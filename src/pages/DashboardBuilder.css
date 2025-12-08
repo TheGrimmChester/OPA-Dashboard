@@ -1,0 +1,215 @@
+.DashboardBuilder {
+  padding: var(--spacing-lg);
+  height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+.builder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.header-icon {
+  font-size: var(--font-size-2xl);
+  color: var(--color-primary);
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.dashboard-select {
+  padding: var(--spacing-sm);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.builder-canvas {
+  flex: 1;
+  display: flex;
+  gap: var(--spacing-lg);
+  overflow: hidden;
+}
+
+.widget-palette {
+  width: 200px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  overflow-y: auto;
+}
+
+.widget-palette h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-lg);
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  user-select: none;
+}
+
+.palette-item:active {
+  cursor: grabbing;
+}
+
+.palette-icon {
+  font-size: var(--font-size-lg);
+}
+
+.canvas-area {
+  flex: 1;
+  position: relative;
+  background: var(--bg-primary);
+  border: 2px dashed var(--border-light);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  min-height: 600px;
+}
+
+.widget {
+  position: absolute;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: move;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.widget.selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-light);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+}
+
+.widget-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+}
+
+.widget-delete:hover {
+  color: var(--color-error);
+}
+
+.widget-content {
+  flex: 1;
+  padding: var(--spacing-sm);
+  overflow: auto;
+}
+
+.widget-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  background: var(--color-primary);
+  cursor: nwse-resize;
+  border-radius: var(--radius-sm) 0 0 0;
+}
+
+.metric-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.metric-value {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+}
+
+.metric-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+.chart-preview,
+.table-preview,
+.heatmap-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+}
+
+.chart-placeholder,
+.table-placeholder,
+.heatmap-placeholder {
+  text-align: center;
+  font-size: var(--font-size-sm);
+}
+
+.context-menu {
+  position: fixed;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  min-width: 150px;
+}
+
+.context-menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.context-menu button:hover {
+  background: var(--bg-secondary);
+}
+

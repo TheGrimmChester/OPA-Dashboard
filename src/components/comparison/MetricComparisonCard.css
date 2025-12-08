@@ -1,0 +1,113 @@
+.metric-comparison-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg, 8px);
+  padding: var(--spacing-lg, 16px);
+  box-shadow: var(--shadow-sm, 0 2px 4px rgba(0, 0, 0, 0.1));
+  transition: all var(--transition-base, 0.2s);
+}
+
+.metric-comparison-card:hover {
+  box-shadow: var(--shadow-md, 0 4px 8px rgba(0, 0, 0, 0.15));
+  transform: translateY(-2px);
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-md, 12px);
+}
+
+.metric-icon {
+  font-size: var(--font-size-lg, 18px);
+  color: var(--color-primary, #007bff);
+}
+
+.metric-label {
+  margin: 0;
+  font-size: var(--font-size-sm, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide, 0.5px);
+}
+
+.metric-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md, 12px);
+  margin-bottom: var(--spacing-md, 12px);
+}
+
+.metric-value-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+}
+
+.metric-value-label {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.metric-value {
+  font-size: var(--font-size-xl, 20px);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono, 'Monaco', 'Menlo', monospace);
+}
+
+.metric-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--spacing-sm, 8px);
+  border-top: 1px solid var(--border-light, #e0e0e0);
+}
+
+.metric-change {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+  font-size: var(--font-size-sm, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  padding: var(--spacing-xs, 4px) var(--spacing-sm, 8px);
+  border-radius: var(--radius-md, 4px);
+}
+
+.metric-change.improvement {
+  color: var(--color-success);
+  background-color: var(--color-success-bg);
+}
+
+.metric-change.degradation {
+  color: var(--color-error);
+  background-color: var(--color-error-bg);
+}
+
+.metric-change.no-change {
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+}
+
+.change-icon {
+  font-size: var(--font-size-base, 16px);
+}
+
+.change-icon.improvement {
+  color: var(--color-success);
+}
+
+.change-icon.degradation {
+  color: var(--color-error);
+}
+
+.change-icon.no-change {
+  color: var(--text-secondary);
+}
+
+.change-value {
+  font-family: var(--font-family-mono, 'Monaco', 'Menlo', monospace);
+}
+

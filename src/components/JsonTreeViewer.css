@@ -1,0 +1,138 @@
+.json-tree-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.json-tree-controls {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.json-control-btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  transition: all 0.2s;
+}
+
+.json-control-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.json-tree-content {
+  overflow-x: auto;
+}
+
+.json-node {
+  margin-left: 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.json-node-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  user-select: none;
+}
+
+.json-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  transition: all 0.2s;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.json-expand-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-radius: var(--radius-xs);
+}
+
+.json-spacer {
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.json-bracket {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-bold);
+}
+
+.json-count {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-style: italic;
+}
+
+.json-node-children {
+  margin-left: calc(var(--spacing-md) + 4px);
+  margin-top: var(--spacing-xs);
+  border-left: 1px solid var(--border-light);
+  padding-left: var(--spacing-sm);
+}
+
+.json-array-item,
+.json-object-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+  min-height: 20px;
+}
+
+.json-key {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.json-string {
+  color: #98c379;
+}
+
+.json-number {
+  color: #d19a66;
+}
+
+.json-boolean {
+  color: #c678dd;
+}
+
+.json-null {
+  color: #5c6370;
+  font-style: italic;
+}
+
+.json-undefined {
+  color: #5c6370;
+  font-style: italic;
+}
+
+.json-unknown {
+  color: var(--text-secondary);
+}
+
+.json-node-footer {
+  margin-top: var(--spacing-xs);
+}
+

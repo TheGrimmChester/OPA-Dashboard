@@ -1,0 +1,46 @@
+.sql-query-viewer {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-secondary);
+}
+
+.sql-query-content {
+  margin: 0;
+  padding: var(--spacing-md);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: auto;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+}
+
+.sql-query-content code {
+  background: transparent;
+  padding: 0;
+}
+
+.sql-keyword {
+  color: var(--color-primary-blue);
+  font-weight: var(--font-weight-semibold);
+}
+
+.sql-string {
+  color: var(--color-success);
+}
+
+.sql-number {
+  color: var(--color-warning);
+}
+
+.sql-query-empty {
+  padding: var(--spacing-md);
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+}
+

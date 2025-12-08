@@ -1,0 +1,41 @@
+.loading-spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  gap: var(--spacing-md);
+}
+
+.loading-spinner-container.small {
+  padding: var(--spacing-lg);
+}
+
+.loading-spinner-container.large {
+  padding: var(--spacing-2xl);
+}
+
+.spinner-icon {
+  font-size: var(--font-size-2xl);
+  color: var(--color-primary);
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner-container.small .spinner-icon {
+  font-size: var(--font-size-lg);
+}
+
+.loading-spinner-container.large .spinner-icon {
+  font-size: var(--font-size-4xl);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-message {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
