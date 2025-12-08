@@ -1,0 +1,144 @@
+.flame-graph-container {
+  width: 100%;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.flame-graph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.flame-graph-header h3 {
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+}
+
+.flame-graph-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.flame-graph-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.metric-selector {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  transition: all var(--transition-base);
+}
+
+.metric-selector:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--color-primary-blue);
+}
+
+.flame-graph-controls button {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  transition: all var(--transition-base);
+}
+
+.flame-graph-controls button:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--color-primary-blue);
+}
+
+.flame-graph-content {
+  position: relative;
+  overflow: auto;
+  max-height: 800px;
+  padding: var(--spacing-lg);
+  background-color: var(--bg-primary);
+}
+
+.flame-graph-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-width: 100%;
+}
+
+.flame-node rect {
+  min-width: 4px;
+}
+
+.flame-node {
+  cursor: pointer;
+  transition: opacity var(--transition-base);
+}
+
+.flame-node:hover {
+  opacity: 0.8;
+}
+
+.flame-node-text {
+  pointer-events: none;
+  user-select: none;
+  font-size: 11px;
+  font-weight: 600;
+  fill: #000000;
+  dominant-baseline: middle;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.flame-node-text-bg {
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: rgba(0, 0, 0, 0.15);
+  stroke-width: 1;
+  rx: 3;
+  ry: 3;
+}
+
+.flame-graph-tooltip {
+  position: absolute;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  pointer-events: none;
+  z-index: 1000;
+  font-size: 13px;
+  max-width: 350px;
+  box-shadow: var(--shadow-lg);
+  line-height: 1.6;
+  transform: translate(0, 0);
+  white-space: nowrap;
+}
+
+.tooltip-content div {
+  margin-bottom: var(--spacing-xs);
+}
+
+.tooltip-content div:last-child {
+  margin-bottom: 0;
+}
+
+.flame-graph-empty {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+

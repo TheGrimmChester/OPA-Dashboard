@@ -1,0 +1,27 @@
+.share-button {
+  background-color: var(--color-primary-blue);
+  color: var(--text-inverse);
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.share-button:hover {
+  background-color: var(--color-primary-blue);
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.share-button.copied {
+  background-color: var(--color-success);
+}
+
+.share-button:active {
+  transform: scale(0.98);
+}
+

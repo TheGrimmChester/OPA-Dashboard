@@ -1,0 +1,144 @@
+.LogCorrelation {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+}
+
+.logs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.header-icon {
+  font-size: var(--font-size-lg);
+  color: var(--color-primary);
+}
+
+.log-filter {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.logs-empty {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+}
+
+.logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.log-entry {
+  background: var(--bg-primary);
+  border-left: 4px solid;
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+}
+
+.log-entry.log-error {
+  border-left-color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
+.log-entry.log-warn {
+  border-left-color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.log-entry.log-info {
+  border-left-color: var(--color-info);
+  background: var(--color-info-bg);
+}
+
+.log-entry.log-debug {
+  border-left-color: var(--text-tertiary);
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+}
+
+.log-level {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.log-icon {
+  font-size: var(--font-size-base);
+}
+
+.log-icon.error {
+  color: var(--color-error);
+}
+
+.log-icon.warn {
+  color: var(--color-warning);
+}
+
+.log-icon.info {
+  color: var(--color-info);
+}
+
+.level-text {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+}
+
+.log-timestamp {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.log-message {
+  font-family: 'Courier New', monospace;
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-fields {
+  margin-top: var(--spacing-xs);
+}
+
+.log-fields summary {
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+.log-fields pre {
+  background: var(--bg-secondary);
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  overflow-x: auto;
+  margin-top: var(--spacing-xs);
+}
+

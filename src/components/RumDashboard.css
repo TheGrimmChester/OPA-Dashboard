@@ -1,0 +1,87 @@
+.rum-dashboard {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.rum-dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.rum-dashboard-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.rum-dashboard-header select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.rum-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.rum-metric-card {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.rum-metric-label {
+  font-size: 0.9em;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.rum-metric-value {
+  font-size: 2em;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.rum-metric-value.error {
+  color: #dc3545;
+}
+
+.rum-metric-trend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85em;
+  color: #666;
+}
+
+.rum-chart-container {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.rum-chart-container h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.rum-dashboard-loading,
+.rum-dashboard-empty {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+

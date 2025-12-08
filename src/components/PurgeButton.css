@@ -1,0 +1,164 @@
+.purge-button {
+  background-color: rgba(220, 53, 69, 0.9);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-sm, 4px);
+  cursor: pointer;
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: var(--font-weight-medium, 500);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+  white-space: nowrap;
+}
+
+.purge-button:hover {
+  background-color: rgba(220, 53, 69, 1);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.purge-button:hover {
+  background-color: var(--color-danger-dark, #c82333);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.purge-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.purge-confirmation {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.purge-confirmation-content {
+  background: var(--bg-secondary, #2d2d2d);
+  border: 1px solid var(--border-light, #404040);
+  border-radius: var(--border-radius-lg, 8px);
+  padding: var(--spacing-xl, 1.5rem);
+  max-width: 500px;
+  width: 90%;
+  box-shadow: var(--shadow-xl, 0 8px 24px rgba(0, 0, 0, 0.6));
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.purge-confirmation-content h3 {
+  margin: 0 0 var(--spacing-md, 1rem) 0;
+  color: var(--color-error, #f87171);
+  font-size: var(--font-size-lg, 1.25rem);
+}
+
+.purge-confirmation-content p {
+  margin: 0 0 var(--spacing-lg, 1.5rem) 0;
+  color: var(--text-primary, #f5f5f5);
+  line-height: 1.6;
+}
+
+.purge-confirmation-content strong {
+  color: var(--color-error, #f87171);
+}
+
+.purge-confirmation-buttons {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+}
+
+.purge-button-confirm {
+  background-color: var(--color-error, #f87171);
+  color: white;
+  border: none;
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-lg, 1.5rem);
+  border-radius: var(--border-radius-sm, 4px);
+  cursor: pointer;
+  font-size: var(--font-size-base, 1rem);
+  font-weight: var(--font-weight-medium, 500);
+  transition: all 0.2s ease;
+}
+
+.purge-button-confirm:hover:not(:disabled) {
+  background-color: var(--color-error-light, #fca5a5);
+}
+
+.purge-button-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.purge-button-cancel {
+  background-color: var(--bg-tertiary, #3a3a3a);
+  color: var(--text-primary, #f5f5f5);
+  border: 1px solid var(--border-light, #404040);
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-lg, 1.5rem);
+  border-radius: var(--border-radius-sm, 4px);
+  cursor: pointer;
+  font-size: var(--font-size-base, 1rem);
+  font-weight: var(--font-weight-medium, 500);
+  transition: all 0.2s ease;
+}
+
+.purge-button-cancel:hover:not(:disabled) {
+  background-color: var(--bg-hover, #404040);
+  border-color: var(--border-medium, #505050);
+}
+
+.purge-button-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.purge-error {
+  margin-top: var(--spacing-md, 1rem);
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-md, 1rem);
+  background-color: var(--color-error-bg, rgba(248, 113, 113, 0.15));
+  color: var(--color-error, #f87171);
+  border-radius: var(--border-radius-sm, 4px);
+  border: 1px solid var(--color-error, #f87171);
+  font-size: var(--font-size-sm, 0.875rem);
+}
+
+.purge-success {
+  margin-top: var(--spacing-md, 1rem);
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-md, 1rem);
+  background-color: var(--color-success-bg, rgba(74, 222, 128, 0.15));
+  color: var(--color-success, #4ade80);
+  border-radius: var(--border-radius-sm, 4px);
+  border: 1px solid var(--color-success, #4ade80);
+  font-size: var(--font-size-sm, 0.875rem);
+}
+

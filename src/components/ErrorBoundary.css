@@ -1,0 +1,93 @@
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: var(--spacing-xl);
+}
+
+.error-boundary-content {
+  text-align: center;
+  max-width: 600px;
+}
+
+.error-boundary h2 {
+  color: var(--color-error);
+  margin-bottom: var(--spacing-md);
+}
+
+.error-boundary p {
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-lg);
+}
+
+.error-details {
+  text-align: left;
+  margin: var(--spacing-lg) 0;
+  padding: var(--spacing-md);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+.error-details summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-primary);
+}
+
+.error-details pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+  font-family: var(--font-family-mono);
+  background-color: var(--bg-primary);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.error-boundary-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: center;
+}
+
+.error-boundary-actions button,
+.button-link {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+  display: inline-block;
+  transition: all var(--transition-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.error-boundary-actions button {
+  background-color: var(--color-primary-blue);
+  color: var(--text-inverse);
+}
+
+.error-boundary-actions button:hover {
+  background-color: var(--color-primary-blue);
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.button-link {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+}
+
+.button-link:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--color-primary-blue);
+}
+
