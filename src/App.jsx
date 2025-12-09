@@ -9,8 +9,6 @@ import {
   FiDatabase, 
   FiAlertCircle,
   FiTarget,
-  FiAlertTriangle,
-  FiLayout,
   FiRefreshCw,
   FiMenu,
   FiX,
@@ -30,18 +28,9 @@ import ServiceProfile from './pages/ServiceProfile'
 import SqlAnalysis from './pages/SqlAnalysis'
 import ErrorAnalysis from './pages/ErrorAnalysis'
 import ErrorViewer from './components/ErrorViewer'
-import RumDashboard from './components/RumDashboard'
-import Alerts from './pages/Alerts'
-import SLOs from './pages/SLOs'
-import Anomalies from './pages/Anomalies'
-import DashboardBuilder from './pages/DashboardBuilder'
-import Login from './pages/Login'
-import ApiKeys from './pages/ApiKeys'
-import KeyTransactions from './pages/KeyTransactions'
 import LiveDumps from './pages/LiveDumps'
 import ServiceMap from './components/ServiceMap'
 import PurgeButton from './components/PurgeButton'
-import TenantSwitcher from './components/TenantSwitcher'
 import HelpIcon from './components/HelpIcon'
 import { TenantProvider } from './contexts/TenantContext'
 import './App.css'
@@ -133,7 +122,6 @@ function Navigation() {
         { path: '/performance', label: 'Performance', icon: FiTrendingUp, helpText: 'Monitor performance metrics over time with percentile analysis' },
         { path: '/sql', label: 'SQL', icon: FiDatabase, helpText: 'Analyze SQL query performance and execution patterns' },
         { path: '/errors', label: 'Errors', icon: FiAlertCircle, helpText: 'View and analyze error occurrences and stack traces' },
-        { path: '/rum', label: 'RUM', icon: FiGlobe, helpText: 'Real User Monitoring - track user experience metrics' },
         { path: '/network', label: 'Network', icon: FiGlobe, helpText: 'Monitor network traffic, latency, and bandwidth usage' },
         { path: '/live-dumps', label: 'Live Dumps', icon: FiTerminal, helpText: 'View real-time variable dumps and debugging information' },
       ]
@@ -141,22 +129,9 @@ function Navigation() {
     {
       label: 'Monitoring',
       icon: FiTarget,
-      helpText: 'Monitoring tools for key transactions, service maps, alerts, and SLOs',
+      helpText: 'Monitoring tools for service maps',
       items: [
-        { path: '/key-transactions', label: 'Key Transactions', icon: FiTarget, helpText: 'Monitor critical business transactions and their performance' },
         { path: '/service-map', label: 'Service Map', icon: FiServer, helpText: 'Visualize service dependencies and relationships' },
-        { path: '/alerts', label: 'Alerts', icon: FiAlertCircle, helpText: 'Configure and manage performance alerts' },
-        { path: '/slos', label: 'SLOs', icon: FiTarget, helpText: 'Service Level Objectives - define and track service reliability targets' },
-        { path: '/anomalies', label: 'Anomalies', icon: FiAlertTriangle, helpText: 'Detect and analyze anomalous behavior in your services' },
-      ]
-    },
-    {
-      label: 'Config',
-      icon: FiLayout,
-      helpText: 'Configuration and customization options',
-      items: [
-        { path: '/dashboards', label: 'Dashboards', icon: FiLayout, helpText: 'Create and customize custom dashboards' },
-        { path: '/api-keys', label: 'API Keys', icon: FiTarget, helpText: 'Manage API keys for programmatic access' },
       ]
     }
   ]
@@ -180,8 +155,6 @@ function Navigation() {
             </Link>
           </div>
           <div className="header-controls">
-            {/* TenantSwitcher temporarily hidden - feature not fully implemented */}
-            {/* <TenantSwitcher /> */}
           </div>
         </div>
         <nav ref={navRef} className={`main-nav ${mobileMenuOpen ? 'mobile-open' : ''}`}>
@@ -331,10 +304,6 @@ function App() {
         <main className="App-main">
           <Routes>
             <Route 
-              path="/login" 
-              element={<Login />} 
-            />
-            <Route 
               path="/" 
               element={
                 <ServiceOverview 
@@ -386,10 +355,6 @@ function App() {
               element={<PerformanceMetrics autoRefresh={autoRefresh} />} 
             />
             <Route 
-              path="/key-transactions" 
-              element={<KeyTransactions />} 
-            />
-            <Route 
               path="/network" 
               element={<NetworkView autoRefresh={autoRefresh} />} 
             />
@@ -414,32 +379,8 @@ function App() {
               element={<ErrorAnalysis />} 
             />
             <Route 
-              path="/rum" 
-              element={<RumDashboard />} 
-            />
-            <Route 
               path="/live-dumps" 
               element={<LiveDumps />} 
-            />
-            <Route 
-              path="/alerts" 
-              element={<Alerts />} 
-            />
-            <Route 
-              path="/slos" 
-              element={<SLOs />} 
-            />
-            <Route 
-              path="/anomalies" 
-              element={<Anomalies />} 
-            />
-            <Route 
-              path="/dashboards" 
-              element={<DashboardBuilder />} 
-            />
-            <Route 
-              path="/api-keys" 
-              element={<ApiKeys />} 
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
