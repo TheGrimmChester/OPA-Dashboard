@@ -17,6 +17,7 @@
     "react-router-dom": "^6.20.0",
     "react-syntax-highlighter": "^16.1.0",
     "recharts": "^2.10.0",
+    "sql-formatter": "^15.6.10",
     "vis-network": "^9.1.13"
   },
   "devDependencies": {
