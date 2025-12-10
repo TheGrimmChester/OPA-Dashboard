@@ -348,6 +348,29 @@ function TraceView() {
         })
       }
       
+      // Collect from span.Http field (HTTP requests stored at span level)
+      if (span.Http && Array.isArray(span.Http) && span.Http.length > 0) {
+        span.Http.forEach(request => {
+          allNetworkRequests.push({
+            span: span.name,
+            spanId: span.span_id,
+            request: request,
+            type: 'http',
+          })
+        })
+      }
+      // Also check lowercase 'http' for compatibility
+      if (span.http && Array.isArray(span.http) && span.http.length > 0) {
+        span.http.forEach(request => {
+          allNetworkRequests.push({
+            span: span.name,
+            spanId: span.span_id,
+            request: request,
+            type: 'http',
+          })
+        })
+      }
+      
       // Collect from call stack (http_requests)
       const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
         ? span.stack_flat
