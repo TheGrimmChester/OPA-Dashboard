@@ -53,6 +53,7 @@ function TraceView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview')
+  const [logCount, setLogCount] = useState(0)
   const [dumpFormat, setDumpFormat] = useState({}) // Format per dump: 'json' or 'tree'
   const [sqlFilters, setSqlFilters] = useState({ enabled: false, thresholds: {} })
   const [networkFilters, setNetworkFilters] = useState({ enabled: false, thresholds: {} })
@@ -81,6 +82,24 @@ function TraceView() {
     }
 
     fetchTrace()
+  }, [traceId])
+
+  // Fetch log count for the trace
+  useEffect(() => {
+    if (!traceId) return
+
+    const fetchLogCount = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/traces/${traceId}/logs`)
+        setLogCount(response.data.logs?.length || 0)
+      } catch (err) {
+        // If logs endpoint doesn't exist or fails, set count to 0
+        setLogCount(0)
+        console.error('Error fetching log count:', err)
+      }
+    }
+
+    fetchLogCount()
   }, [traceId])
 
   // Sync activeTab to URL params
@@ -710,7 +729,7 @@ function TraceView() {
             <HelpIcon text="View detailed stack traces showing function call sequences" position="right" />
           </button>
         )}
-        {allNetworkRequests.length > 0 && (
+        {allNetworkRequests.filter(r => r.type === 'http').length > 0 && (
           <button
             className={`tab ${activeTab === 'network' ? 'active' : ''}`}
             onClick={() => setActiveTab('network')}
@@ -759,6 +778,7 @@ function TraceView() {
         >
           <FiFileText className="tab-icon" />
           <span>Logs</span>
+          {logCount > 0 && <span className="tab-badge">{logCount}</span>}
           <HelpIcon text="View correlated log entries for this trace" position="right" />
         </button>
         {allDumps.length > 0 && (
@@ -919,7 +939,7 @@ function TraceView() {
           </div>
         )}
 
-        {activeTab === 'network' && (
+        {activeTab === 'network' && allNetworkRequests.filter(r => r.type === 'http').length > 0 && (
           <div className="trace-network">
             <TraceTabFilters
               onFiltersChange={setNetworkFilters}
@@ -949,7 +969,17 @@ function TraceView() {
                     .filter((item) => {
                       if (!networkFilters.enabled) return true
                       const duration = item.request?.duration_ms || 0
-                      const totalBytes = (item.request?.bytes_sent || 0) + (item.request?.bytes_received || 0)
+                      // Use fallback values when bytes_sent/bytes_received are 0
+                      // Priority: curl_bytes_* > bytes_* > request_size/response_size
+                      const bytesSent = item.request?.curl_bytes_sent || 
+                                       item.request?.bytes_sent || 
+                                       item.request?.request_size || 
+                                       0
+                      const bytesReceived = item.request?.curl_bytes_received || 
+                                           item.request?.bytes_received || 
+                                           item.request?.response_size || 
+                                           0
+                      const totalBytes = bytesSent + bytesReceived
                       return duration >= (networkFilters.thresholds.duration || 0) &&
                              totalBytes >= (networkFilters.thresholds.network || 0)
                     })
@@ -1004,7 +1034,16 @@ function TraceView() {
                               )}
                             </>
                           ) : (
-                            <div>{item.request.bytes_sent ? `${(item.request.bytes_sent / 1024).toFixed(2)} KB` : '0'}</div>
+                            <div>
+                              {(() => {
+                                // Use request_size as fallback when bytes_sent is 0
+                                const bytesSent = item.request.bytes_sent || 0;
+                                const displayBytes = (bytesSent === 0 && item.request.request_size) 
+                                  ? item.request.request_size 
+                                  : bytesSent;
+                                return displayBytes > 0 ? `${(displayBytes / 1024).toFixed(2)} KB` : '0';
+                              })()}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -1018,9 +1057,21 @@ function TraceView() {
                               )}
                             </>
                           ) : (
-                            <div>{item.request.bytes_received ? `${(item.request.bytes_received / 1024).toFixed(2)} KB` : '0'}</div>
+                            <div>
+                              {(() => {
+                                // Use response_size as fallback when bytes_received is 0
+                                const bytesReceived = item.request.bytes_received || 0;
+                                const displayBytes = (bytesReceived === 0 && item.request.response_size) 
+                                  ? item.request.response_size 
+                                  : bytesReceived;
+                                return displayBytes > 0 ? `${(displayBytes / 1024).toFixed(2)} KB` : '0';
+                              })()}
+                            </div>
                           )}
-                          {item.request.response_size && item.request.response_size !== item.request.curl_bytes_received && (
+                          {item.request.response_size && 
+                           item.request.response_size !== item.request.curl_bytes_received && 
+                           item.request.response_size !== item.request.bytes_received && 
+                           item.request.bytes_received !== 0 && (
                             <div><small>Size: {(item.request.response_size / 1024).toFixed(2)} KB</small></div>
                           )}
                         </div>
