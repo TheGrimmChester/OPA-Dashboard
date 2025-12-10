@@ -56,6 +56,11 @@
   padding: var(--spacing-sm);
 }
 
+.log-entry.log-critical {
+  border-left-color: var(--color-error, #c62828);
+  background: rgba(198, 40, 40, 0.1);
+}
+
 .log-entry.log-error {
   border-left-color: var(--color-error);
   background: var(--color-error-bg);
@@ -90,6 +95,10 @@
 
 .log-icon {
   font-size: var(--font-size-base);
+}
+
+.log-icon.critical {
+  color: var(--color-error, #c62828);
 }
 
 .log-icon.error {

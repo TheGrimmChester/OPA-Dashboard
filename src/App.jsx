@@ -15,6 +15,7 @@ import {
   FiChevronDown,
   FiChevronRight,
   FiTerminal,
+  FiFileText,
 } from 'react-icons/fi'
 import ErrorBoundary from './components/ErrorBoundary'
 import ServiceOverview from './components/ServiceOverview.jsx'
@@ -29,6 +30,7 @@ import SqlAnalysis from './pages/SqlAnalysis'
 import ErrorAnalysis from './pages/ErrorAnalysis'
 import ErrorViewer from './components/ErrorViewer'
 import LiveDumps from './pages/LiveDumps'
+import LiveLogs from './pages/LiveLogs'
 import ServiceMap from './components/ServiceMap'
 import PurgeButton from './components/PurgeButton'
 import HelpIcon from './components/HelpIcon'
@@ -124,6 +126,7 @@ function Navigation() {
         { path: '/errors', label: 'Errors', icon: FiAlertCircle, helpText: 'View and analyze error occurrences and stack traces' },
         { path: '/network', label: 'Network', icon: FiGlobe, helpText: 'Monitor network traffic, latency, and bandwidth usage' },
         { path: '/live-dumps', label: 'Live Dumps', icon: FiTerminal, helpText: 'View real-time variable dumps and debugging information' },
+        { path: '/live-logs', label: 'Live Logs', icon: FiFileText, helpText: 'View real-time application logs with filtering and correlation' },
       ]
     },
     {
@@ -381,6 +384,10 @@ function App() {
             <Route 
               path="/live-dumps" 
               element={<LiveDumps />} 
+            />
+            <Route 
+              path="/live-logs" 
+              element={<LiveLogs />} 
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

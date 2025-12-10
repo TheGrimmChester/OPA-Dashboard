@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { FiFileText, FiAlertCircle, FiInfo, FiAlertTriangle } from 'react-icons/fi'
+import { FiFileText, FiAlertCircle, FiInfo, FiAlertTriangle, FiXCircle } from 'react-icons/fi'
 import axios from 'axios'
 import './LogCorrelation.css'
 
@@ -8,7 +8,7 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 function LogCorrelation({ traceId, spanId = null }) {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all') // all, error, warn, info, debug
+  const [filter, setFilter] = useState('all') // all, critical, error, warn, info, debug
 
   useEffect(() => {
     if (traceId) {
@@ -34,6 +34,9 @@ function LogCorrelation({ traceId, spanId = null }) {
 
   const getLevelIcon = (level) => {
     switch (level.toLowerCase()) {
+      case 'critical':
+      case 'crit':
+        return <FiXCircle className="log-icon critical" />
       case 'error':
         return <FiAlertCircle className="log-icon error" />
       case 'warn':
@@ -48,6 +51,9 @@ function LogCorrelation({ traceId, spanId = null }) {
 
   const getLevelColor = (level) => {
     switch (level.toLowerCase()) {
+      case 'critical':
+      case 'crit':
+        return 'critical'
       case 'error':
         return 'error'
       case 'warn':
@@ -62,7 +68,15 @@ function LogCorrelation({ traceId, spanId = null }) {
 
   const filteredLogs = logs.filter(log => {
     if (filter === 'all') return true
-    return log.level.toLowerCase() === filter.toLowerCase()
+    const logLevel = log.level.toLowerCase()
+    const filterLevel = filter.toLowerCase()
+    
+    // Handle aliases for critical level
+    if (filterLevel === 'critical') {
+      return logLevel === 'critical' || logLevel === 'crit'
+    }
+    
+    return logLevel === filterLevel
   })
 
   if (loading) {
@@ -82,6 +96,7 @@ function LogCorrelation({ traceId, spanId = null }) {
           className="log-filter"
         >
           <option value="all">All Levels</option>
+          <option value="critical">Critical</option>
           <option value="error">Error</option>
           <option value="warn">Warning</option>
           <option value="info">Info</option>
