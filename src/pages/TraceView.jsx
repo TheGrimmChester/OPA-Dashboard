@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { 
   FiArrowLeft, 
@@ -21,7 +21,9 @@ import {
   FiZap,
   FiHardDrive,
   FiFileText,
-  FiTerminal
+  FiTerminal,
+  FiChevronLeft,
+  FiChevronRight
 } from 'react-icons/fi'
 import axios from 'axios'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -57,6 +59,9 @@ function TraceView() {
   const [cacheFilters, setCacheFilters] = useState({ enabled: false, thresholds: {} })
   const [redisFilters, setRedisFilters] = useState({ enabled: false, thresholds: {} })
   const [stacksFilters, setStacksFilters] = useState({ enabled: false, thresholds: {} })
+  const tabsContainerRef = useRef(null)
+  const [showLeftScroll, setShowLeftScroll] = useState(false)
+  const [showRightScroll, setShowRightScroll] = useState(false)
 
   useEffect(() => {
     if (!traceId) return
@@ -87,6 +92,59 @@ function TraceView() {
     
     setSearchParams(params, { replace: true })
   }, [activeTab, searchParams, setSearchParams])
+
+  // Check scroll position and update indicators
+  const checkScrollPosition = useCallback(() => {
+    const container = tabsContainerRef.current
+    if (!container) return
+    
+    const { scrollLeft, scrollWidth, clientWidth } = container
+    setShowLeftScroll(scrollLeft > 0)
+    setShowRightScroll(scrollLeft < scrollWidth - clientWidth - 1)
+  }, [])
+
+  // Scroll active tab into view
+  useEffect(() => {
+    if (!tabsContainerRef.current) return
+    
+    const activeTabElement = tabsContainerRef.current.querySelector('.tab.active')
+    if (activeTabElement) {
+      activeTabElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center'
+      })
+    }
+    
+    // Check scroll position after a short delay to allow for scroll animation
+    setTimeout(checkScrollPosition, 300)
+  }, [activeTab])
+
+  // Check scroll position on mount and resize
+  useEffect(() => {
+    checkScrollPosition()
+    const container = tabsContainerRef.current
+    if (container) {
+      container.addEventListener('scroll', checkScrollPosition)
+      window.addEventListener('resize', checkScrollPosition)
+      return () => {
+        container.removeEventListener('scroll', checkScrollPosition)
+        window.removeEventListener('resize', checkScrollPosition)
+      }
+    }
+  }, [trace, checkScrollPosition])
+
+  // Scroll tabs left/right
+  const scrollTabs = (direction) => {
+    const container = tabsContainerRef.current
+    if (!container) return
+    
+    const scrollAmount = 200
+    container.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    })
+  }
 
   // Compute callStack and rootSpan using useMemo before any early returns
   // This ensures stable references and follows Rules of Hooks
@@ -554,15 +612,29 @@ function TraceView() {
         </div>
       </div>
 
-      <div className="trace-view-tabs">
-        <button
-          className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveTab('overview')}
+      <div className={`trace-view-tabs-wrapper ${showLeftScroll ? 'show-left' : ''} ${showRightScroll ? 'show-right' : ''}`}>
+        {showLeftScroll && (
+          <button
+            className="tab-scroll-button tab-scroll-left"
+            onClick={() => scrollTabs('left')}
+            aria-label="Scroll tabs left"
+          >
+            <FiChevronLeft />
+          </button>
+        )}
+        <div 
+          className="trace-view-tabs"
+          ref={tabsContainerRef}
+          onScroll={checkScrollPosition}
         >
-          <FiInfo className="tab-icon" />
-          <span>Overview</span>
-          <HelpIcon text="General information about the trace including statistics and summary" position="right" />
-        </button>
+          <button
+            className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
+            onClick={() => setActiveTab('overview')}
+          >
+            <FiInfo className="tab-icon" />
+            <span>Overview</span>
+            <HelpIcon text="General information about the trace including statistics and summary" position="right" />
+          </button>
         {callStack.length > 0 && (
         <button
             className={`tab ${activeTab === 'stacktree' ? 'active' : ''}`}
@@ -675,6 +747,16 @@ function TraceView() {
             <span>Dumps</span>
             <span className="tab-badge">{allDumps.reduce((sum, item) => sum + item.dumps.length, 0)}</span>
             <HelpIcon text="View variable dumps and debugging information captured during execution" position="right" />
+          </button>
+        )}
+        </div>
+        {showRightScroll && (
+          <button
+            className="tab-scroll-button tab-scroll-right"
+            onClick={() => scrollTabs('right')}
+            aria-label="Scroll tabs right"
+          >
+            <FiChevronRight />
           </button>
         )}
       </div>
@@ -833,6 +915,8 @@ function TraceView() {
                     <th>Duration</th>
                     <th>Bytes Sent</th>
                     <th>Bytes Received</th>
+                    <th>Timing</th>
+                    <th>Details</th>
                     <th>Error</th>
                   </tr>
                 </thead>
@@ -880,21 +964,158 @@ function TraceView() {
                         </span>
                       </td>
                       <td>
-                        {formatDuration(item.request.duration_ms || 0)}
-                        {item.request.network_time_ms && (
+                        <div className="duration-main">{formatDuration(item.request.duration_ms || 0)}</div>
+                        {item.request.total_time_ms && (
                           <div className="network-timing">
-                            <small>Network: {formatDuration(item.request.network_time_ms)}</small>
-                            {item.request.dns_time_ms && <small>DNS: {formatDuration(item.request.dns_time_ms)}</small>}
-                            {item.request.connect_time_ms && <small>Connect: {formatDuration(item.request.connect_time_ms)}</small>}
+                            <small>Total: {formatDuration(item.request.total_time_ms)}</small>
                           </div>
                         )}
                       </td>
-                      <td>{item.request.bytes_sent ? `${(item.request.bytes_sent / 1024).toFixed(2)} KB` : '0'}</td>
                       <td>
-                        {item.request.bytes_received ? `${(item.request.bytes_received / 1024).toFixed(2)} KB` : '0'}
-                        {item.request.response_size && item.request.response_size !== item.request.bytes_received && (
-                          <div><small>Size: {(item.request.response_size / 1024).toFixed(2)} KB</small></div>
-                        )}
+                        <div className="bytes-info">
+                          {item.request.curl_bytes_sent !== undefined ? (
+                            <>
+                              <div><strong>cURL:</strong> {(item.request.curl_bytes_sent / 1024).toFixed(2)} KB</div>
+                              {item.request.system_bytes_sent !== undefined && item.request.system_bytes_sent !== item.request.curl_bytes_sent && (
+                                <div><small>System: {(item.request.system_bytes_sent / 1024).toFixed(2)} KB</small></div>
+                              )}
+                            </>
+                          ) : (
+                            <div>{item.request.bytes_sent ? `${(item.request.bytes_sent / 1024).toFixed(2)} KB` : '0'}</div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="bytes-info">
+                          {item.request.curl_bytes_received !== undefined ? (
+                            <>
+                              <div><strong>cURL:</strong> {(item.request.curl_bytes_received / 1024).toFixed(2)} KB</div>
+                              {item.request.system_bytes_received !== undefined && item.request.system_bytes_received !== item.request.curl_bytes_received && (
+                                <div><small>System: {(item.request.system_bytes_received / 1024).toFixed(2)} KB</small></div>
+                              )}
+                            </>
+                          ) : (
+                            <div>{item.request.bytes_received ? `${(item.request.bytes_received / 1024).toFixed(2)} KB` : '0'}</div>
+                          )}
+                          {item.request.response_size && item.request.response_size !== item.request.curl_bytes_received && (
+                            <div><small>Size: {(item.request.response_size / 1024).toFixed(2)} KB</small></div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <details className="timing-details">
+                          <summary>Timing Breakdown</summary>
+                          <div className="timing-breakdown">
+                            {item.request.dns_time_ms && (
+                              <div className="timing-item">
+                                <strong>DNS Lookup:</strong> {formatDuration(item.request.dns_time_ms)}
+                              </div>
+                            )}
+                            {item.request.connect_time_ms && (
+                              <div className="timing-item">
+                                <strong>Connect:</strong> {formatDuration(item.request.connect_time_ms)}
+                              </div>
+                            )}
+                            {item.request.pretransfer_time_ms && (
+                              <div className="timing-item">
+                                <strong>Pre-Transfer:</strong> {formatDuration(item.request.pretransfer_time_ms)}
+                              </div>
+                            )}
+                            {item.request.starttransfer_time_ms && (
+                              <div className="timing-item">
+                                <strong>Start Transfer:</strong> {formatDuration(item.request.starttransfer_time_ms)}
+                              </div>
+                            )}
+                            {item.request.total_time_ms && (
+                              <div className="timing-item">
+                                <strong>Total Time:</strong> {formatDuration(item.request.total_time_ms)}
+                              </div>
+                            )}
+                            {item.request.network_time_ms && (
+                              <div className="timing-item">
+                                <strong>Network Time:</strong> {formatDuration(item.request.network_time_ms)}
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      </td>
+                      <td>
+                        <details className="request-details">
+                          <summary>View Details</summary>
+                          <div className="request-details-content">
+                            {item.request.effective_url && item.request.effective_url !== item.request.url && (
+                              <div className="detail-row">
+                                <strong>Effective URL:</strong> {item.request.effective_url}
+                              </div>
+                            )}
+                            {item.request.content_type && (
+                              <div className="detail-row">
+                                <strong>Content Type:</strong> {item.request.content_type}
+                              </div>
+                            )}
+                            {item.request.redirect_count !== undefined && item.request.redirect_count > 0 && (
+                              <div className="detail-row">
+                                <strong>Redirects:</strong> {item.request.redirect_count}
+                                {item.request.redirect_url && (
+                                  <div><small>→ {item.request.redirect_url}</small></div>
+                                )}
+                              </div>
+                            )}
+                            {item.request.ssl_verify_result !== undefined && item.request.ssl_verify_result !== 0 && (
+                              <div className="detail-row">
+                                <strong>SSL Verify Result:</strong> {item.request.ssl_verify_result}
+                              </div>
+                            )}
+                            {item.request.uri && (
+                              <div className="detail-row">
+                                <strong>URI Path:</strong> {item.request.uri}
+                              </div>
+                            )}
+                            {item.request.query_string && (
+                              <div className="detail-row">
+                                <strong>Query String:</strong> <code>{item.request.query_string}</code>
+                              </div>
+                            )}
+                            {item.request.request_body && (
+                              <div className="detail-row">
+                                <strong>Request Body:</strong>
+                                <details className="body-details">
+                                  <summary>View Body ({item.request.request_body.length} bytes)</summary>
+                                  <pre className="body-content">{item.request.request_body}</pre>
+                                </details>
+                              </div>
+                            )}
+                            {item.request.response_body && (
+                              <div className="detail-row">
+                                <strong>Response Body:</strong>
+                                <details className="body-details">
+                                  <summary>View Body ({item.request.response_body.length} bytes)</summary>
+                                  <pre className="body-content">{item.request.response_body}</pre>
+                                </details>
+                              </div>
+                            )}
+                            {(item.request.request_headers_raw || item.request.response_headers_raw) && (
+                              <div className="detail-row">
+                                <strong>Headers:</strong>
+                                <details className="headers-details">
+                                  <summary>View Headers</summary>
+                                  {item.request.request_headers_raw && (
+                                    <div className="request-headers-section">
+                                      <strong>Request Headers:</strong>
+                                      <pre>{item.request.request_headers_raw}</pre>
+                                    </div>
+                                  )}
+                                  {item.request.response_headers_raw && (
+                                    <div className="response-headers-section">
+                                      <strong>Response Headers:</strong>
+                                      <pre>{item.request.response_headers_raw}</pre>
+                                    </div>
+                                  )}
+                                </details>
+                              </div>
+                            )}
+                          </div>
+                        </details>
                       </td>
                       <td className="error-cell">{item.request.error || '-'}</td>
                     </tr>
@@ -903,7 +1124,7 @@ function TraceView() {
                     <tr key={`legacy-${idx}`}>
                       <td>{item.span}</td>
                       <td className="span-id-cell">{item.spanId}</td>
-                      <td colSpan="7">
+                      <td colSpan="9">
                         <pre>{JSON.stringify(item.net, null, 2)}</pre>
                       </td>
                     </tr>
