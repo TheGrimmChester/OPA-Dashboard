@@ -66,11 +66,12 @@
   letter-spacing: var(--letter-spacing-tight);
 }
 
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+  }
 
 .menu-collapse-toggle {
   display: flex;
@@ -386,10 +387,17 @@
 
   .header-content {
     padding: var(--spacing-md);
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
   }
 
   .header-logo h1 {
     font-size: var(--font-size-lg);
+  }
+
+  .header-controls {
+    width: 100%;
+    order: 3;
   }
 
   .main-nav {

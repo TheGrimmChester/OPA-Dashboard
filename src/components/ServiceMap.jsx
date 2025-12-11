@@ -27,7 +27,6 @@ import {
 } from 'react-icons/fi'
 import HelpIcon from './HelpIcon'
 import TimeRangePicker from './TimeRangePicker'
-import TenantSwitcher from './TenantSwitcher'
 import { useTenant } from '../contexts/TenantContext'
 import './ServiceMap.css'
 
@@ -151,10 +150,13 @@ function ServiceMap() {
       setLoading(true)
       const token = localStorage.getItem('auth_token')
       // Use tenant context values, fallback to localStorage if not available
-      const orgIdRaw = organizationId || localStorage.getItem('organization_id') || 'default-org'
-      const projIdRaw = projectId || localStorage.getItem('project_id') || 'default-project'
-      const orgId = orgIdRaw === 'all' ? 'default-org' : orgIdRaw
-      const projId = projIdRaw === 'all' ? 'default-project' : projIdRaw
+      // Preserve 'all' if that's what's selected
+      const orgIdRaw = organizationId !== undefined && organizationId !== null 
+        ? organizationId 
+        : (localStorage.getItem('organization_id') || 'default-org')
+      const projIdRaw = projectId !== undefined && projectId !== null 
+        ? projectId 
+        : (localStorage.getItem('project_id') || 'default-project')
       
       const timeParams = getTimeRangeParams(timeRange)
       const params = new URLSearchParams({
@@ -162,12 +164,25 @@ function ServiceMap() {
         to: timeParams.to
       })
       
+      // Only include headers when not "all" - when "all", backend returns all orgs/projects
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      }
+      
+      // Send "all" explicitly so backend knows to return all data
+      if (orgIdRaw && orgIdRaw !== 'all') {
+        headers['X-Organization-ID'] = orgIdRaw
+      } else if (orgIdRaw === 'all') {
+        headers['X-Organization-ID'] = 'all'
+      }
+      if (projIdRaw && projIdRaw !== 'all') {
+        headers['X-Project-ID'] = projIdRaw
+      } else if (projIdRaw === 'all') {
+        headers['X-Project-ID'] = 'all'
+      }
+      
       const response = await axios.get(`${API_URL}/api/service-map?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'X-Organization-ID': orgId,
-          'X-Project-ID': projId,
-        },
+        headers,
       })
       
       const nodesData = Array.isArray(response.data?.nodes) ? response.data.nodes : []
@@ -189,7 +204,7 @@ function ServiceMap() {
     } finally {
       setLoading(false)
     }
-  }, [timeRange])
+  }, [timeRange, organizationId, projectId])
 
   useEffect(() => {
     loadServiceMap()
@@ -828,7 +843,6 @@ function ServiceMap() {
           <HelpIcon text="Interactive service dependency map. Click nodes or edges to view detailed metrics. Use filters to focus on specific services or health statuses." position="right" />
         </h2>
         <div className="service-map-controls">
-          <TenantSwitcher />
           <TimeRangePicker value={timeRange} onChange={setTimeRange} />
           <button 
             onClick={() => setShowFilters(!showFilters)} 

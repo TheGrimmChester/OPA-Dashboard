@@ -96,11 +96,12 @@ export const TenantProvider = ({ children }) => {
   // Update axios interceptor to include tenant headers
   useEffect(() => {
     const interceptor = axios.interceptors.request.use((config) => {
-      // Only send headers if not "all"
-      if (organizationId !== 'all') {
+      // Send "all" explicitly so backend knows to return all data
+      // Backend expects "all" in header to indicate no filtering
+      if (organizationId) {
         config.headers['X-Organization-ID'] = organizationId
       }
-      if (projectId !== 'all') {
+      if (projectId) {
         config.headers['X-Project-ID'] = projectId
       }
       return config
