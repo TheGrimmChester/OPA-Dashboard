@@ -340,7 +340,15 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
         <div className="loading">Loading traces...</div>
       ) : (
         <>
-          <div className="trace-table-container">
+          <div className={`trace-table-container ${refreshing ? 'refreshing' : ''}`}>
+            {refreshing && (
+              <div className="refresh-overlay active">
+                <div className="refresh-overlay-content">
+                  <FiRefreshCw className="spinning" />
+                  <span>Refreshing...</span>
+                </div>
+              </div>
+            )}
             <table className="trace-table">
               <thead>
                 <tr>
@@ -392,10 +400,10 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
                 </tr>
               </thead>
               <tbody>
-                {traces.map((trace, idx) => (
+                {traces.map((trace) => (
                   <tr 
-                    key={idx} 
-                    className={`trace-row ${selectedTraces.has(trace.trace_id) ? 'trace-row-selected' : ''}`}
+                    key={trace.trace_id}
+                    className={`trace-row smooth-list-item ${selectedTraces.has(trace.trace_id) ? 'trace-row-selected' : ''}`}
                     onClick={(e) => {
                       // Don't navigate if clicking on checkbox or delete button
                       if (e.target.type === 'checkbox' || e.target.closest('button')) {
