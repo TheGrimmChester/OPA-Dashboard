@@ -724,7 +724,7 @@ const ServiceMap = ({ refreshTrigger }) => {
           shadow: { size: 12 }
         } 
       })
-    }
+    })
 
     network.on('blurNode', () => {
       network.setOptions({ 
