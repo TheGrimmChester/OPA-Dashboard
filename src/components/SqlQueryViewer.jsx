@@ -34,6 +34,14 @@ function SqlQueryViewer({ query, language = 'sql' }) {
       meta.dbSystem = query.db_system
     }
     
+    if (query.db_host) {
+      meta.dbHost = query.db_host
+    }
+    
+    if (query.db_dsn) {
+      meta.dbDsn = query.db_dsn
+    }
+    
     return Object.keys(meta).length > 0 ? meta : null
   }, [query])
 
@@ -144,8 +152,22 @@ function SqlQueryViewer({ query, language = 'sql' }) {
           )}
           {metadata.dbSystem && (
             <span className="sql-meta-item">
-              <span className="sql-meta-label">DB:</span>
+              <span className="sql-meta-label">DB System:</span>
               <span className="sql-meta-value">{metadata.dbSystem}</span>
+            </span>
+          )}
+          {metadata.dbHost && (
+            <span className="sql-meta-item">
+              <span className="sql-meta-label">Host:</span>
+              <span className="sql-meta-value">{metadata.dbHost}</span>
+            </span>
+          )}
+          {metadata.dbDsn && (
+            <span className="sql-meta-item" title={metadata.dbDsn}>
+              <span className="sql-meta-label">DSN:</span>
+              <span className="sql-meta-value" style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>
+                {metadata.dbDsn}
+              </span>
             </span>
           )}
         </div>
