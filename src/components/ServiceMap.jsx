@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { Network } from 'vis-network'
 import { 
@@ -12,10 +13,22 @@ import {
   FiX,
   FiDownload,
   FiLayers,
-  FiGitBranch
+  FiGitBranch,
+  FiDatabase,
+  FiGlobe,
+  FiServer,
+  FiActivity,
+  FiTrendingUp,
+  FiAlertCircle,
+  FiCheckCircle,
+  FiClock,
+  FiBarChart2,
+  FiChevronRight
 } from 'react-icons/fi'
 import HelpIcon from './HelpIcon'
 import TimeRangePicker from './TimeRangePicker'
+import TenantSwitcher from './TenantSwitcher'
+import { useTenant } from '../contexts/TenantContext'
 import './ServiceMap.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -35,16 +48,51 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`
 }
 
+function formatNumber(num) {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`
+  if (num >= 1000) return `${(num / 1000).toFixed(2)}K`
+  return num.toString()
+}
+
+// Get CSS variable color values (matching index.css)
+const COLORS = {
+  success: '#10b981',
+  warning: '#f59e0b',
+  error: '#ef4444',
+  primary: '#3b82f6',
+  primaryHover: '#4a9eff',
+  textPrimary: '#f1f5f9',
+  textSecondary: '#94a3b8',
+  textTertiary: '#374151',
+  bgSecondary: '#1e293b',
+  bgTertiary: '#334155',
+  borderLight: '#334155',
+  white: '#ffffff',
+}
+
 function getHealthColor(status) {
   switch (status) {
     case 'healthy':
-      return '#4caf50'
+      return COLORS.success
     case 'degraded':
-      return '#ff9800'
+      return COLORS.warning
     case 'down':
-      return '#f44336'
+      return COLORS.error
     default:
-      return '#9e9e9e'
+      return COLORS.textSecondary
+  }
+}
+
+function getHealthIcon(status) {
+  switch (status) {
+    case 'healthy':
+      return <FiCheckCircle className="health-icon healthy" />
+    case 'degraded':
+      return <FiAlertCircle className="health-icon degraded" />
+    case 'down':
+      return <FiAlertCircle className="health-icon down" />
+    default:
+      return <FiActivity className="health-icon unknown" />
   }
 }
 
@@ -80,80 +128,31 @@ function getTimeRangeParams(range) {
 }
 
 function ServiceMap() {
+  const { organizationId, projectId } = useTenant()
   const [nodes, setNodes] = useState([])
   const [edges, setEdges] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState(null)
-  const [selectedEdge, setSelectedEdge] = useState(null)
+  const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false)
   const [viewMode, setViewMode] = useState('force') // 'force' or 'hierarchical'
   const [timeRange, setTimeRange] = useState('24h')
   const [showFilters, setShowFilters] = useState(false)
-  const [healthFilter, setHealthFilter] = useState('all') // 'all', 'healthy', 'degraded', 'down'
+  const [healthFilter, setHealthFilter] = useState('all')
   const [serviceSearch, setServiceSearch] = useState('')
   const [showIsolated, setShowIsolated] = useState(true)
   const [showExternalDeps, setShowExternalDeps] = useState(true)
-  const [httpCalls, setHttpCalls] = useState([])
-  const [loadingHttpCalls, setLoadingHttpCalls] = useState(false)
+  const [nodeTypeFilter, setNodeTypeFilter] = useState('all')
   const containerRef = useRef(null)
   const networkRef = useRef(null)
-
-  // Load HTTP/cURL calls for a service
-  const loadHttpCalls = useCallback(async (serviceName) => {
-    if (!serviceName || serviceName.startsWith('db:') || serviceName.startsWith('http://') || serviceName.startsWith('https://') || serviceName.startsWith('redis://') || serviceName.startsWith('cache:')) {
-      setHttpCalls([])
-      return
-    }
-
-    try {
-      setLoadingHttpCalls(true)
-      const token = localStorage.getItem('auth_token')
-      const orgIdRaw = localStorage.getItem('organization_id') || 'default-org'
-      const projIdRaw = localStorage.getItem('project_id') || 'default-project'
-      const orgId = orgIdRaw === 'all' ? 'default-org' : orgIdRaw
-      const projId = projIdRaw === 'all' ? 'default-project' : projIdRaw
-      
-      const timeParams = getTimeRangeParams(timeRange)
-      const params = new URLSearchParams({
-        from: timeParams.from,
-        to: timeParams.to,
-        limit: '100'
-      })
-      
-      const response = await axios.get(`${API_URL}/api/services/${encodeURIComponent(serviceName)}/http-calls?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'X-Organization-ID': orgId,
-          'X-Project-ID': projId,
-        },
-      })
-      
-      const httpCallsData = response.data?.http_calls || []
-      setHttpCalls(httpCallsData)
-    } catch (error) {
-      console.error('Failed to load HTTP calls:', error)
-      setHttpCalls([])
-    } finally {
-      setLoadingHttpCalls(false)
-    }
-  }, [timeRange])
-
-  // Load HTTP calls when a service node is selected
-  useEffect(() => {
-    if (selectedNode && selectedNode.node_type === 'service') {
-      const serviceName = selectedNode.service || selectedNode.id
-      loadHttpCalls(serviceName)
-    } else {
-      setHttpCalls([])
-    }
-  }, [selectedNode, loadHttpCalls])
 
   // Load service map data
   const loadServiceMap = useCallback(async () => {
     try {
       setLoading(true)
       const token = localStorage.getItem('auth_token')
-      const orgIdRaw = localStorage.getItem('organization_id') || 'default-org'
-      const projIdRaw = localStorage.getItem('project_id') || 'default-project'
+      // Use tenant context values, fallback to localStorage if not available
+      const orgIdRaw = organizationId || localStorage.getItem('organization_id') || 'default-org'
+      const projIdRaw = projectId || localStorage.getItem('project_id') || 'default-project'
       const orgId = orgIdRaw === 'all' ? 'default-org' : orgIdRaw
       const projId = projIdRaw === 'all' ? 'default-project' : projIdRaw
       
@@ -163,11 +162,7 @@ function ServiceMap() {
         to: timeParams.to
       })
       
-      const url = `${API_URL}/api/service-map?${params.toString()}`
-      console.log('[ServiceMap] Fetching from:', url)
-      console.log('[ServiceMap] Headers:', { orgId, projId })
-      
-      const response = await axios.get(url, {
+      const response = await axios.get(`${API_URL}/api/service-map?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'X-Organization-ID': orgId,
@@ -175,29 +170,20 @@ function ServiceMap() {
         },
       })
       
-      console.log('[ServiceMap] Response:', response.data)
-      
-      // API returns { nodes: [...], edges: [...] } directly
       const nodesData = Array.isArray(response.data?.nodes) ? response.data.nodes : []
       const edgesData = Array.isArray(response.data?.edges) ? response.data.edges : []
       
-      console.log('[ServiceMap] Parsed data:', { nodes: nodesData.length, edges: edgesData.length })
-      
-      if (nodesData.length === 0 && edgesData.length === 0) {
-        console.warn('[ServiceMap] No data returned from API. Response:', response.data)
-      }
+      console.log('ServiceMap: Loaded data', { 
+        nodesCount: nodesData.length, 
+        edgesCount: edgesData.length,
+        nodes: nodesData.map(n => ({ id: n.id, service: n.service, node_type: n.node_type })),
+        edges: edgesData.map(e => ({ from: e.from, to: e.to, dependency_type: e.dependency_type }))
+      })
       
       setNodes(nodesData)
       setEdges(edgesData)
     } catch (error) {
       console.error('Failed to load service map:', error)
-      if (error.response) {
-        console.error('Response status:', error.response.status)
-        console.error('Response data:', error.response.data)
-      }
-      if (error.request) {
-        console.error('Request made but no response:', error.request)
-      }
       setNodes([])
       setEdges([])
     } finally {
@@ -211,7 +197,7 @@ function ServiceMap() {
     return () => clearInterval(interval)
   }, [loadServiceMap])
 
-  // Filter nodes and edges based on filters
+  // Filter nodes and edges
   const filteredData = useMemo(() => {
     let filteredNodes = [...nodes]
     let filteredEdges = [...edges]
@@ -219,7 +205,10 @@ function ServiceMap() {
     // Health filter
     if (healthFilter !== 'all') {
       filteredNodes = filteredNodes.filter(node => node.health_status === healthFilter)
-      filteredEdges = filteredEdges.filter(edge => edge.health_status === healthFilter)
+      const filteredServiceSet = new Set(filteredNodes.map(n => n.service || n.id))
+      filteredEdges = filteredEdges.filter(edge => 
+        filteredServiceSet.has(edge.from) && filteredServiceSet.has(edge.to)
+      )
     }
 
     // Service search filter
@@ -229,7 +218,18 @@ function ServiceMap() {
         const serviceName = (node.service || node.id || '').toLowerCase()
         return serviceName.includes(searchLower)
       })
-      // Filter edges that connect to filtered nodes
+      const filteredServiceSet = new Set(filteredNodes.map(n => n.service || n.id))
+      filteredEdges = filteredEdges.filter(edge => 
+        filteredServiceSet.has(edge.from) && filteredServiceSet.has(edge.to)
+      )
+    }
+
+    // Node type filter
+    if (nodeTypeFilter !== 'all') {
+      filteredNodes = filteredNodes.filter(node => {
+        const nodeType = node.node_type || 'service'
+        return nodeType === nodeTypeFilter
+      })
       const filteredServiceSet = new Set(filteredNodes.map(n => n.service || n.id))
       filteredEdges = filteredEdges.filter(edge => 
         filteredServiceSet.has(edge.from) && filteredServiceSet.has(edge.to)
@@ -252,47 +252,41 @@ function ServiceMap() {
     // External dependencies filter
     if (!showExternalDeps) {
       filteredNodes = filteredNodes.filter(node => {
-        const nodeType = node.node_type || getNodeTypeFromName(node.service || node.id)
+        const nodeType = node.node_type || 'service'
         return nodeType === 'service'
       })
-      // Also filter edges that connect to external dependencies
-      const serviceSet = new Set(filteredNodes.map(n => n.service || n.id))
+      const filteredServiceSet = new Set(filteredNodes.map(n => n.service || n.id))
       filteredEdges = filteredEdges.filter(edge => 
-        serviceSet.has(edge.from) && serviceSet.has(edge.to)
+        filteredServiceSet.has(edge.from) && filteredServiceSet.has(edge.to)
       )
     }
 
     return { nodes: filteredNodes, edges: filteredEdges }
-  }, [nodes, edges, healthFilter, serviceSearch, showIsolated, showExternalDeps])
+  }, [nodes, edges, healthFilter, serviceSearch, showIsolated, showExternalDeps, nodeTypeFilter])
 
-  // Helper function to detect node type from name (used in filter)
-  const getNodeTypeFromName = (name) => {
-    if (!name) return 'service'
-    if (name.startsWith('db:') || (name.includes('://') && (name.startsWith('mysql://') || name.startsWith('postgresql://') || name.startsWith('postgres://') || name.startsWith('mariadb://') || name.startsWith('sqlite://')))) {
-      return 'database'
-    }
-    if (name.startsWith('http://') || name.startsWith('https://')) return 'http'
-    if (name.startsWith('redis://') || name === 'redis') return 'redis'
-    if (name.startsWith('cache:') || name.startsWith('cache://')) return 'cache'
-    return 'service'
-  }
-
-  // Transform data for vis-network
+  // Transform data for vis-network with complete metrics
   const graphData = useMemo(() => {
     const { nodes: filteredNodes, edges: filteredEdges } = filteredData
+    
+    // Debug logging
+    if (filteredNodes.length === 0 && filteredEdges.length === 0) {
+      console.warn('ServiceMap: No filtered nodes or edges', { 
+        originalNodes: nodes.length, 
+        originalEdges: edges.length,
+        filteredNodes: filteredNodes.length,
+        filteredEdges: filteredEdges.length
+      })
+    }
 
     // Calculate max values for scaling
     const maxCallCount = Math.max(...filteredEdges.map(e => e.call_count || 0), 1)
     const maxLatency = Math.max(...filteredEdges.map(e => e.avg_latency_ms || 0), 1)
-    const maxErrorRate = Math.max(...filteredEdges.map(e => e.error_rate || 0), 1)
 
     // Helper function to detect node type
     const getNodeType = (node) => {
-      if (node.node_type) {
-        return node.node_type
-      }
+      if (node.node_type) return node.node_type
       const serviceName = node.service || node.id || ''
-      if (serviceName.startsWith('db:') || (serviceName.includes('://') && (serviceName.startsWith('mysql://') || serviceName.startsWith('postgresql://') || serviceName.startsWith('postgres://') || serviceName.startsWith('mariadb://') || serviceName.startsWith('sqlite://')))) {
+      if (serviceName.startsWith('db:') || serviceName.includes('://') && (serviceName.includes('mysql://') || serviceName.includes('postgres://'))) {
         return 'database'
       } else if (serviceName.startsWith('http://') || serviceName.startsWith('https://')) {
         return 'http'
@@ -304,27 +298,26 @@ function ServiceMap() {
       return 'service'
     }
 
-    // Helper function to get node color based on type
+    // Helper function to get node color
     const getNodeColor = (nodeType, healthStatus) => {
       if (nodeType === 'service') {
         return getHealthColor(healthStatus)
       }
-      // Different colors for external dependencies
       switch (nodeType) {
         case 'database':
-          return '#2196f3' // Blue
+          return COLORS.primary
         case 'http':
-          return '#4caf50' // Green
+          return COLORS.success
         case 'redis':
-          return '#f44336' // Red
+          return COLORS.error
         case 'cache':
-          return '#ff9800' // Orange
+          return COLORS.warning
         default:
-          return '#9e9e9e' // Gray
+          return COLORS.textSecondary
       }
     }
 
-    // Helper function to get node shape based on type
+    // Helper function to get node shape
     const getNodeShape = (nodeType) => {
       switch (nodeType) {
         case 'database':
@@ -340,39 +333,60 @@ function ServiceMap() {
       }
     }
 
-    // Create vis-network nodes
+    // Helper function to get node icon
+    const getNodeIcon = (nodeType) => {
+      switch (nodeType) {
+        case 'database':
+          return '🗄️'
+        case 'http':
+          return '🌐'
+        case 'redis':
+          return '⚡'
+        case 'cache':
+          return '💾'
+        default:
+          return '🖥️'
+      }
+    }
+
+    // Identify connected nodes (nodes that appear in edges)
+    const connectedServices = new Set()
+    filteredEdges.forEach(edge => {
+      connectedServices.add(edge.from)
+      connectedServices.add(edge.to)
+    })
+
+    // Create vis-network nodes with complete metrics
+    let isolatedIndex = 0
     const visNodes = filteredNodes.map(node => {
       const serviceName = node.service || node.id
       const healthStatus = node.health_status || 'unknown'
       const nodeType = getNodeType(node)
       const color = getNodeColor(nodeType, healthStatus)
       
-      // Calculate node size based on importance (number of connections)
+      // Calculate node size based on importance
       const connectionCount = filteredEdges.filter(e => 
         e.from === serviceName || e.to === serviceName
       ).length
-      // External dependencies are slightly smaller
-      const baseSize = nodeType === 'service' ? 30 : 25
-      const nodeSize = Math.max(baseSize, Math.min(80, baseSize + connectionCount * 5))
+      const baseSize = nodeType === 'service' ? 40 : 30
+      const nodeSize = Math.max(baseSize, Math.min(100, baseSize + connectionCount * 3))
+      
+      // Check if node is isolated (not in any edge)
+      const isIsolated = !connectedServices.has(serviceName)
 
-      // Format label for external dependencies
+      // Format label with metrics
       let label = serviceName
       if (nodeType === 'database') {
         if (serviceName.startsWith('db:')) {
           label = serviceName.replace('db:', '')
         } else if (serviceName.includes('://')) {
-          // Format: mysql://hostname or postgresql://hostname
           try {
             const url = new URL(serviceName)
             label = `${url.protocol.replace(':', '')}://${url.hostname}`
           } catch (e) {
-            // If URL parsing fails, try to extract hostname manually
             const parts = serviceName.split('://')
             if (parts.length === 2) {
-              const hostPart = parts[1].split('/')[0]
-              label = `${parts[0]}://${hostPart}`
-            } else {
-              label = serviceName
+              label = `${parts[0]}://${parts[1].split('/')[0]}`
             }
           }
         }
@@ -383,60 +397,102 @@ function ServiceMap() {
         } catch (e) {
           label = serviceName
         }
-      } else if (nodeType === 'redis' && serviceName.startsWith('redis://')) {
-        label = serviceName.replace('redis://', '')
-      } else if (nodeType === 'cache' && serviceName.startsWith('cache:')) {
-        label = serviceName.replace('cache:', '')
       }
       
-      if (label.length > 20) {
-        label = label.substring(0, 20) + '...'
+      if (label.length > 25) {
+        label = label.substring(0, 22) + '...'
       }
 
-      return {
+      // Build title with complete metrics
+      const title = `${serviceName}\n` +
+        `Type: ${nodeType}\n` +
+        `Status: ${healthStatus}\n` +
+        `Connections: ${connectionCount}\n` +
+        (node.total_spans ? `Spans: ${formatNumber(node.total_spans)}\n` : '') +
+        (node.avg_duration ? `Avg Latency: ${formatDuration(node.avg_duration)}\n` : '') +
+        (node.error_rate !== undefined ? `Error Rate: ${node.error_rate.toFixed(2)}%\n` : '') +
+        (node.incoming_calls ? `Incoming: ${formatNumber(node.incoming_calls)}\n` : '') +
+        (node.outgoing_calls ? `Outgoing: ${formatNumber(node.outgoing_calls)}\n` : '') +
+        (node.throughput ? `Throughput: ${node.throughput.toFixed(2)} req/s\n` : '') +
+        (node.total_traffic ? `Traffic: ${formatBytes(node.total_traffic)}` : '')
+
+      const nodeConfig = {
         id: serviceName,
         label: label,
-        title: `${serviceName}\nType: ${nodeType}\nStatus: ${healthStatus}\nConnections: ${connectionCount}`,
+        title: title,
         color: {
           background: color,
-          border: '#ffffff',
+          border: COLORS.white,
           highlight: {
             background: color,
-            border: '#4a9eff',
+            border: COLORS.primaryHover,
           },
         },
         font: {
-          size: nodeType === 'service' ? 12 : 11,
-          color: '#ffffff',
-          face: 'Arial, sans-serif',
+          size: nodeType === 'service' ? 14 : 12,
+          color: COLORS.white,
+          face: 'Inter, -apple-system, sans-serif',
+          bold: nodeType === 'service',
         },
         shape: getNodeShape(nodeType),
         size: nodeSize,
-        borderWidth: 2,
+        borderWidth: healthStatus === 'down' ? 4 : healthStatus === 'degraded' ? 3 : 2,
         data: { ...node, node_type: nodeType },
       }
+      
+      // Position isolated nodes symmetrically around the edges to keep graph centered
+      if (isIsolated) {
+        nodeConfig.fixed = { x: true, y: true }
+        // Arrange in a grid on the right side, centered vertically
+        const cols = 3
+        const spacing = 180
+        const startX = 800  // Right side of main view
+        const startY = -200  // Start above center, will balance below too
+        const row = Math.floor(isolatedIndex / cols)
+        const col = isolatedIndex % cols
+        nodeConfig.x = startX + col * spacing
+        nodeConfig.y = startY + row * spacing
+        nodeConfig.opacity = 0.6  // Make them slightly transparent to indicate they're isolated
+        isolatedIndex++
+      }
+      
+      return nodeConfig
     })
 
-    // Create vis-network edges
+    // Create vis-network edges with complete metrics
     const visEdges = filteredEdges.map((edge, idx) => {
       const healthStatus = edge.health_status || 'healthy'
       const color = getHealthColor(healthStatus)
       
-      // Calculate edge width based on call count
+      // Calculate edge width based on call count (thinner arrows)
       const callCount = edge.call_count || 0
-      const width = Math.max(1, Math.min(8, 1 + (callCount / maxCallCount) * 7))
+      const width = Math.max(1, Math.min(4, 1 + (callCount / maxCallCount) * 3))
       
-      // Create edge label with metrics
+      // Create edge label with key metrics
       const latency = edge.avg_latency_ms || 0
       const errorRate = edge.error_rate || 0
-      const label = `${formatDuration(latency)} | ${errorRate.toFixed(1)}%`
+      const label = `${formatDuration(latency)} | ${errorRate.toFixed(1)}% | ${formatNumber(callCount)}`
+
+      // Build title with complete metrics
+      const title = `${edge.from} → ${edge.to}\n` +
+        `Avg Latency: ${formatDuration(latency)}\n` +
+        (edge.min_latency_ms ? `Min: ${formatDuration(edge.min_latency_ms)}\n` : '') +
+        (edge.max_latency_ms ? `Max: ${formatDuration(edge.max_latency_ms)}\n` : '') +
+        (edge.p95_latency_ms ? `P95: ${formatDuration(edge.p95_latency_ms)}\n` : '') +
+        (edge.p99_latency_ms ? `P99: ${formatDuration(edge.p99_latency_ms)}\n` : '') +
+        `Error Rate: ${errorRate.toFixed(2)}%\n` +
+        (edge.success_rate !== undefined ? `Success Rate: ${edge.success_rate.toFixed(2)}%\n` : '') +
+        `Call Count: ${formatNumber(callCount)}\n` +
+        (edge.throughput ? `Throughput: ${edge.throughput.toFixed(2)} req/s\n` : '') +
+        (edge.bytes_sent || edge.bytes_received ? `Traffic: ${formatBytes((edge.bytes_sent || 0) + (edge.bytes_received || 0))}\n` : '') +
+        (edge.dependency_type ? `Type: ${edge.dependency_type}` : '')
 
       return {
         id: `edge-${idx}`,
         from: edge.from,
         to: edge.to,
         label: label,
-        title: `${edge.from} → ${edge.to}\nAvg Latency: ${formatDuration(latency)}\nError Rate: ${errorRate.toFixed(2)}%\nCall Count: ${(callCount || 0).toLocaleString()}\nP95 Latency: ${formatDuration(edge.p95_latency_ms || 0)}\nP99 Latency: ${formatDuration(edge.p99_latency_ms || 0)}\nThroughput: ${(edge.throughput || 0).toFixed(2)} req/s\nTraffic: ${formatBytes((edge.bytes_sent || 0) + (edge.bytes_received || 0))}`,
+        title: title,
         color: {
           color: color,
           highlight: '#4a9eff',
@@ -452,13 +508,19 @@ function ServiceMap() {
         },
         smooth: {
           type: 'curvedCW',
-          roundness: 0.2,
+          roundness: 0.3,
         },
+        dashes: healthStatus === 'degraded' || healthStatus === 'down',
         font: {
-          size: 10,
-          color: '#666',
-          face: 'Arial, sans-serif',
-          align: 'middle',
+          size: 12,
+          color: COLORS.white,
+          face: 'Inter, -apple-system, sans-serif',
+          align: 'top',
+          vadjust: -25,
+          background: 'rgba(30, 41, 59, 0.98)',
+          strokeWidth: 3,
+          strokeColor: COLORS.bgSecondary,
+          bold: true,
         },
         data: edge,
       }
@@ -467,22 +529,46 @@ function ServiceMap() {
     return { nodes: visNodes, edges: visEdges }
   }, [filteredData])
 
-  // Initialize vis-network (only when viewMode changes or on mount)
+  // Initialize vis-network
   useEffect(() => {
+    // Wait for container to be available
     if (!containerRef.current) {
-      return
+      // Retry after a short delay if container isn't ready yet
+      const timeoutId = setTimeout(() => {
+        if (!containerRef.current) {
+          console.warn('ServiceMap: containerRef still not available after delay')
+        }
+      }, 100)
+      return () => clearTimeout(timeoutId)
     }
 
-    // If network already exists and only viewMode changed, destroy and recreate
     if (networkRef.current) {
       networkRef.current.destroy()
       networkRef.current = null
     }
 
-    // Create new network with current data
     const data = {
       nodes: graphData.nodes,
       edges: graphData.edges,
+    }
+
+    // Debug logging
+    console.log('ServiceMap: Initializing network', {
+      nodesCount: data.nodes?.length || 0,
+      edgesCount: data.edges?.length || 0,
+      hasContainer: !!containerRef.current,
+      sampleNodes: data.nodes?.slice(0, 3).map(n => ({ id: n.id, label: n.label }))
+    })
+
+    // Ensure we have data before creating network
+    if (!data.nodes || data.nodes.length === 0) {
+      console.warn('ServiceMap: No nodes to render', { 
+        graphDataNodes: graphData.nodes?.length || 0,
+        graphDataEdges: graphData.edges?.length || 0,
+        filteredDataNodes: filteredData.nodes?.length || 0,
+        filteredDataEdges: filteredData.edges?.length || 0
+      })
+      return
     }
 
     const options = {
@@ -490,9 +576,9 @@ function ServiceMap() {
         hierarchical: {
           direction: 'UD',
           sortMethod: 'hubsize',
-          levelSeparation: 200,
-          nodeSpacing: 150,
-          treeSpacing: 300,
+          levelSeparation: 350,
+          nodeSpacing: 300,
+          treeSpacing: 500,
           blockShifting: true,
           edgeMinimization: true,
           parentCentralization: true,
@@ -506,13 +592,13 @@ function ServiceMap() {
       } : {
         enabled: true,
         stabilization: {
-          iterations: 200,
+          iterations: 300,
           fit: true,
         },
         barnesHut: {
-          gravitationalConstant: -2000,
+          gravitationalConstant: -5000,
           centralGravity: 0.3,
-          springLength: 150,
+          springLength: 300,
           springConstant: 0.04,
           damping: 0.09,
         },
@@ -521,51 +607,57 @@ function ServiceMap() {
         borderWidth: 2,
         shadow: {
           enabled: true,
-          color: 'rgba(0,0,0,0.2)',
-          size: 5,
-          x: 2,
-          y: 2,
+          color: 'rgba(0,0,0,0.3)',
+          size: 8,
+          x: 3,
+          y: 3,
         },
         font: {
-          size: 12,
-          color: '#ffffff',
-          face: 'Arial, sans-serif',
+          size: 14,
+          color: COLORS.white,
+          face: 'Inter, -apple-system, sans-serif',
         },
         shapeProperties: {
-          borderRadius: 4,
+          borderRadius: 6,
         },
-        margin: 10,
+        margin: 20,
       },
       edges: {
         color: {
-          color: '#b0b0b0',
-          highlight: '#4a9eff',
-          hover: '#4a9eff',
+          color: COLORS.textSecondary,
+          highlight: COLORS.primaryHover,
+          hover: COLORS.primaryHover,
         },
         smooth: {
           type: 'curvedCW',
-          roundness: 0.2,
+          roundness: 0.3,
         },
         arrows: {
           to: {
             enabled: true,
-            scaleFactor: 1.2,
+            scaleFactor: 1.0,
             type: 'arrow',
-            length: 15,
           },
         },
-        selectionWidth: 3,
+        width: 2,
+        length: 300,
+        selectionWidth: 4,
         font: {
-          size: 10,
-          color: '#666',
-          face: 'Arial, sans-serif',
-          align: 'middle',
+          size: 12,
+          color: COLORS.white,
+          face: 'Inter, -apple-system, sans-serif',
+          align: 'top',
+          vadjust: -25,
+          background: 'rgba(30, 41, 59, 0.98)',
+          strokeWidth: 3,
+          strokeColor: COLORS.bgSecondary,
+          bold: true,
         },
-        labelHighlightBold: false,
+        labelHighlightBold: true,
       },
       interaction: {
         hover: true,
-        tooltipDelay: 150,
+        tooltipDelay: 200,
         zoomView: true,
         dragView: true,
         selectConnectedEdges: true,
@@ -581,44 +673,53 @@ function ServiceMap() {
         const node = graphData.nodes.find((n) => n.id === nodeId)
         if (node) {
           setSelectedNode(node.data)
-          setSelectedEdge(null)
-          network.setSelection({ nodes: [nodeId] })
-        }
-      } else if (params.edges.length > 0) {
-        const edgeId = params.edges[0]
-        const edge = graphData.edges.find((e) => e.id === edgeId)
-        if (edge) {
-          setSelectedEdge(edge.data)
-          setSelectedNode(null)
-          network.setSelection({ edges: [edgeId] })
+          setIsDetailsPanelOpen(true)
+          network.setSelection({ nodes: [nodeId], edges: [] })
         }
       } else {
         setSelectedNode(null)
-        setSelectedEdge(null)
+        setIsDetailsPanelOpen(false)
         network.setSelection({ nodes: [], edges: [] })
       }
     })
 
+    network.on('hoverNode', (params) => {
+      network.setOptions({ 
+        nodes: { 
+          borderWidth: 4,
+          shadow: { size: 12 }
+        } 
+      })
+    })
+
+    network.on('blurNode', () => {
+      network.setOptions({ 
+        nodes: { 
+          borderWidth: 2,
+          shadow: { size: 8 }
+        } 
+      })
+    })
+
     setTimeout(() => {
-      network.fit({ animation: { duration: 300 } })
-    }, 100)
+      network.fit({ animation: { duration: 400 } })
+    }, 200)
     
     if (viewMode === 'hierarchical') {
       setTimeout(() => {
-        network.fit({ animation: { duration: 300 } })
-      }, 500)
+        network.fit({ animation: { duration: 400 } })
+      }, 600)
     }
 
     return () => {
-      // Cleanup: destroy network when component unmounts
       if (networkRef.current) {
         networkRef.current.destroy()
         networkRef.current = null
       }
     }
-  }, [viewMode]) // Only recreate when viewMode changes
+  }, [viewMode, graphData])
 
-  // Update network data when graphData changes (but not viewMode)
+  // Update network data when graphData changes
   useEffect(() => {
     if (networkRef.current && containerRef.current) {
       const data = {
@@ -626,13 +727,16 @@ function ServiceMap() {
         edges: graphData.edges,
       }
       networkRef.current.setData(data)
-      // Fit to view after data update (only if there are nodes)
       if (graphData.nodes.length > 0) {
         setTimeout(() => {
-          if (networkRef.current) {
-            networkRef.current.fit({ animation: { duration: 300 } })
+          if (networkRef.current && networkRef.current.fit) {
+            try {
+              networkRef.current.fit({ animation: { duration: 400 } })
+            } catch (err) {
+              console.warn('ServiceMap: Failed to fit network after data update', err)
+            }
           }
-        }, 100)
+        }, 300)
       }
     }
   }, [graphData])
@@ -641,20 +745,20 @@ function ServiceMap() {
   const handleZoomIn = () => {
     if (networkRef.current) {
       const scale = networkRef.current.getScale()
-      networkRef.current.moveTo({ scale: scale * 1.2 })
+      networkRef.current.moveTo({ scale: scale * 1.3, animation: true })
     }
   }
 
   const handleZoomOut = () => {
     if (networkRef.current) {
       const scale = networkRef.current.getScale()
-      networkRef.current.moveTo({ scale: scale * 0.8 })
+      networkRef.current.moveTo({ scale: scale * 0.7, animation: true })
     }
   }
 
   const handleFit = () => {
     if (networkRef.current) {
-      networkRef.current.fit({ animation: true })
+      networkRef.current.fit({ animation: { duration: 400 } })
     }
   }
 
@@ -672,7 +776,10 @@ function ServiceMap() {
   if (loading && (!nodes || nodes.length === 0)) {
     return (
       <div className="service-map-container">
-        <div className="service-map-loading">Loading service map...</div>
+        <div className="service-map-loading">
+          <FiActivity className="loading-spinner" />
+          <p>Loading service map...</p>
+        </div>
       </div>
     )
   }
@@ -691,17 +798,15 @@ function ServiceMap() {
         </div>
         <div className="service-map-content">
           <div className="empty-state">
+            <FiServer className="empty-icon" />
             <h3>No Service Data Available</h3>
             <p>No service dependencies found for the selected time range.</p>
             <p>Try:</p>
             <ul>
               <li>Selecting a different time range (e.g., 7 days or 30 days)</li>
               <li>Making some requests to generate service dependencies</li>
-              <li>Checking the browser console for API errors</li>
+              <li>Checking that services are properly instrumented</li>
             </ul>
-            <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--text-tertiary)' }}>
-              Check the browser console (F12) for detailed error messages.
-            </p>
           </div>
         </div>
       </div>
@@ -711,8 +816,13 @@ function ServiceMap() {
   return (
     <div className="service-map-container">
       <div className="service-map-header">
-        <h2>Service Map <HelpIcon text="Visualize service dependencies and relationships. Nodes represent services, edges show communication between them." position="right" /></h2>
+        <h2>
+          <FiGlobe className="header-icon" />
+          Service Map
+          <HelpIcon text="Interactive service dependency map. Click nodes or edges to view detailed metrics. Use filters to focus on specific services or health statuses." position="right" />
+        </h2>
         <div className="service-map-controls">
+          <TenantSwitcher />
           <TimeRangePicker value={timeRange} onChange={setTimeRange} />
           <button 
             onClick={() => setShowFilters(!showFilters)} 
@@ -749,10 +859,26 @@ function ServiceMap() {
                 onChange={(e) => setHealthFilter(e.target.value)}
                 className="filter-select"
               >
-                <option value="all">All</option>
+                <option value="all">All Statuses</option>
                 <option value="healthy">Healthy</option>
                 <option value="degraded">Degraded</option>
                 <option value="down">Down</option>
+              </select>
+            </div>
+
+            <div className="filter-group">
+              <label>Node Type</label>
+              <select 
+                value={nodeTypeFilter} 
+                onChange={(e) => setNodeTypeFilter(e.target.value)}
+                className="filter-select"
+              >
+                <option value="all">All Types</option>
+                <option value="service">Services</option>
+                <option value="database">Databases</option>
+                <option value="http">HTTP Services</option>
+                <option value="redis">Redis</option>
+                <option value="cache">Cache</option>
               </select>
             </div>
 
@@ -771,7 +897,7 @@ function ServiceMap() {
             </div>
 
             <div className="filter-group">
-              <label>
+              <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={showIsolated}
@@ -782,7 +908,7 @@ function ServiceMap() {
             </div>
 
             <div className="filter-group">
-              <label>
+              <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={showExternalDeps}
@@ -832,197 +958,172 @@ function ServiceMap() {
         </div>
 
         {/* Details Panel */}
-        <div className="service-map-details">
+        {isDetailsPanelOpen && (
+        <div className={`service-map-details ${isDetailsPanelOpen ? 'open' : ''}`}>
           {selectedNode && (
-            <div>
-              <h3>Service Details</h3>
-              <div className="detail-section">
-                <p>
-                  <strong>Service:</strong> 
-                  <span style={{ color: getHealthColor(selectedNode.health_status), marginLeft: '0.5rem' }}>
-                    {selectedNode.service || selectedNode.id}
-                  </span>
-                </p>
-                {selectedNode.node_type && selectedNode.node_type !== 'service' && (
-                  <p>
-                    <strong>Type:</strong>
-                    <span 
-                      className="type-badge"
-                      style={{ 
-                        marginLeft: '0.5rem',
-                        textTransform: 'capitalize'
-                      }}
-                    >
-                      {selectedNode.node_type}
-                    </span>
-                  </p>
-                )}
-                <p>
-                  <strong>Status:</strong>
-                  <span 
-                    className="status-badge"
-                    style={{ 
-                      backgroundColor: getHealthColor(selectedNode.health_status) + '20',
-                      color: getHealthColor(selectedNode.health_status),
-                      marginLeft: '0.5rem'
-                    }}
-                  >
-                    {selectedNode.health_status || 'unknown'}
-                  </span>
-                </p>
-                {selectedNode.avg_duration && (
-                  <p>
-                    <strong>Avg Duration:</strong> {formatDuration(selectedNode.avg_duration)}ms
-                  </p>
-                )}
-                {selectedNode.error_rate !== undefined && (
-                  <p>
-                    <strong>Error Rate:</strong> {selectedNode.error_rate.toFixed(2)}%
-                  </p>
-                )}
-                {selectedNode.total_spans && (
-                  <p>
-                    <strong>Total Spans:</strong> {selectedNode.total_spans.toLocaleString()}
-                  </p>
-                )}
+            <div className="details-content">
+              <div className="details-header">
+                <h3>
+                  {selectedNode.node_type === 'service' && <FiServer />}
+                  {selectedNode.node_type === 'database' && <FiDatabase />}
+                  {selectedNode.node_type === 'http' && <FiGlobe />}
+                  {selectedNode.node_type === 'redis' && <FiActivity />}
+                  {selectedNode.node_type === 'cache' && <FiBarChart2 />}
+                  {selectedNode.service || selectedNode.id}
+                </h3>
+                <button 
+                  className="details-close"
+                  onClick={() => {
+                    setIsDetailsPanelOpen(false)
+                    setSelectedNode(null)
+                  }}
+                  title="Close"
+                >
+                  <FiChevronRight />
+                </button>
               </div>
               
-              {/* HTTP/cURL Calls Section */}
-              {selectedNode.node_type === 'service' && (
-                <div className="detail-section" style={{ marginTop: '2rem' }}>
-                  <h4 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    cURL Calls
-                  </h4>
-                  {loadingHttpCalls ? (
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading cURL calls...</p>
-                  ) : httpCalls.length > 0 ? (
-                    <div className="http-calls-list" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                      {httpCalls.map((call, idx) => (
-                        <div 
-                          key={idx} 
-                          className="http-call-item" 
-                          style={{ 
-                            marginBottom: '1rem', 
-                            padding: '0.75rem', 
-                            background: 'var(--bg-tertiary)', 
-                            borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--border-light)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            <span 
-                              style={{ 
-                                padding: '0.25rem 0.5rem', 
-                                background: 'var(--color-primary)', 
-                                color: 'var(--text-inverse)', 
-                                borderRadius: 'var(--radius-sm)',
-                                fontSize: '0.75rem',
-                                fontWeight: 600
-                              }}
-                            >
-                              {call.method || 'GET'}
-                            </span>
-                            <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)', fontWeight: 500, wordBreak: 'break-all' }}>
-                              {call.url}
-                            </span>
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            <div>
-                              <strong>Calls:</strong> {call.call_count?.toLocaleString() || 0}
-                            </div>
-                            <div>
-                              <strong>Avg:</strong> {formatDuration(call.avg_duration || 0)}
-                            </div>
-                            {call.min_duration !== undefined && call.max_duration !== undefined && (
-                              <>
-                                <div>
-                                  <strong>Min:</strong> {formatDuration(call.min_duration)}
-                                </div>
-                                <div>
-                                  <strong>Max:</strong> {formatDuration(call.max_duration)}
-                                </div>
-                              </>
-                            )}
-                            <div>
-                              <strong>Errors:</strong> {call.error_count?.toLocaleString() || 0} ({call.error_rate?.toFixed(1) || 0}%)
-                            </div>
-                            {(call.total_bytes_sent || call.total_bytes_received) && (
-                              <div>
-                                <strong>Traffic:</strong> {formatBytes((call.total_bytes_sent || 0) + (call.total_bytes_received || 0))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>No cURL calls found for this service.</p>
-                  )}
+              <div className="details-section">
+                <div className="metric-card health">
+                  <div className="metric-header">
+                    {getHealthIcon(selectedNode.health_status)}
+                    <span className="metric-label">Health Status</span>
+                  </div>
+                  <div className="metric-value" style={{ color: getHealthColor(selectedNode.health_status || 'unknown') }}>
+                    {selectedNode.health_status || 'unknown'}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
-          {selectedEdge && (
-            <div>
-              <h3>Dependency Details</h3>
-              <div className="detail-section">
-                <p>
-                  <strong>From:</strong> {selectedEdge.from}
-                </p>
-                <p>
-                  <strong>To:</strong> {selectedEdge.to}
-                </p>
-                <p>
-                  <strong>Avg Latency:</strong> {formatDuration(selectedEdge.avg_latency_ms || 0)}
-                </p>
-                {selectedEdge.p95_latency_ms && (
-                  <p>
-                    <strong>P95 Latency:</strong> {formatDuration(selectedEdge.p95_latency_ms)}
-                  </p>
+
+                {selectedNode.node_type && selectedNode.node_type !== 'service' && (
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <FiInfo />
+                      <span className="metric-label">Type</span>
+                    </div>
+                    <div className="metric-value type-badge">
+                      {selectedNode.node_type}
+                    </div>
+                  </div>
                 )}
-                {selectedEdge.p99_latency_ms && (
-                  <p>
-                    <strong>P99 Latency:</strong> {formatDuration(selectedEdge.p99_latency_ms)}
-                  </p>
+
+                {selectedNode.total_spans !== undefined && (
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <FiActivity />
+                      <span className="metric-label">Total Spans</span>
+                    </div>
+                    <div className="metric-value">
+                      {formatNumber(selectedNode.total_spans)}
+                    </div>
+                  </div>
                 )}
-                <p>
-                  <strong>Error Rate:</strong> {(selectedEdge.error_rate || 0).toFixed(2)}%
-                </p>
-                <p>
-                  <strong>Call Count:</strong> {(selectedEdge.call_count || 0).toLocaleString()}
-                </p>
-                {selectedEdge.throughput && (
-                  <p>
-                    <strong>Throughput:</strong> {selectedEdge.throughput.toFixed(2)} req/s
-                  </p>
+
+                {selectedNode.avg_duration !== undefined && (
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <FiClock />
+                      <span className="metric-label">Avg Duration</span>
+                    </div>
+                    <div className="metric-value">
+                      {formatDuration(selectedNode.avg_duration)}
+                    </div>
+                    {selectedNode.min_duration !== undefined && selectedNode.max_duration !== undefined && (
+                      <div className="metric-subtext">
+                        {formatDuration(selectedNode.min_duration)} - {formatDuration(selectedNode.max_duration)}
+                      </div>
+                    )}
+                    {selectedNode.p95_duration !== undefined && selectedNode.p99_duration !== undefined && (
+                      <div className="metric-subtext">
+                        P95: {formatDuration(selectedNode.p95_duration)} | P99: {formatDuration(selectedNode.p99_duration)}
+                      </div>
+                    )}
+                  </div>
                 )}
-                {(selectedEdge.bytes_sent || selectedEdge.bytes_received) && (
-                  <p>
-                    <strong>Traffic:</strong> {formatBytes((selectedEdge.bytes_sent || 0) + (selectedEdge.bytes_received || 0))}
-                  </p>
+
+                {selectedNode.error_rate !== undefined && (
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <FiAlertCircle />
+                      <span className="metric-label">Error Rate</span>
+                    </div>
+                    <div className="metric-value" style={{ color: selectedNode.error_rate > 10 ? COLORS.error : selectedNode.error_rate > 5 ? COLORS.warning : COLORS.success }}>
+                      {selectedNode.error_rate.toFixed(2)}%
+                    </div>
+                  </div>
                 )}
-                <p>
-                  <strong>Status:</strong>
-                  <span 
-                    className="status-badge"
-                    style={{ 
-                      backgroundColor: getHealthColor(selectedEdge.health_status) + '20',
-                      color: getHealthColor(selectedEdge.health_status),
-                      marginLeft: '0.5rem'
-                    }}
+
+                {selectedNode.incoming_calls !== undefined && (
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <FiTrendingUp />
+                      <span className="metric-label">Incoming Calls</span>
+                    </div>
+                    <div className="metric-value">
+                      {formatNumber(selectedNode.incoming_calls)}
+                    </div>
+                  </div>
+                )}
+
+                {selectedNode.outgoing_calls !== undefined && (
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <FiTrendingUp />
+                      <span className="metric-label">Outgoing Calls</span>
+                    </div>
+                    <div className="metric-value">
+                      {formatNumber(selectedNode.outgoing_calls)}
+                    </div>
+                  </div>
+                )}
+
+                {selectedNode.throughput !== undefined && selectedNode.throughput > 0 && (
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <FiBarChart2 />
+                      <span className="metric-label">Throughput</span>
+                    </div>
+                    <div className="metric-value">
+                      {selectedNode.throughput.toFixed(2)} req/s
+                    </div>
+                  </div>
+                )}
+
+                {selectedNode.total_traffic !== undefined && selectedNode.total_traffic > 0 && (
+                  <div className="metric-card">
+                    <div className="metric-header">
+                      <FiActivity />
+                      <span className="metric-label">Total Traffic</span>
+                    </div>
+                    <div className="metric-value">
+                      {formatBytes(selectedNode.total_traffic)}
+                    </div>
+                  </div>
+                )}
+
+                <div className="details-actions">
+                  <Link 
+                    to={`/traces?service=${encodeURIComponent(selectedNode.service || selectedNode.id)}`}
+                    className="view-traces-link"
                   >
-                    {selectedEdge.health_status || 'healthy'}
-                  </span>
-                </p>
+                    <FiActivity />
+                    View Traces by Service
+                  </Link>
+                </div>
               </div>
             </div>
           )}
-          {!selectedNode && !selectedEdge && (
+
+          {!selectedNode && (
             <div className="details-placeholder">
-              <p>Click on a service or dependency to view details</p>
+              <FiInfo className="placeholder-icon" />
+              <p>Click on a service to view detailed metrics</p>
+              <p className="placeholder-hint">
+                Hover over nodes and edges to see quick metrics preview
+              </p>
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Legend */}
@@ -1031,44 +1132,49 @@ function ServiceMap() {
         <div className="legend-section">
           <h4>Health Status</h4>
           <div className="legend-item">
-            <span className="legend-color" style={{ background: '#4caf50' }}></span>
+            <span className="legend-color" style={{ background: COLORS.success }}></span>
             <span>Healthy</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color" style={{ background: '#ff9800' }}></span>
+            <span className="legend-color" style={{ background: '#f59e0b' }}></span>
             <span>Degraded</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color" style={{ background: '#f44336' }}></span>
+            <span className="legend-color" style={{ background: COLORS.error }}></span>
             <span>Down</span>
           </div>
         </div>
         <div className="legend-section">
           <h4>Node Types</h4>
           <div className="legend-item">
-            <span className="legend-color legend-shape-box" style={{ background: '#4caf50' }}></span>
+            <span className="legend-color legend-shape-box" style={{ background: '#10b981' }}></span>
             <span>Service</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color legend-shape-database" style={{ background: '#2196f3' }}></span>
+            <span className="legend-color legend-shape-database" style={{ background: COLORS.primary }}></span>
             <span>Database</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color legend-shape-icon" style={{ background: '#4caf50' }}></span>
-            <span>HTTP/cURL</span>
+            <span className="legend-color legend-shape-icon" style={{ background: '#10b981' }}></span>
+            <span>HTTP Service</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color legend-shape-diamond" style={{ background: '#f44336' }}></span>
+            <span className="legend-color legend-shape-diamond" style={{ background: COLORS.error }}></span>
             <span>Redis</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color legend-shape-triangle" style={{ background: '#ff9800' }}></span>
+            <span className="legend-color legend-shape-triangle" style={{ background: COLORS.warning }}></span>
             <span>Cache</span>
           </div>
         </div>
-        <div className="legend-note">
-          <p>Edge thickness indicates call volume</p>
-          <p>Node size indicates connection count</p>
+        <div className="legend-section">
+          <h4>Edge Information</h4>
+          <div className="legend-note">
+            <p><strong>Label Format:</strong> Latency | Error Rate | Call Count</p>
+            <p><strong>Width:</strong> Proportional to call volume</p>
+            <p><strong>Color:</strong> Based on health status</p>
+            <p><strong>Style:</strong> Dashed = Degraded/Down, Solid = Healthy</p>
+          </div>
         </div>
       </div>
     </div>
