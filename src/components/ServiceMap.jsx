@@ -92,8 +92,60 @@ function ServiceMap() {
   const [serviceSearch, setServiceSearch] = useState('')
   const [showIsolated, setShowIsolated] = useState(true)
   const [showExternalDeps, setShowExternalDeps] = useState(true)
+  const [httpCalls, setHttpCalls] = useState([])
+  const [loadingHttpCalls, setLoadingHttpCalls] = useState(false)
   const containerRef = useRef(null)
   const networkRef = useRef(null)
+
+  // Load HTTP/cURL calls for a service
+  const loadHttpCalls = useCallback(async (serviceName) => {
+    if (!serviceName || serviceName.startsWith('db:') || serviceName.startsWith('http://') || serviceName.startsWith('https://') || serviceName.startsWith('redis://') || serviceName.startsWith('cache:')) {
+      setHttpCalls([])
+      return
+    }
+
+    try {
+      setLoadingHttpCalls(true)
+      const token = localStorage.getItem('auth_token')
+      const orgIdRaw = localStorage.getItem('organization_id') || 'default-org'
+      const projIdRaw = localStorage.getItem('project_id') || 'default-project'
+      const orgId = orgIdRaw === 'all' ? 'default-org' : orgIdRaw
+      const projId = projIdRaw === 'all' ? 'default-project' : projIdRaw
+      
+      const timeParams = getTimeRangeParams(timeRange)
+      const params = new URLSearchParams({
+        from: timeParams.from,
+        to: timeParams.to,
+        limit: '100'
+      })
+      
+      const response = await axios.get(`${API_URL}/api/services/${encodeURIComponent(serviceName)}/http-calls?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Organization-ID': orgId,
+          'X-Project-ID': projId,
+        },
+      })
+      
+      const httpCallsData = response.data?.http_calls || []
+      setHttpCalls(httpCallsData)
+    } catch (error) {
+      console.error('Failed to load HTTP calls:', error)
+      setHttpCalls([])
+    } finally {
+      setLoadingHttpCalls(false)
+    }
+  }, [timeRange])
+
+  // Load HTTP calls when a service node is selected
+  useEffect(() => {
+    if (selectedNode && selectedNode.node_type === 'service') {
+      const serviceName = selectedNode.service || selectedNode.id
+      loadHttpCalls(serviceName)
+    } else {
+      setHttpCalls([])
+    }
+  }, [selectedNode, loadHttpCalls])
 
   // Load service map data
   const loadServiceMap = useCallback(async () => {
@@ -111,7 +163,11 @@ function ServiceMap() {
         to: timeParams.to
       })
       
-      const response = await axios.get(`${API_URL}/api/service-map?${params.toString()}`, {
+      const url = `${API_URL}/api/service-map?${params.toString()}`
+      console.log('[ServiceMap] Fetching from:', url)
+      console.log('[ServiceMap] Headers:', { orgId, projId })
+      
+      const response = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           'X-Organization-ID': orgId,
@@ -119,14 +175,29 @@ function ServiceMap() {
         },
       })
       
-      const data = response.data?.data || response.data
-      const nodesData = Array.isArray(data?.nodes) ? data.nodes : (Array.isArray(response.data?.nodes) ? response.data.nodes : [])
-      const edgesData = Array.isArray(data?.edges) ? data.edges : (Array.isArray(response.data?.edges) ? response.data.edges : [])
+      console.log('[ServiceMap] Response:', response.data)
+      
+      // API returns { nodes: [...], edges: [...] } directly
+      const nodesData = Array.isArray(response.data?.nodes) ? response.data.nodes : []
+      const edgesData = Array.isArray(response.data?.edges) ? response.data.edges : []
+      
+      console.log('[ServiceMap] Parsed data:', { nodes: nodesData.length, edges: edgesData.length })
+      
+      if (nodesData.length === 0 && edgesData.length === 0) {
+        console.warn('[ServiceMap] No data returned from API. Response:', response.data)
+      }
       
       setNodes(nodesData)
       setEdges(edgesData)
     } catch (error) {
       console.error('Failed to load service map:', error)
+      if (error.response) {
+        console.error('Response status:', error.response.status)
+        console.error('Response data:', error.response.data)
+      }
+      if (error.request) {
+        console.error('Request made but no response:', error.request)
+      }
       setNodes([])
       setEdges([])
     } finally {
@@ -197,7 +268,9 @@ function ServiceMap() {
   // Helper function to detect node type from name (used in filter)
   const getNodeTypeFromName = (name) => {
     if (!name) return 'service'
-    if (name.startsWith('db:')) return 'database'
+    if (name.startsWith('db:') || (name.includes('://') && (name.startsWith('mysql://') || name.startsWith('postgresql://') || name.startsWith('postgres://') || name.startsWith('mariadb://') || name.startsWith('sqlite://')))) {
+      return 'database'
+    }
     if (name.startsWith('http://') || name.startsWith('https://')) return 'http'
     if (name.startsWith('redis://') || name === 'redis') return 'redis'
     if (name.startsWith('cache:') || name.startsWith('cache://')) return 'cache'
@@ -219,7 +292,7 @@ function ServiceMap() {
         return node.node_type
       }
       const serviceName = node.service || node.id || ''
-      if (serviceName.startsWith('db:')) {
+      if (serviceName.startsWith('db:') || (serviceName.includes('://') && (serviceName.startsWith('mysql://') || serviceName.startsWith('postgresql://') || serviceName.startsWith('postgres://') || serviceName.startsWith('mariadb://') || serviceName.startsWith('sqlite://')))) {
         return 'database'
       } else if (serviceName.startsWith('http://') || serviceName.startsWith('https://')) {
         return 'http'
@@ -284,8 +357,25 @@ function ServiceMap() {
 
       // Format label for external dependencies
       let label = serviceName
-      if (nodeType === 'database' && serviceName.startsWith('db:')) {
-        label = serviceName.replace('db:', '')
+      if (nodeType === 'database') {
+        if (serviceName.startsWith('db:')) {
+          label = serviceName.replace('db:', '')
+        } else if (serviceName.includes('://')) {
+          // Format: mysql://hostname or postgresql://hostname
+          try {
+            const url = new URL(serviceName)
+            label = `${url.protocol.replace(':', '')}://${url.hostname}`
+          } catch (e) {
+            // If URL parsing fails, try to extract hostname manually
+            const parts = serviceName.split('://')
+            if (parts.length === 2) {
+              const hostPart = parts[1].split('/')[0]
+              label = `${parts[0]}://${hostPart}`
+            } else {
+              label = serviceName
+            }
+          }
+        }
       } else if (nodeType === 'http') {
         try {
           const url = new URL(serviceName)
@@ -377,17 +467,19 @@ function ServiceMap() {
     return { nodes: visNodes, edges: visEdges }
   }, [filteredData])
 
-  // Initialize vis-network
+  // Initialize vis-network (only when viewMode changes or on mount)
   useEffect(() => {
-    if (!containerRef.current || graphData.nodes.length === 0) {
+    if (!containerRef.current) {
       return
     }
 
+    // If network already exists and only viewMode changed, destroy and recreate
     if (networkRef.current) {
       networkRef.current.destroy()
       networkRef.current = null
     }
 
+    // Create new network with current data
     const data = {
       nodes: graphData.nodes,
       edges: graphData.edges,
@@ -457,8 +549,9 @@ function ServiceMap() {
         arrows: {
           to: {
             enabled: true,
-            scaleFactor: 1.0,
+            scaleFactor: 1.2,
             type: 'arrow',
+            length: 15,
           },
         },
         selectionWidth: 3,
@@ -517,12 +610,32 @@ function ServiceMap() {
     }
 
     return () => {
+      // Cleanup: destroy network when component unmounts
       if (networkRef.current) {
         networkRef.current.destroy()
         networkRef.current = null
       }
     }
-  }, [graphData, viewMode])
+  }, [viewMode]) // Only recreate when viewMode changes
+
+  // Update network data when graphData changes (but not viewMode)
+  useEffect(() => {
+    if (networkRef.current && containerRef.current) {
+      const data = {
+        nodes: graphData.nodes,
+        edges: graphData.edges,
+      }
+      networkRef.current.setData(data)
+      // Fit to view after data update (only if there are nodes)
+      if (graphData.nodes.length > 0) {
+        setTimeout(() => {
+          if (networkRef.current) {
+            networkRef.current.fit({ animation: { duration: 300 } })
+          }
+        }, 100)
+      }
+    }
+  }, [graphData])
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -556,7 +669,7 @@ function ServiceMap() {
     }
   }
 
-  if (loading) {
+  if (loading && (!nodes || nodes.length === 0)) {
     return (
       <div className="service-map-container">
         <div className="service-map-loading">Loading service map...</div>
@@ -564,17 +677,32 @@ function ServiceMap() {
     )
   }
 
-  if (!nodes || nodes.length === 0) {
+  if (!loading && (!nodes || nodes.length === 0)) {
     return (
       <div className="service-map-container">
         <div className="service-map-header">
           <h2>Service Map <HelpIcon text="Visualize service dependencies and relationships. Nodes represent services, edges show communication between them." position="right" /></h2>
-          <button onClick={loadServiceMap} className="refresh-btn">
-            <FiRefreshCw /> Refresh
-          </button>
+          <div className="service-map-controls">
+            <TimeRangePicker value={timeRange} onChange={setTimeRange} />
+            <button onClick={loadServiceMap} className="refresh-btn">
+              <FiRefreshCw /> Refresh
+            </button>
+          </div>
         </div>
         <div className="service-map-content">
-          <p>No service data available. Make some requests to generate service dependencies.</p>
+          <div className="empty-state">
+            <h3>No Service Data Available</h3>
+            <p>No service dependencies found for the selected time range.</p>
+            <p>Try:</p>
+            <ul>
+              <li>Selecting a different time range (e.g., 7 days or 30 days)</li>
+              <li>Making some requests to generate service dependencies</li>
+              <li>Checking the browser console for API errors</li>
+            </ul>
+            <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--text-tertiary)' }}>
+              Check the browser console (F12) for detailed error messages.
+            </p>
+          </div>
         </div>
       </div>
     )
@@ -758,6 +886,80 @@ function ServiceMap() {
                   </p>
                 )}
               </div>
+              
+              {/* HTTP/cURL Calls Section */}
+              {selectedNode.node_type === 'service' && (
+                <div className="detail-section" style={{ marginTop: '2rem' }}>
+                  <h4 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    cURL Calls
+                  </h4>
+                  {loadingHttpCalls ? (
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading cURL calls...</p>
+                  ) : httpCalls.length > 0 ? (
+                    <div className="http-calls-list" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                      {httpCalls.map((call, idx) => (
+                        <div 
+                          key={idx} 
+                          className="http-call-item" 
+                          style={{ 
+                            marginBottom: '1rem', 
+                            padding: '0.75rem', 
+                            background: 'var(--bg-tertiary)', 
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border-light)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <span 
+                              style={{ 
+                                padding: '0.25rem 0.5rem', 
+                                background: 'var(--color-primary)', 
+                                color: 'var(--text-inverse)', 
+                                borderRadius: 'var(--radius-sm)',
+                                fontSize: '0.75rem',
+                                fontWeight: 600
+                              }}
+                            >
+                              {call.method || 'GET'}
+                            </span>
+                            <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)', fontWeight: 500, wordBreak: 'break-all' }}>
+                              {call.url}
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            <div>
+                              <strong>Calls:</strong> {call.call_count?.toLocaleString() || 0}
+                            </div>
+                            <div>
+                              <strong>Avg:</strong> {formatDuration(call.avg_duration || 0)}
+                            </div>
+                            {call.min_duration !== undefined && call.max_duration !== undefined && (
+                              <>
+                                <div>
+                                  <strong>Min:</strong> {formatDuration(call.min_duration)}
+                                </div>
+                                <div>
+                                  <strong>Max:</strong> {formatDuration(call.max_duration)}
+                                </div>
+                              </>
+                            )}
+                            <div>
+                              <strong>Errors:</strong> {call.error_count?.toLocaleString() || 0} ({call.error_rate?.toFixed(1) || 0}%)
+                            </div>
+                            {(call.total_bytes_sent || call.total_bytes_received) && (
+                              <div>
+                                <strong>Traffic:</strong> {formatBytes((call.total_bytes_sent || 0) + (call.total_bytes_received || 0))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>No cURL calls found for this service.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {selectedEdge && (
