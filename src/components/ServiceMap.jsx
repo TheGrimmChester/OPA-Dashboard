@@ -308,6 +308,8 @@ function ServiceMap() {
           return COLORS.primary
         case 'http':
           return COLORS.success
+        case 'curl':
+          return COLORS.warning
         case 'redis':
           return COLORS.error
         case 'cache':
@@ -324,6 +326,8 @@ function ServiceMap() {
           return 'database'
         case 'http':
           return 'icon'
+        case 'curl':
+          return 'hexagon'
         case 'redis':
           return 'diamond'
         case 'cache':
@@ -340,6 +344,8 @@ function ServiceMap() {
           return '🗄️'
         case 'http':
           return '🌐'
+        case 'curl':
+          return '🔗'
         case 'redis':
           return '⚡'
         case 'cache':
@@ -877,6 +883,7 @@ function ServiceMap() {
                 <option value="service">Services</option>
                 <option value="database">Databases</option>
                 <option value="http">HTTP Services</option>
+                <option value="curl">cURL</option>
                 <option value="redis">Redis</option>
                 <option value="cache">Cache</option>
               </select>
@@ -961,156 +968,184 @@ function ServiceMap() {
         {isDetailsPanelOpen && (
         <div className={`service-map-details ${isDetailsPanelOpen ? 'open' : ''}`}>
           {selectedNode && (
-            <div className="details-content">
+            <>
+              {/* Header */}
               <div className="details-header">
-                <h3>
-                  {selectedNode.node_type === 'service' && <FiServer />}
-                  {selectedNode.node_type === 'database' && <FiDatabase />}
-                  {selectedNode.node_type === 'http' && <FiGlobe />}
-                  {selectedNode.node_type === 'redis' && <FiActivity />}
-                  {selectedNode.node_type === 'cache' && <FiBarChart2 />}
-                  {selectedNode.service || selectedNode.id}
-                </h3>
-                <button 
-                  className="details-close"
-                  onClick={() => {
-                    setIsDetailsPanelOpen(false)
-                    setSelectedNode(null)
-                  }}
-                  title="Close"
-                >
-                  <FiChevronRight />
-                </button>
-              </div>
-              
-              <div className="details-section">
-                <div className="metric-card health">
-                  <div className="metric-header">
-                    {getHealthIcon(selectedNode.health_status)}
-                    <span className="metric-label">Health Status</span>
+                <div className="details-header-content">
+                  <div className="details-header-icon">
+                    {selectedNode.node_type === 'service' && <FiServer />}
+                    {selectedNode.node_type === 'database' && <FiDatabase />}
+                    {selectedNode.node_type === 'http' && <FiGlobe />}
+                    {selectedNode.node_type === 'curl' && <FiGlobe />}
+                    {selectedNode.node_type === 'redis' && <FiActivity />}
+                    {selectedNode.node_type === 'cache' && <FiBarChart2 />}
                   </div>
-                  <div className="metric-value" style={{ color: getHealthColor(selectedNode.health_status || 'unknown') }}>
-                    {selectedNode.health_status || 'unknown'}
+                  <div className="details-header-info">
+                    <h3>{selectedNode.service || selectedNode.id}</h3>
+                    {selectedNode.node_type && selectedNode.node_type !== 'service' && (
+                      <span className="details-type-badge">{selectedNode.node_type}</span>
+                    )}
+                  </div>
+                  <button 
+                    className="details-close"
+                    onClick={() => {
+                      setIsDetailsPanelOpen(false)
+                      setSelectedNode(null)
+                    }}
+                    title="Close"
+                    aria-label="Close details panel"
+                  >
+                    <FiX />
+                  </button>
+                </div>
+              </div>
+
+              {/* Content Area - Scrollable */}
+              <div className="details-scrollable">
+                {/* Health Status Section */}
+                <div className="details-section">
+                  <div className="details-section-title">Health & Status</div>
+                  <div className="metric-grid">
+                    <div className="metric-card health-card">
+                      <div className="metric-icon-wrapper">
+                        {getHealthIcon(selectedNode.health_status)}
+                      </div>
+                      <div className="metric-info">
+                        <div className="metric-label">Health Status</div>
+                        <div className="metric-value-large" style={{ color: getHealthColor(selectedNode.health_status || 'unknown') }}>
+                          {selectedNode.health_status || 'unknown'}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {selectedNode.node_type && selectedNode.node_type !== 'service' && (
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <FiInfo />
-                      <span className="metric-label">Type</span>
-                    </div>
-                    <div className="metric-value type-badge">
-                      {selectedNode.node_type}
+                {/* Performance Metrics */}
+                {(selectedNode.total_spans !== undefined || selectedNode.avg_duration !== undefined || selectedNode.throughput !== undefined) && (
+                  <div className="details-section">
+                    <div className="details-section-title">Performance</div>
+                    <div className="metric-grid">
+                      {selectedNode.total_spans !== undefined && (
+                        <div className="metric-card">
+                          <div className="metric-icon-wrapper">
+                            <FiActivity />
+                          </div>
+                          <div className="metric-info">
+                            <div className="metric-label">Total Spans</div>
+                            <div className="metric-value">{formatNumber(selectedNode.total_spans)}</div>
+                          </div>
+                        </div>
+                      )}
+                      {selectedNode.avg_duration !== undefined && (
+                        <div className="metric-card">
+                          <div className="metric-icon-wrapper">
+                            <FiClock />
+                          </div>
+                          <div className="metric-info">
+                            <div className="metric-label">Avg Duration</div>
+                            <div className="metric-value">{formatDuration(selectedNode.avg_duration)}</div>
+                            {selectedNode.min_duration !== undefined && selectedNode.max_duration !== undefined && (
+                              <div className="metric-subtext">
+                                {formatDuration(selectedNode.min_duration)} - {formatDuration(selectedNode.max_duration)}
+                              </div>
+                            )}
+                            {selectedNode.p95_duration !== undefined && selectedNode.p99_duration !== undefined && (
+                              <div className="metric-subtext">
+                                P95: {formatDuration(selectedNode.p95_duration)} | P99: {formatDuration(selectedNode.p99_duration)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {selectedNode.throughput !== undefined && selectedNode.throughput > 0 && (
+                        <div className="metric-card">
+                          <div className="metric-icon-wrapper">
+                            <FiBarChart2 />
+                          </div>
+                          <div className="metric-info">
+                            <div className="metric-label">Throughput</div>
+                            <div className="metric-value">{selectedNode.throughput.toFixed(2)} req/s</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {selectedNode.total_spans !== undefined && (
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <FiActivity />
-                      <span className="metric-label">Total Spans</span>
-                    </div>
-                    <div className="metric-value">
-                      {formatNumber(selectedNode.total_spans)}
-                    </div>
-                  </div>
-                )}
-
-                {selectedNode.avg_duration !== undefined && (
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <FiClock />
-                      <span className="metric-label">Avg Duration</span>
-                    </div>
-                    <div className="metric-value">
-                      {formatDuration(selectedNode.avg_duration)}
-                    </div>
-                    {selectedNode.min_duration !== undefined && selectedNode.max_duration !== undefined && (
-                      <div className="metric-subtext">
-                        {formatDuration(selectedNode.min_duration)} - {formatDuration(selectedNode.max_duration)}
-                      </div>
-                    )}
-                    {selectedNode.p95_duration !== undefined && selectedNode.p99_duration !== undefined && (
-                      <div className="metric-subtext">
-                        P95: {formatDuration(selectedNode.p95_duration)} | P99: {formatDuration(selectedNode.p99_duration)}
-                      </div>
-                    )}
-                  </div>
-                )}
-
+                {/* Error & Reliability */}
                 {selectedNode.error_rate !== undefined && (
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <FiAlertCircle />
-                      <span className="metric-label">Error Rate</span>
-                    </div>
-                    <div className="metric-value" style={{ color: selectedNode.error_rate > 10 ? COLORS.error : selectedNode.error_rate > 5 ? COLORS.warning : COLORS.success }}>
-                      {selectedNode.error_rate.toFixed(2)}%
-                    </div>
-                  </div>
-                )}
-
-                {selectedNode.incoming_calls !== undefined && (
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <FiTrendingUp />
-                      <span className="metric-label">Incoming Calls</span>
-                    </div>
-                    <div className="metric-value">
-                      {formatNumber(selectedNode.incoming_calls)}
+                  <div className="details-section">
+                    <div className="details-section-title">Reliability</div>
+                    <div className="metric-grid">
+                      <div className="metric-card">
+                        <div className="metric-icon-wrapper">
+                          <FiAlertCircle />
+                        </div>
+                        <div className="metric-info">
+                          <div className="metric-label">Error Rate</div>
+                          <div className="metric-value" style={{ color: selectedNode.error_rate > 10 ? COLORS.error : selectedNode.error_rate > 5 ? COLORS.warning : COLORS.success }}>
+                            {selectedNode.error_rate.toFixed(2)}%
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {selectedNode.outgoing_calls !== undefined && (
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <FiTrendingUp />
-                      <span className="metric-label">Outgoing Calls</span>
-                    </div>
-                    <div className="metric-value">
-                      {formatNumber(selectedNode.outgoing_calls)}
+                {/* Traffic Metrics */}
+                {(selectedNode.incoming_calls !== undefined || selectedNode.outgoing_calls !== undefined || selectedNode.total_traffic !== undefined) && (
+                  <div className="details-section">
+                    <div className="details-section-title">Traffic</div>
+                    <div className="metric-grid">
+                      {selectedNode.incoming_calls !== undefined && (
+                        <div className="metric-card">
+                          <div className="metric-icon-wrapper">
+                            <FiTrendingUp />
+                          </div>
+                          <div className="metric-info">
+                            <div className="metric-label">Incoming Calls</div>
+                            <div className="metric-value">{formatNumber(selectedNode.incoming_calls)}</div>
+                          </div>
+                        </div>
+                      )}
+                      {selectedNode.outgoing_calls !== undefined && (
+                        <div className="metric-card">
+                          <div className="metric-icon-wrapper">
+                            <FiTrendingUp />
+                          </div>
+                          <div className="metric-info">
+                            <div className="metric-label">Outgoing Calls</div>
+                            <div className="metric-value">{formatNumber(selectedNode.outgoing_calls)}</div>
+                          </div>
+                        </div>
+                      )}
+                      {selectedNode.total_traffic !== undefined && selectedNode.total_traffic > 0 && (
+                        <div className="metric-card">
+                          <div className="metric-icon-wrapper">
+                            <FiActivity />
+                          </div>
+                          <div className="metric-info">
+                            <div className="metric-label">Total Traffic</div>
+                            <div className="metric-value">{formatBytes(selectedNode.total_traffic)}</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {selectedNode.throughput !== undefined && selectedNode.throughput > 0 && (
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <FiBarChart2 />
-                      <span className="metric-label">Throughput</span>
-                    </div>
-                    <div className="metric-value">
-                      {selectedNode.throughput.toFixed(2)} req/s
-                    </div>
-                  </div>
-                )}
-
-                {selectedNode.total_traffic !== undefined && selectedNode.total_traffic > 0 && (
-                  <div className="metric-card">
-                    <div className="metric-header">
-                      <FiActivity />
-                      <span className="metric-label">Total Traffic</span>
-                    </div>
-                    <div className="metric-value">
-                      {formatBytes(selectedNode.total_traffic)}
-                    </div>
-                  </div>
-                )}
-
+                {/* Action Button */}
                 <div className="details-actions">
                   <Link 
                     to={`/traces?service=${encodeURIComponent(selectedNode.service || selectedNode.id)}`}
                     className="view-traces-link"
                   >
                     <FiActivity />
-                    View Traces by Service
+                    View Traces
                   </Link>
                 </div>
               </div>
-            </div>
+            </>
           )}
 
           {!selectedNode && (
@@ -1157,6 +1192,10 @@ function ServiceMap() {
           <div className="legend-item">
             <span className="legend-color legend-shape-icon" style={{ background: '#10b981' }}></span>
             <span>HTTP Service</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-color legend-shape-hexagon" style={{ background: COLORS.warning }}></span>
+            <span>cURL</span>
           </div>
           <div className="legend-item">
             <span className="legend-color legend-shape-diamond" style={{ background: COLORS.error }}></span>
