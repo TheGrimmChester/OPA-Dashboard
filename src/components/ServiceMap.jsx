@@ -126,7 +126,7 @@ function getTimeRangeParams(range) {
   }
 }
 
-function ServiceMap({ refreshTrigger }) {
+const ServiceMap = ({ refreshTrigger }) => {
   const { organizationId, projectId } = useTenant()
   const [nodes, setNodes] = useState([])
   const [edges, setEdges] = useState([])
