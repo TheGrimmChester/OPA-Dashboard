@@ -15,13 +15,18 @@ function LiveSqlMini({ isPaused, onRefresh }) {
   const navigate = useNavigate()
   const [queries, setQueries] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
 
-  const fetchQueries = useCallback(async () => {
+  const fetchQueries = useCallback(async (isRefresh = false) => {
     if (isPaused) return
     
     try {
-      setLoading(true)
+      if (isRefresh && queries.length > 0) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
       setError(null)
       
       const now = new Date()
@@ -42,18 +47,19 @@ function LiveSqlMini({ isPaused, onRefresh }) {
       setQueries([])
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [isPaused])
+  }, [isPaused, queries.length])
 
   useEffect(() => {
     fetchQueries()
   }, [fetchQueries])
 
   useEffect(() => {
-    if (onRefresh) {
-      fetchQueries()
+    if (onRefresh && onRefresh > 0 && !loading) {
+      fetchQueries(true)
     }
-  }, [onRefresh, fetchQueries])
+  }, [onRefresh, fetchQueries, loading])
 
   if (loading && queries.length === 0) {
     return (
@@ -96,7 +102,14 @@ function LiveSqlMini({ isPaused, onRefresh }) {
           View Full <FiExternalLink />
         </Link>
       </div>
-      <div className="mini-content">
+      <div className={`mini-content ${refreshing ? 'refreshing' : ''}`}>
+        {refreshing && (
+          <div className="refresh-overlay active">
+            <div className="refresh-overlay-content">
+              <FiRefreshCw className="loading-spinner" />
+            </div>
+          </div>
+        )}
         {queries.length === 0 ? (
           <div className="empty-state">
             <FiDatabase className="empty-icon" />

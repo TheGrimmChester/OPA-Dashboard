@@ -59,13 +59,18 @@ function formatTimestamp(timestamp) {
 function LiveLogsMini({ isPaused, onRefresh }) {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
 
-  const fetchLogs = useCallback(async () => {
+  const fetchLogs = useCallback(async (isRefresh = false) => {
     if (isPaused) return
     
     try {
-      setLoading(true)
+      if (isRefresh && logs.length > 0) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
       setError(null)
       
       const params = new URLSearchParams({
@@ -83,18 +88,19 @@ function LiveLogsMini({ isPaused, onRefresh }) {
       setLogs([])
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [isPaused])
+  }, [isPaused, logs.length])
 
   useEffect(() => {
     fetchLogs()
   }, [fetchLogs])
 
   useEffect(() => {
-    if (onRefresh) {
-      fetchLogs()
+    if (onRefresh && onRefresh > 0 && !loading) {
+      fetchLogs(true)
     }
-  }, [onRefresh, fetchLogs])
+  }, [onRefresh, fetchLogs, loading])
 
   if (loading && logs.length === 0) {
     return (
@@ -137,7 +143,14 @@ function LiveLogsMini({ isPaused, onRefresh }) {
           View Full <FiExternalLink />
         </Link>
       </div>
-      <div className="mini-content">
+      <div className={`mini-content ${refreshing ? 'refreshing' : ''}`}>
+        {refreshing && (
+          <div className="refresh-overlay active">
+            <div className="refresh-overlay-content">
+              <FiFileText className="loading-spinner" />
+            </div>
+          </div>
+        )}
         {logs.length === 0 ? (
           <div className="empty-state">
             <FiFileText className="empty-icon" />

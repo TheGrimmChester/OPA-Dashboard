@@ -126,11 +126,12 @@ function getTimeRangeParams(range) {
   }
 }
 
-function ServiceMap() {
+function ServiceMap({ refreshTrigger }) {
   const { organizationId, projectId } = useTenant()
   const [nodes, setNodes] = useState([])
   const [edges, setEdges] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedNode, setSelectedNode] = useState(null)
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false)
   const [viewMode, setViewMode] = useState('force') // 'force' or 'hierarchical'
@@ -145,9 +146,13 @@ function ServiceMap() {
   const networkRef = useRef(null)
 
   // Load service map data
-  const loadServiceMap = useCallback(async () => {
+  const loadServiceMap = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true)
+      if (isRefresh && nodes.length > 0) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
       const token = localStorage.getItem('auth_token')
       // Use tenant context values, fallback to localStorage if not available
       // Preserve 'all' if that's what's selected
@@ -203,14 +208,22 @@ function ServiceMap() {
       setEdges([])
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [timeRange, organizationId, projectId])
+  }, [timeRange, organizationId, projectId, nodes.length])
 
   useEffect(() => {
     loadServiceMap()
-    const interval = setInterval(loadServiceMap, 30000) // Refresh every 30 seconds
+    const interval = setInterval(() => loadServiceMap(true), 30000) // Refresh every 30 seconds
     return () => clearInterval(interval)
   }, [loadServiceMap])
+
+  // Handle external refresh trigger
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0 && !loading) {
+      loadServiceMap(true)
+    }
+  }, [refreshTrigger, loadServiceMap, loading])
 
   // Filter nodes and edges
   const filteredData = useMemo(() => {
@@ -857,7 +870,15 @@ function ServiceMap() {
         </div>
       </div>
 
-      <div className="service-map-content">
+      <div className={`service-map-content ${refreshing ? 'refreshing' : ''}`}>
+        {refreshing && (
+          <div className="refresh-overlay active">
+            <div className="refresh-overlay-content">
+              <FiRefreshCw className="spinning" />
+              <span>Refreshing...</span>
+            </div>
+          </div>
+        )}
         {/* Filter Panel */}
         {showFilters && (
           <div className="service-map-filters">

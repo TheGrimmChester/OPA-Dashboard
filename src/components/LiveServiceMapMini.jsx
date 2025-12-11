@@ -43,6 +43,7 @@ function LiveServiceMapMini({ isPaused, onRefresh }) {
   const [nodes, setNodes] = useState([])
   const [edges, setEdges] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
 
   const loadServiceMap = useCallback(async () => {
@@ -100,8 +101,9 @@ function LiveServiceMapMini({ isPaused, onRefresh }) {
       setEdges([])
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [isPaused, organizationId, projectId])
+  }, [isPaused, organizationId, projectId, nodes.length])
 
   useEffect(() => {
     loadServiceMap()
@@ -158,7 +160,14 @@ function LiveServiceMapMini({ isPaused, onRefresh }) {
           View Full <FiExternalLink />
         </Link>
       </div>
-      <div className="mini-content">
+      <div className={`mini-content ${refreshing ? 'refreshing' : ''}`}>
+        {refreshing && (
+          <div className="refresh-overlay active">
+            <div className="refresh-overlay-content">
+              <FiRefreshCw className="loading-spinner" />
+            </div>
+          </div>
+        )}
         <div className="service-map-stats">
           <div className="stat-item">
             <div className="stat-value">{nodes.length}</div>

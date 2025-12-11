@@ -481,6 +481,71 @@ html {
   animation: fadeIn 0.3s ease-out;
 }
 
+/* Smooth refresh transitions */
+.smooth-refresh-container {
+  position: relative;
+  transition: opacity var(--transition-base);
+}
+
+.smooth-refresh-container.refreshing {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.refresh-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-base);
+}
+
+.refresh-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.refresh-overlay-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  background: var(--bg-secondary);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Smooth list item transitions */
+.smooth-list-item {
+  transition: opacity var(--transition-base), transform var(--transition-base), background-color var(--transition-base);
+}
+
+.smooth-list-item.entering {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.smooth-list-item.entered {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.smooth-list-item.exiting {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
 /* Slide in animation */
 @keyframes slideIn {
   from {

@@ -10,7 +10,7 @@ import HelpIcon from '../components/HelpIcon'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './SqlAnalysis.css'
 
-function SqlAnalysis() {
+function SqlAnalysis({ refreshTrigger }) {
   const { fingerprint } = useParams()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -115,6 +115,13 @@ function SqlAnalysis() {
       setOffset(0)
     }
   }, [service, timeRange, minDuration, fingerprint])
+
+  // Handle external refresh trigger
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0 && !fingerprint && !loading) {
+      fetchQueries()
+    }
+  }, [refreshTrigger, fetchQueries, fingerprint, loading])
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams)

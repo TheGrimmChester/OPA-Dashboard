@@ -10,13 +10,10 @@ function LiveSql() {
   const [lastRefresh, setLastRefresh] = useState(Date.now())
   const [refreshInterval, setRefreshInterval] = useState(10000) // 10 seconds
   const refreshIntervalRef = useRef(null)
-  const forceRefreshRef = useRef(null)
-
-  // Force refresh mechanism - we'll use a key to force SqlAnalysis to remount
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const handleRefresh = useCallback(() => {
-    setRefreshKey(prev => prev + 1)
+    setRefreshTrigger(prev => prev + 1)
     setLastRefresh(Date.now())
   }, [])
 
@@ -98,7 +95,7 @@ function LiveSql() {
       </div>
 
       <div className="live-sql-content">
-        <SqlAnalysis key={refreshKey} />
+        <SqlAnalysis refreshTrigger={refreshTrigger} />
       </div>
     </div>
   )
