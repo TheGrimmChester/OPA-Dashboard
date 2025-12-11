@@ -149,6 +149,48 @@
   box-shadow: var(--shadow-md);
   overflow-x: auto;
   margin-bottom: var(--spacing-lg);
+  position: relative;
+  transition: opacity var(--transition-base);
+}
+
+.trace-table-container.refreshing {
+  opacity: 0.85;
+}
+
+.trace-table-container .refresh-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-base);
+  border-radius: var(--radius-md);
+}
+
+.trace-table-container .refresh-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.trace-table-container .refresh-overlay-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  background: var(--bg-secondary);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-light);
 }
 
 .trace-table {
@@ -219,7 +261,7 @@
 
 .trace-row {
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all var(--transition-base), opacity var(--transition-base);
   background: var(--bg-secondary);
 }
 
