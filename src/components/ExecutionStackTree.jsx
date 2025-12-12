@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { FiCpu, FiClock, FiHardDrive, FiGlobe, FiChevronRight, FiChevronDown, FiCode, FiFile } from 'react-icons/fi'
 import TraceTabFilters from './TraceTabFilters'
 import './ExecutionStackTree.css'
@@ -6,39 +6,39 @@ import './ExecutionStackTree.css'
 function ExecutionStackTree({ callStack }) {
   const [expandedNodes, setExpandedNodes] = useState(new Set())
   const [filters, setFilters] = useState({ enabled: false, thresholds: {} })
+  const [loadedChildren, setLoadedChildren] = useState(new Map()) // Cache of loaded children by parent_id
 
-  // Build tree structure from call stack
-  const treeData = useMemo(() => {
-    if (!callStack || (Array.isArray(callStack) && callStack.length === 0)) {
-      return []
+  // Normalize nodes - handle both flat and hierarchical structures
+  const normalizeNode = useCallback((node) => {
+    return {
+      call_id: node.call_id || node.CallID || node.id || Math.random().toString(),
+      function: node.function || node.Function || node.name || 'unknown',
+      class: node.class || node.Class || '',
+      file: node.file || node.File || '',
+      line: node.line || node.Line || 0,
+      duration_ms: node.duration_ms || node.DurationMs || node.duration || 0,
+      cpu_ms: node.cpu_ms || node.CPUMs || node.cpu || 0,
+      memory_delta: node.memory_delta || node.MemoryDelta || 0,
+      network_bytes_sent: node.network_bytes_sent || node.NetworkBytesSent || 0,
+      network_bytes_received: node.network_bytes_received || node.NetworkBytesReceived || 0,
+      parent_id: node.parent_id || node.ParentID || null,
+      depth: node.depth || node.Depth || 0,
+      function_type: node.function_type || node.FunctionType || 0,
+      _hasChildren: undefined, // Will be computed lazily
     }
+  }, [])
 
-    // Normalize nodes - handle both flat and hierarchical structures
-    const normalizeNode = (node) => {
-      return {
-        call_id: node.call_id || node.CallID || node.id || Math.random().toString(),
-        function: node.function || node.Function || node.name || 'unknown',
-        class: node.class || node.Class || '',
-        file: node.file || node.File || '',
-        line: node.line || node.Line || 0,
-        duration_ms: node.duration_ms || node.DurationMs || node.duration || 0,
-        cpu_ms: node.cpu_ms || node.CPUMs || node.cpu || 0,
-        memory_delta: node.memory_delta || node.MemoryDelta || 0,
-        network_bytes_sent: node.network_bytes_sent || node.NetworkBytesSent || 0,
-        network_bytes_received: node.network_bytes_received || node.NetworkBytesReceived || 0,
-        parent_id: node.parent_id || node.ParentID || null,
-        depth: node.depth || node.Depth || 0,
-        function_type: node.function_type || node.FunctionType || 0,
-        children: node.children || [],
-      }
+  // Build flat node map and root nodes - lazy loading approach
+  const { nodeMap, rootNodes } = useMemo(() => {
+    if (!callStack || (Array.isArray(callStack) && callStack.length === 0)) {
+      return { nodeMap: new Map(), rootNodes: [] }
     }
 
     // Flatten hierarchical structure if needed
     const flattenStack = (nodes) => {
       const flat = []
       const processNode = (node) => {
-        const normalized = normalizeNode(node)
-        flat.push(normalized)
+        flat.push(node)
         if (node.children && Array.isArray(node.children) && node.children.length > 0) {
           node.children.forEach(processNode)
         }
@@ -52,68 +52,90 @@ function ExecutionStackTree({ callStack }) {
       node.children && Array.isArray(node.children) && node.children.length > 0
     )
 
-    let allNodes
-    if (hasNestedChildren) {
-      // Already hierarchical - use it directly but normalize
-      const buildNormalizedTree = (nodes) => {
-        return nodes.map(node => {
-          const normalized = normalizeNode(node)
-          if (node.children && Array.isArray(node.children) && node.children.length > 0) {
-            normalized.children = buildNormalizedTree(node.children)
-          } else {
-            normalized.children = []
-          }
-          return normalized
+    // Get flat array of all nodes
+    const allNodesFlat = hasNestedChildren ? flattenStack(callStack) : callStack
+
+    // Normalize all nodes and create map
+    const normalizedNodes = allNodesFlat.map(normalizeNode)
+    const map = new Map()
+    const roots = []
+
+    // Create map and identify roots
+    normalizedNodes.forEach(node => {
+      map.set(node.call_id, node)
+      if (!node.parent_id || node.parent_id === '') {
+        roots.push(node)
+      }
+    })
+
+    // Sort root nodes by depth or original order
+    roots.sort((a, b) => {
+      if (a.depth !== undefined && b.depth !== undefined) {
+        return a.depth - b.depth
+      }
+      return 0
+    })
+
+    return { nodeMap: map, rootNodes: roots }
+  }, [callStack, normalizeNode])
+
+  // Check if a node has children (without loading them)
+  const hasChildren = useCallback((nodeId) => {
+    // Quick check: iterate through nodeMap to see if any node has this as parent
+    for (const node of nodeMap.values()) {
+      if (node.parent_id === nodeId) {
+        return true
+      }
+    }
+    return false
+  }, [nodeMap])
+
+  // Get children for a specific node (lazy loading)
+  const getChildren = useCallback((parentId) => {
+    // Check cache first
+    if (loadedChildren.has(parentId)) {
+      return loadedChildren.get(parentId)
+    }
+
+    // Find all nodes with this parent_id
+    const children = []
+    nodeMap.forEach(node => {
+      if (node.parent_id === parentId) {
+        children.push({
+          ...node,
+          _hasChildren: hasChildren(node.call_id)
         })
       }
-      return buildNormalizedTree(callStack)
-    } else {
-      // Flat array - build tree from parent_id relationships
-      allNodes = callStack.map(normalizeNode)
+    })
 
-      const nodeMap = new Map()
-      const rootNodes = []
-
-      // Create map of all nodes
-      allNodes.forEach(node => {
-        nodeMap.set(node.call_id, { ...node, children: [] })
-      })
-
-      // Build parent-child relationships
-      allNodes.forEach(node => {
-        const nodeObj = nodeMap.get(node.call_id)
-        if (!node.parent_id || node.parent_id === '') {
-          rootNodes.push(nodeObj)
-        } else {
-          const parent = nodeMap.get(node.parent_id)
-          if (parent) {
-            parent.children.push(nodeObj)
-          } else {
-            // Orphan node - add as root
-            rootNodes.push(nodeObj)
-          }
-        }
-      })
-
-      // Sort children by depth or original order
-      const sortChildren = (node) => {
-        if (node.children.length > 0) {
-          node.children.sort((a, b) => {
-            if (a.depth !== undefined && b.depth !== undefined) {
-              return a.depth - b.depth
-            }
-            return 0
-          })
-          node.children.forEach(sortChildren)
-        }
+    // Sort children by depth
+    children.sort((a, b) => {
+      if (a.depth !== undefined && b.depth !== undefined) {
+        return a.depth - b.depth
       }
-      rootNodes.forEach(sortChildren)
+      return 0
+    })
 
-      return rootNodes.length > 0 ? rootNodes : []
-    }
-  }, [callStack])
+    // Cache the result
+    setLoadedChildren(prev => {
+      const newMap = new Map(prev)
+      newMap.set(parentId, children)
+      return newMap
+    })
 
-  // Filter tree data based on thresholds
+    return children
+  }, [nodeMap, hasChildren, loadedChildren])
+
+  // Build tree structure with lazy-loaded children
+  const treeData = useMemo(() => {
+    // Initially only return root nodes
+    return rootNodes.map(node => ({
+      ...node,
+      _hasChildren: hasChildren(node.call_id)
+    }))
+  }, [rootNodes, hasChildren])
+
+  // Filter tree data based on thresholds (only applies to root nodes initially)
   const filteredTreeData = useMemo(() => {
     if (!filters.enabled || !treeData || treeData.length === 0) {
       return treeData
@@ -145,50 +167,44 @@ function ExecutionStackTree({ callStack }) {
       return true
     }
 
-    const filterNode = (node) => {
-      // If node doesn't meet criteria, exclude it and all its children
-      if (!shouldIncludeNode(node)) {
-        return null
-      }
-
-      // Filter children recursively
-      const filteredChildren = node.children
-        ? node.children.map(filterNode).filter(child => child !== null)
-        : []
-
-      // Return node with filtered children
-      return {
-        ...node,
-        children: filteredChildren
-      }
-    }
-
-    return treeData.map(filterNode).filter(node => node !== null)
+    return treeData.filter(shouldIncludeNode)
   }, [treeData, filters])
 
-  const toggleNode = (callId) => {
+  const toggleNode = useCallback((callId) => {
     const newExpanded = new Set(expandedNodes)
     if (newExpanded.has(callId)) {
       newExpanded.delete(callId)
     } else {
+      // When expanding, load children if not already loaded
       newExpanded.add(callId)
+      if (!loadedChildren.has(callId)) {
+        getChildren(callId)
+      }
     }
     setExpandedNodes(newExpanded)
-  }
+  }, [expandedNodes, loadedChildren, getChildren])
 
-  const expandAll = () => {
-    const allNodeIds = new Set()
-    const collectIds = (nodes) => {
+  const expandAll = useCallback(() => {
+    // Note: expandAll will still need to load all children, which may be slow for large trees
+    // For now, we'll just expand what's visible - full expand all would require loading everything
+    const allVisibleNodeIds = new Set()
+    const collectVisibleIds = (nodes) => {
       nodes.forEach(node => {
-        if (node.children && node.children.length > 0) {
-          allNodeIds.add(node.call_id)
-          collectIds(node.children)
+        if (hasChildren(node.call_id)) {
+          allVisibleNodeIds.add(node.call_id)
+          // Load children to make them visible
+          if (!loadedChildren.has(node.call_id)) {
+            getChildren(node.call_id)
+          }
+          // Recursively collect from loaded children
+          const children = loadedChildren.get(node.call_id) || []
+          collectVisibleIds(children)
         }
       })
     }
-    collectIds(treeData)
-    setExpandedNodes(allNodeIds)
-  }
+    collectVisibleIds(filteredTreeData)
+    setExpandedNodes(allVisibleNodeIds)
+  }, [filteredTreeData, hasChildren, loadedChildren, getChildren])
 
   const collapseAll = () => {
     setExpandedNodes(new Set())
@@ -263,6 +279,9 @@ function ExecutionStackTree({ callStack }) {
             formatBytes={formatBytes}
             formatMemory={formatMemory}
             formatDuration={formatDuration}
+            getChildren={getChildren}
+            hasChildren={hasChildren}
+            loadedChildren={loadedChildren}
           />
         ))}
       </div>
@@ -270,11 +289,16 @@ function ExecutionStackTree({ callStack }) {
   )
 }
 
-function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, formatMemory, formatDuration }) {
-  const hasChildren = node.children && node.children.length > 0
+function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, formatMemory, formatDuration, getChildren, hasChildren, loadedChildren }) {
+  const nodeHasChildren = hasChildren ? hasChildren(node.call_id) : (node._hasChildren !== undefined ? node._hasChildren : false)
   const isExpanded = expandedNodes.has(node.call_id)
   const displayName = node.class ? `${node.class}::${node.function}` : node.function
   const functionTypeLabel = node.function_type === 1 ? 'internal' : node.function_type === 2 ? 'method' : 'user'
+
+  // Get children when expanded (lazy load)
+  const children = isExpanded && nodeHasChildren && getChildren 
+    ? (loadedChildren.get(node.call_id) || getChildren(node.call_id))
+    : []
 
   return (
     <div className="stack-tree-node">
@@ -283,7 +307,7 @@ function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, form
         style={{ paddingLeft: `${depth * 24 + 8}px` }}
       >
         <div className="stack-tree-node-main">
-          {hasChildren && (
+          {nodeHasChildren && (
             <button
               className="stack-tree-expand-btn"
               onClick={() => onToggle(node.call_id)}
@@ -292,7 +316,7 @@ function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, form
               {isExpanded ? <FiChevronDown /> : <FiChevronRight />}
             </button>
           )}
-          {!hasChildren && <div className="stack-tree-spacer" />}
+          {!nodeHasChildren && <div className="stack-tree-spacer" />}
           
           <div className="stack-tree-node-info">
             <div className="stack-tree-node-name">
@@ -357,9 +381,9 @@ function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, form
         </div>
       </div>
       
-      {hasChildren && isExpanded && (
+      {nodeHasChildren && isExpanded && children.length > 0 && (
         <div className="stack-tree-children">
-          {node.children.map((child, idx) => (
+          {children.map((child, idx) => (
             <StackTreeNode
               key={child.call_id || idx}
               node={child}
@@ -369,6 +393,9 @@ function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, form
               formatBytes={formatBytes}
               formatMemory={formatMemory}
               formatDuration={formatDuration}
+              getChildren={getChildren}
+              hasChildren={hasChildren}
+              loadedChildren={loadedChildren}
             />
           ))}
         </div>
