@@ -29,9 +29,11 @@ import CompareTraces from './pages/CompareTraces'
 import ServiceProfile from './pages/ServiceProfile'
 import SqlAnalysis from './pages/SqlAnalysis'
 import ErrorAnalysis from './pages/ErrorAnalysis'
+import HttpAnalysis from './pages/HttpAnalysis'
 import ErrorViewer from './components/ErrorViewer'
 import LiveDumps from './pages/LiveDumps'
 import LiveLogs from './pages/LiveLogs'
+import LiveHttp from './pages/LiveHttp'
 import LiveDashboard from './pages/LiveDashboard'
 import LiveServiceMap from './pages/LiveServiceMap'
 import LiveSql from './pages/LiveSql'
@@ -124,11 +126,12 @@ function Navigation() {
     {
       label: 'Analysis',
       icon: FiTrendingUp,
-      helpText: 'Analysis tools for performance, SQL, errors, and network monitoring',
+      helpText: 'Analysis tools for performance, SQL, errors, HTTP requests, and network monitoring',
       items: [
         { path: '/performance', label: 'Performance', icon: FiTrendingUp, helpText: 'Monitor performance metrics over time with percentile analysis' },
         { path: '/sql', label: 'SQL', icon: FiDatabase, helpText: 'Analyze SQL query performance and execution patterns' },
         { path: '/errors', label: 'Errors', icon: FiAlertCircle, helpText: 'View and analyze error occurrences and stack traces' },
+        { path: '/http', label: 'HTTP Requests', icon: FiGlobe, helpText: 'Analyze HTTP request performance and execution patterns grouped by URL and method' },
         { path: '/network', label: 'Network', icon: FiGlobe, helpText: 'Monitor network traffic, latency, and bandwidth usage' },
       ]
     },
@@ -140,6 +143,7 @@ function Navigation() {
         { path: '/live', label: 'Live Dashboard', icon: FiActivity, helpText: 'Overview of all live monitoring features in one organized view' },
         { path: '/live-dumps', label: 'Live Dumps', icon: FiTerminal, helpText: 'View real-time variable dumps and debugging information' },
         { path: '/live-logs', label: 'Live Logs', icon: FiFileText, helpText: 'View real-time application logs with filtering and correlation' },
+        { path: '/live-http', label: 'Live HTTP', icon: FiGlobe, helpText: 'Monitor incoming and outgoing HTTP requests in real-time with detailed request/response data' },
         { path: '/live/service-map', label: 'Live Service Map', icon: FiServer, helpText: 'Real-time service dependency visualization with auto-refresh' },
         { path: '/live/sql', label: 'Live SQL', icon: FiDatabase, helpText: 'Real-time SQL query monitoring with auto-refresh' },
       ]
@@ -390,6 +394,10 @@ function App() {
               element={<SqlAnalysis />} 
             />
             <Route 
+              path="/http" 
+              element={<HttpAnalysis autoRefresh={autoRefresh} />} 
+            />
+            <Route 
               path="/errors" 
               element={<ErrorViewer />} 
             />
@@ -408,6 +416,10 @@ function App() {
             <Route 
               path="/live-logs" 
               element={<LiveLogs />} 
+            />
+            <Route 
+              path="/live-http" 
+              element={<LiveHttp />} 
             />
             <Route 
               path="/live/service-map" 
