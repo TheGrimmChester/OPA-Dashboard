@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FiDatabase, FiRefreshCw, FiExternalLink, FiArrowRight } from 'react-icons/fi'
 import { sqlService } from '../services/sqlApi'
@@ -11,7 +11,7 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(2)}s`
 }
 
-function LiveSqlMini({ isPaused, onRefresh }) {
+function LiveSqlMini({ isPaused, onRefresh, onDataStatusChange }) {
   const navigate = useNavigate()
   const [queries, setQueries] = useState([])
   const [loading, setLoading] = useState(true)
@@ -22,7 +22,7 @@ function LiveSqlMini({ isPaused, onRefresh }) {
     if (isPaused) return
     
     try {
-      if (isRefresh && queries.length > 0) {
+      if (isRefresh) {
         setRefreshing(true)
       } else {
         setLoading(true)
@@ -40,23 +40,38 @@ function LiveSqlMini({ isPaused, onRefresh }) {
       }
       
       const data = await sqlService.listQueries(params)
-      setQueries(data.queries || [])
+      const fetchedQueries = data.queries || []
+      const hasData = fetchedQueries.length > 0
+      
+      if (onDataStatusChange) {
+        onDataStatusChange(hasData)
+      }
+      
+      setQueries(fetchedQueries)
     } catch (err) {
       console.error('Fetch SQL queries error:', err)
       setError('Error fetching SQL queries')
       setQueries([])
+      if (onDataStatusChange) {
+        onDataStatusChange(false)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [isPaused, queries.length])
+  }, [isPaused, onDataStatusChange])
+
+  const hasMountedRef = useRef(false)
+  
+  useEffect(() => {
+    if (!hasMountedRef.current && !isPaused) {
+      hasMountedRef.current = true
+      fetchQueries()
+    }
+  }, [isPaused, fetchQueries])
 
   useEffect(() => {
-    fetchQueries()
-  }, [fetchQueries])
-
-  useEffect(() => {
-    if (onRefresh && onRefresh > 0 && !loading) {
+    if (onRefresh && onRefresh > 0 && !loading && hasMountedRef.current) {
       fetchQueries(true)
     }
   }, [onRefresh, fetchQueries, loading])

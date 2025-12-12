@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { FiServer, FiActivity, FiRefreshCw, FiExternalLink } from 'react-icons/fi'
@@ -38,7 +38,7 @@ function getTimeRangeParams(range = '24h') {
   }
 }
 
-function LiveServiceMapMini({ isPaused, onRefresh }) {
+function LiveServiceMapMini({ isPaused, onRefresh, onDataStatusChange }) {
   const { organizationId, projectId } = useTenant()
   const [nodes, setNodes] = useState([])
   const [edges, setEdges] = useState([])
@@ -92,6 +92,11 @@ function LiveServiceMapMini({ isPaused, onRefresh }) {
       const nodesData = Array.isArray(response.data?.nodes) ? response.data.nodes : []
       const edgesData = Array.isArray(response.data?.edges) ? response.data.edges : []
       
+      const hasData = nodesData.length > 0 || edgesData.length > 0
+      if (onDataStatusChange) {
+        onDataStatusChange(hasData)
+      }
+      
       setNodes(nodesData)
       setEdges(edgesData)
     } catch (err) {
@@ -99,18 +104,33 @@ function LiveServiceMapMini({ isPaused, onRefresh }) {
       setError('Failed to load service map')
       setNodes([])
       setEdges([])
+      if (onDataStatusChange) {
+        onDataStatusChange(false)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [isPaused, organizationId, projectId, nodes.length])
+  }, [isPaused, organizationId, projectId, onDataStatusChange])
+
+  const hasMountedRef = useRef(false)
+  const lastTenantRef = useRef(`${organizationId}-${projectId}`)
+  
+  useEffect(() => {
+    const currentTenant = `${organizationId}-${projectId}`
+    if (!hasMountedRef.current && !isPaused) {
+      hasMountedRef.current = true
+      lastTenantRef.current = currentTenant
+      loadServiceMap()
+    } else if (lastTenantRef.current !== currentTenant && !isPaused) {
+      // Tenant changed, reload
+      lastTenantRef.current = currentTenant
+      loadServiceMap()
+    }
+  }, [isPaused, organizationId, projectId, loadServiceMap])
 
   useEffect(() => {
-    loadServiceMap()
-  }, [loadServiceMap])
-
-  useEffect(() => {
-    if (onRefresh) {
+    if (onRefresh && hasMountedRef.current) {
       loadServiceMap()
     }
   }, [onRefresh, loadServiceMap])

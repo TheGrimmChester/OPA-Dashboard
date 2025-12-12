@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { 
@@ -46,7 +46,7 @@ function toggleDump(dumpId, expandedDumps, setExpandedDumps) {
   setExpandedDumps(newExpanded)
 }
 
-function LiveDumpsMini({ isPaused, onRefresh }) {
+function LiveDumpsMini({ isPaused, onRefresh, onDataStatusChange }) {
   const [dumps, setDumps] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -55,11 +55,15 @@ function LiveDumpsMini({ isPaused, onRefresh }) {
   const [dumpExpandedNodes, setDumpExpandedNodes] = useState({}) // Map of dump.id -> Set of expanded nodes
   const [dumpDisplayFormat, setDumpDisplayFormat] = useState({}) // Map of dump.id -> 'tree' | 'json'
 
-  const fetchDumps = useCallback(async () => {
+  const fetchDumps = useCallback(async (isRefresh = false) => {
     if (isPaused) return
     
     try {
-      setLoading(true)
+      if (isRefresh) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
       setError(null)
       
       const params = new URLSearchParams({
@@ -69,24 +73,37 @@ function LiveDumpsMini({ isPaused, onRefresh }) {
       
       const response = await axios.get(`${API_URL}/api/dumps?${params}`)
       const fetchedDumps = response.data.dumps || []
+      const hasData = fetchedDumps.length > 0
+      
+      if (onDataStatusChange) {
+        onDataStatusChange(hasData)
+      }
       
       setDumps(fetchedDumps.slice(0, 10))
     } catch (err) {
       console.error('Error fetching dumps:', err)
       setError('Error fetching dumps')
       setDumps([])
+      if (onDataStatusChange) {
+        onDataStatusChange(false)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [isPaused, dumps.length])
+  }, [isPaused, onDataStatusChange])
+
+  const hasMountedRef = useRef(false)
+  
+  useEffect(() => {
+    if (!hasMountedRef.current && !isPaused) {
+      hasMountedRef.current = true
+      fetchDumps()
+    }
+  }, [isPaused, fetchDumps])
 
   useEffect(() => {
-    fetchDumps()
-  }, [fetchDumps])
-
-  useEffect(() => {
-    if (onRefresh && onRefresh > 0 && !loading) {
+    if (onRefresh && onRefresh > 0 && !loading && hasMountedRef.current) {
       fetchDumps(true)
     }
   }, [onRefresh, fetchDumps, loading])

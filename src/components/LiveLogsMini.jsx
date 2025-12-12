@@ -56,7 +56,7 @@ function formatTimestamp(timestamp) {
   return date.toLocaleTimeString()
 }
 
-function LiveLogsMini({ isPaused, onRefresh }) {
+function LiveLogsMini({ isPaused, onRefresh, onDataStatusChange }) {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -66,7 +66,7 @@ function LiveLogsMini({ isPaused, onRefresh }) {
     if (isPaused) return
     
     try {
-      if (isRefresh && logs.length > 0) {
+      if (isRefresh) {
         setRefreshing(true)
       } else {
         setLoading(true)
@@ -80,24 +80,37 @@ function LiveLogsMini({ isPaused, onRefresh }) {
       
       const response = await axios.get(`${API_URL}/api/logs?${params}`)
       const fetchedLogs = response.data.logs || []
+      const hasData = fetchedLogs.length > 0
+      
+      if (onDataStatusChange) {
+        onDataStatusChange(hasData)
+      }
       
       setLogs(fetchedLogs.slice(0, 20))
     } catch (err) {
       console.error('Error fetching logs:', err)
       setError('Error fetching logs')
       setLogs([])
+      if (onDataStatusChange) {
+        onDataStatusChange(false)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [isPaused, logs.length])
+  }, [isPaused, onDataStatusChange])
+
+  const hasMountedRef = useRef(false)
+  
+  useEffect(() => {
+    if (!hasMountedRef.current && !isPaused) {
+      hasMountedRef.current = true
+      fetchLogs()
+    }
+  }, [isPaused, fetchLogs])
 
   useEffect(() => {
-    fetchLogs()
-  }, [fetchLogs])
-
-  useEffect(() => {
-    if (onRefresh && onRefresh > 0 && !loading) {
+    if (onRefresh && onRefresh > 0 && !loading && hasMountedRef.current) {
       fetchLogs(true)
     }
   }, [onRefresh, fetchLogs, loading])

@@ -15,6 +15,60 @@ function LiveDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(10000) // 10 seconds
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const refreshIntervalRef = useRef(null)
+  
+  // Track data status from child components
+  const dataStatusRef = useRef({
+    serviceMap: false,
+    sql: false,
+    logs: false,
+    dumps: false
+  })
+  
+  // Track previous overall data state to detect changes
+  const previousHasDataRef = useRef(null)
+  const adjustmentTimeoutRef = useRef(null)
+  
+  // Adaptive interval configuration
+  const MIN_INTERVAL = 5000   // 5 seconds when data is present
+  const BASE_INTERVAL = 10000 // 10 seconds default
+  const MAX_INTERVAL = 120000 // 120 seconds (2 minutes) when no data
+  const INTERVAL_STEP = 10000 // Increase by 10 seconds when no data
+
+  // Callback to update data status from child components
+  const updateDataStatus = useCallback((component, hasData) => {
+    dataStatusRef.current[component] = hasData
+    
+    // Clear any pending adjustment
+    if (adjustmentTimeoutRef.current) {
+      clearTimeout(adjustmentTimeoutRef.current)
+    }
+    
+    // Debounce the interval adjustment to batch updates from multiple components
+    adjustmentTimeoutRef.current = setTimeout(() => {
+      // Check if any component has data
+      const hasAnyData = Object.values(dataStatusRef.current).some(status => status === true)
+      
+      // Only adjust interval when the overall state changes or when we need to increment for no data
+      const previousHasData = previousHasDataRef.current
+      previousHasDataRef.current = hasAnyData
+      
+      setRefreshInterval(prevInterval => {
+        if (hasAnyData) {
+          // Data is present - reset to MIN_INTERVAL for fast updates
+          return MIN_INTERVAL
+        } else {
+          // No data - gradually increase interval (but not above MAX_INTERVAL)
+          if (previousHasData === true || previousHasData === null) {
+            // State changed from has data to no data, or initial state
+            // Start from BASE_INTERVAL
+            return BASE_INTERVAL
+          }
+          // Still no data, increment interval
+          return Math.min(MAX_INTERVAL, prevInterval + INTERVAL_STEP)
+        }
+      })
+    }, 200) // Wait 200ms to batch updates from all components
+  }, [])
 
   const handleRefresh = useCallback(() => {
     setRefreshTrigger(prev => prev + 1)
@@ -33,7 +87,12 @@ function LiveDashboard() {
     // Initial refresh
     handleRefresh()
 
-    // Set up auto-refresh interval
+    // Clear existing interval
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current)
+    }
+
+    // Set up auto-refresh interval with current refreshInterval
     refreshIntervalRef.current = setInterval(() => {
       handleRefresh()
     }, refreshInterval)
@@ -42,6 +101,10 @@ function LiveDashboard() {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current)
         refreshIntervalRef.current = null
+      }
+      if (adjustmentTimeoutRef.current) {
+        clearTimeout(adjustmentTimeoutRef.current)
+        adjustmentTimeoutRef.current = null
       }
     }
   }, [isPaused, refreshInterval, handleRefresh])
@@ -102,6 +165,7 @@ function LiveDashboard() {
           <LiveServiceMapMini 
             isPaused={isPaused} 
             onRefresh={refreshTrigger}
+            onDataStatusChange={(hasData) => updateDataStatus('serviceMap', hasData)}
           />
         </div>
 
@@ -111,18 +175,21 @@ function LiveDashboard() {
             <LiveSqlMini 
               isPaused={isPaused} 
               onRefresh={refreshTrigger}
+              onDataStatusChange={(hasData) => updateDataStatus('sql', hasData)}
             />
           </div>
           <div className="dashboard-section logs-section">
             <LiveLogsMini 
               isPaused={isPaused} 
               onRefresh={refreshTrigger}
+              onDataStatusChange={(hasData) => updateDataStatus('logs', hasData)}
             />
           </div>
           <div className="dashboard-section dumps-section">
             <LiveDumpsMini 
               isPaused={isPaused} 
               onRefresh={refreshTrigger}
+              onDataStatusChange={(hasData) => updateDataStatus('dumps', hasData)}
             />
           </div>
         </div>
