@@ -762,16 +762,6 @@ function TraceView() {
             <HelpIcon text="View Redis operations executed during the trace" position="right" />
           </button>
         )}
-        {allTags.length > 0 && (
-          <button
-            className={`tab ${activeTab === 'tags' ? 'active' : ''}`}
-            onClick={() => setActiveTab('tags')}
-          >
-            <FiTag className="tab-icon" />
-            <span>Tags</span>
-            <HelpIcon text="View metadata tags associated with spans including HTTP request/response data" position="right" />
-          </button>
-        )}
         <button
           className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
           onClick={() => setActiveTab('logs')}
@@ -790,6 +780,17 @@ function TraceView() {
             <span>Dumps</span>
             <span className="tab-badge">{allDumps.reduce((sum, item) => sum + item.dumps.length, 0)}</span>
             <HelpIcon text="View variable dumps and debugging information captured during execution" position="right" />
+          </button>
+        )}
+        {allTags.length > 0 && (
+          <button
+            className={`tab ${activeTab === 'tags' ? 'active' : ''}`}
+            onClick={() => setActiveTab('tags')}
+          >
+            <FiTag className="tab-icon" />
+            <span>Tags</span>
+            <span className="tab-badge">{allTags.length}</span>
+            <HelpIcon text="View metadata tags associated with spans including HTTP request/response data" position="right" />
           </button>
         )}
         </div>
