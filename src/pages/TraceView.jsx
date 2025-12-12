@@ -63,6 +63,10 @@ function TraceView() {
   const tabsContainerRef = useRef(null)
   const [showLeftScroll, setShowLeftScroll] = useState(false)
   const [showRightScroll, setShowRightScroll] = useState(false)
+  const [visibleTagsCount, setVisibleTagsCount] = useState(50)
+  const [isLoadingMoreTags, setIsLoadingMoreTags] = useState(false)
+  const tagsContainerRef = useRef(null)
+  const tagsSentinelRef = useRef(null)
 
   useEffect(() => {
     if (!traceId) return
@@ -153,6 +157,137 @@ function TraceView() {
     }
   }, [trace, checkScrollPosition])
 
+  // Compute callStack and rootSpan using useMemo before any early returns
+  // This ensures stable references and follows Rules of Hooks
+  const { rootSpan, callStack } = useMemo(() => {
+    if (!trace || !trace.spans) {
+      return { rootSpan: null, callStack: [] }
+    }
+    const root = trace.spans?.find(s => !s.parent_id) || trace.spans?.[0]
+    // Check both stack_flat and stack, with stack_flat taking priority (like elsewhere in the code)
+    const stack = (root?.stack_flat && Array.isArray(root.stack_flat) && root.stack_flat.length > 0)
+      ? root.stack_flat
+      : (root?.stack && Array.isArray(root.stack) && root.stack.length > 0 ? root.stack : [])
+    return { rootSpan: root, callStack: stack }
+  }, [trace])
+
+  // Collect all tags using useMemo before any early returns
+  // This ensures stable references and follows Rules of Hooks
+  const allTags = useMemo(() => {
+    if (!trace || !trace.spans) {
+      return []
+    }
+    const tags = []
+    const collectTags = (spans) => {
+      spans.forEach(span => {
+        if (span.tags && typeof span.tags === 'object' && Object.keys(span.tags).length > 0) {
+          tags.push({
+            span: span.name,
+            spanId: span.span_id,
+            tags: span.tags,
+          })
+        }
+        if (span.children) {
+          collectTags(span.children)
+        }
+      })
+    }
+    collectTags(trace.spans)
+    return tags
+  }, [trace])
+
+  // Reset visible tags count when tags change
+  // This must be before early returns to follow Rules of Hooks
+  useEffect(() => {
+    setVisibleTagsCount(50)
+  }, [allTags.length])
+
+  // Load more tags function
+  const loadMoreTags = useCallback(() => {
+    if (isLoadingMoreTags || visibleTagsCount >= allTags.length) {
+      return
+    }
+    setIsLoadingMoreTags(true)
+    setTimeout(() => {
+      setVisibleTagsCount(prev => {
+        const newCount = Math.min(prev + 50, allTags.length)
+        setIsLoadingMoreTags(false)
+        return newCount
+      })
+    }, 50)
+  }, [allTags.length, visibleTagsCount, isLoadingMoreTags])
+
+  // Intersection Observer for infinite scrolling tags
+  // This must be before early returns to follow Rules of Hooks
+  useEffect(() => {
+    // Only set up observer when tags tab is active
+    if (activeTab !== 'tags') {
+      return
+    }
+
+    const sentinel = tagsSentinelRef.current
+    if (!sentinel || allTags.length <= visibleTagsCount) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (entry.isIntersecting) {
+          loadMoreTags()
+        }
+      },
+      {
+        root: null, // Use viewport as root for better compatibility
+        rootMargin: '100px',
+        threshold: 0.01,
+      }
+    )
+
+    // Small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      if (sentinel) {
+        observer.observe(sentinel)
+      }
+    }, 100)
+
+    return () => {
+      clearTimeout(timeoutId)
+      observer.disconnect()
+    }
+  }, [allTags.length, visibleTagsCount, activeTab, loadMoreTags])
+
+  // Fallback scroll handler for infinite scroll
+  useEffect(() => {
+    if (activeTab !== 'tags' || allTags.length <= visibleTagsCount) {
+      return
+    }
+
+    const handleScroll = () => {
+      if (isLoadingMoreTags || visibleTagsCount >= allTags.length) {
+        return
+      }
+
+      const sentinel = tagsSentinelRef.current
+      if (!sentinel) {
+        return
+      }
+
+      const rect = sentinel.getBoundingClientRect()
+      const windowHeight = window.innerHeight || document.documentElement.clientHeight
+      
+      // Load more when sentinel is within 200px of viewport
+      if (rect.top <= windowHeight + 200) {
+        loadMoreTags()
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [activeTab, allTags.length, visibleTagsCount, isLoadingMoreTags, loadMoreTags])
+
   // Scroll tabs left/right
   const scrollTabs = (direction) => {
     const container = tabsContainerRef.current
@@ -164,17 +299,6 @@ function TraceView() {
       behavior: 'smooth'
     })
   }
-
-  // Compute callStack and rootSpan using useMemo before any early returns
-  // This ensures stable references and follows Rules of Hooks
-  const { rootSpan, callStack } = useMemo(() => {
-    if (!trace || !trace.spans) {
-      return { rootSpan: null, callStack: [] }
-    }
-    const root = trace.spans?.find(s => !s.parent_id) || trace.spans?.[0]
-    const stack = root?.stack || []
-    return { rootSpan: root, callStack: stack }
-  }, [trace])
 
   // Debug: log call stack to console
   // This useEffect must be called before any early returns to follow Rules of Hooks
@@ -510,25 +634,7 @@ function TraceView() {
     collectRedis(trace.spans)
   }
 
-  // Collect all tags
-  const allTags = []
-  const collectTags = (spans) => {
-    spans.forEach(span => {
-      if (span.tags && typeof span.tags === 'object' && Object.keys(span.tags).length > 0) {
-        allTags.push({
-          span: span.name,
-          spanId: span.span_id,
-          tags: span.tags,
-        })
-      }
-      if (span.children) {
-        collectTags(span.children)
-      }
-    })
-  }
-  if (trace.spans) {
-    collectTags(trace.spans)
-  }
+  // Note: allTags is now calculated using useMemo above, before early returns
 
   // Collect all dumps
   const allDumps = []
@@ -1320,9 +1426,9 @@ function TraceView() {
 
         {activeTab === 'tags' && (
           <div className="trace-tags">
-            <h2>Tags</h2>
-            <div className="tags-container">
-              {allTags.map((item, idx) => {
+            <h2>Tags {allTags.length > 50 && <span className="tags-count-badge">({allTags.length} total, showing {Math.min(visibleTagsCount, allTags.length)})</span>}</h2>
+            <div className="tags-container" ref={tagsContainerRef}>
+              {allTags.slice(0, visibleTagsCount).map((item, idx) => {
                 // Extract CLI args and HTTP request/response from tags
                 const cliArgs = item.tags.cli
                 const httpRequest = item.tags.http_request
@@ -1435,6 +1541,15 @@ function TraceView() {
                 </div>
                 )
               })}
+              {allTags.length > visibleTagsCount && (
+                <div ref={tagsSentinelRef} className="tags-sentinel">
+                  {isLoadingMoreTags && (
+                    <div className="tags-loading-more">
+                      <LoadingSpinner message="Loading more tags..." />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
