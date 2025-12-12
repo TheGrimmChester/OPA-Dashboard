@@ -14,6 +14,31 @@
   margin-bottom: var(--spacing-md);
 }
 
+.filters-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.collapse-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xs);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
+  font-size: var(--font-size-lg);
+}
+
+.collapse-button:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
 .filters-header h3 {
   margin: 0;
   font-size: var(--font-size-xl);
@@ -41,6 +66,19 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--spacing-md);
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
 }
 
 .filter-group {

@@ -556,6 +556,14 @@ function TraceView() {
     return `${(ms / 1000).toFixed(2)}s`
   }
 
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  }
+
   const getDumpDisplayFormat = (spanIdx, dumpIdx) => {
     const key = `${spanIdx}-${dumpIdx}`
     return dumpFormat[key] || 'tree'
@@ -1377,6 +1385,9 @@ function TraceView() {
                           {httpRequest.query_string && (
                             <div><strong>Query String (Arguments):</strong> <code>{httpRequest.query_string}</code></div>
                           )}
+                          {httpRequest.request_size && (
+                            <div><strong>Request Size:</strong> <code>{formatBytes(Number(httpRequest.request_size))}</code> <span className="size-detail">({httpRequest.request_size} bytes)</span></div>
+                          )}
                           {httpRequest.request_headers && typeof httpRequest.request_headers === 'object' && (
                             <div className="http-headers">
                               <strong>Request Headers:</strong>
@@ -1396,6 +1407,9 @@ function TraceView() {
                         <div className="http-details">
                           {httpResponse.status_code && (
                             <div><strong>Status Code:</strong> <code>{httpResponse.status_code}</code></div>
+                          )}
+                          {httpResponse.response_size && (
+                            <div><strong>Response Size:</strong> <code>{formatBytes(Number(httpResponse.response_size))}</code> <span className="size-detail">({httpResponse.response_size} bytes)</span></div>
                           )}
                           {httpResponse.headers && typeof httpResponse.headers === 'object' && (
                             <div className="http-headers">

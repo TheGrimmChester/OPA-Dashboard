@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { FiChevronDown, FiChevronUp } from 'react-icons/fi'
 import axios from 'axios'
 import HelpIcon from './HelpIcon'
 import './TraceFilters.css'
@@ -8,6 +9,7 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 
 function TraceFilters({ onFiltersChange }) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const [isCollapsed, setIsCollapsed] = useState(true)
   
   const [service, setService] = useState(searchParams.get('service') || '')
   const [status, setStatus] = useState(searchParams.get('status') || 'all')
@@ -154,10 +156,20 @@ function TraceFilters({ onFiltersChange }) {
   return (
     <div className="TraceFilters">
       <div className="filters-header">
-        <h3>Filters <HelpIcon text="Filter traces by service, status, time range, duration, and other criteria" position="right" /></h3>
+        <div className="filters-header-left">
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)} 
+            className="collapse-button"
+            aria-label={isCollapsed ? 'Expand filters' : 'Collapse filters'}
+          >
+            {isCollapsed ? <FiChevronDown /> : <FiChevronUp />}
+          </button>
+          <h3>Filters <HelpIcon text="Filter traces by service, status, time range, duration, and other criteria" position="right" /></h3>
+        </div>
         <button onClick={handleClear} className="clear-button">Clear All</button>
       </div>
       
+      {!isCollapsed && (
       <div className="filters-grid">
         <div className="filter-group">
           <label>Service</label>
@@ -319,6 +331,7 @@ function TraceFilters({ onFiltersChange }) {
           />
         </div>
       </div>
+      )}
     </div>
   )
 }
