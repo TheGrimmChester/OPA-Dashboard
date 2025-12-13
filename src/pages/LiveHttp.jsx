@@ -95,7 +95,7 @@ function LiveHttp() {
         
         // Estimate error count based on error_rate
         const errorCount = call.error_count || 0
-        const callCount = call.call_count || 1
+        const callCount = Number(call.call_count) || 1
         const hasErrors = errorCount > 0
         
         // Use actual status code from the data if available, otherwise infer from error state
@@ -103,6 +103,62 @@ function LiveHttp() {
         let statusCode = call.status_code || 0
         if (statusCode === 0) {
           statusCode = hasErrors ? 500 : 200
+        }
+        
+        // Extract bytes_sent - handle both total_bytes_sent and bytes_sent, ensure proper type conversion
+        let bytesSent = 0
+        // Try total_bytes_sent first (aggregated data from API)
+        if ('total_bytes_sent' in call && call.total_bytes_sent != null) {
+          const totalSent = Number(call.total_bytes_sent)
+          if (!isNaN(totalSent) && totalSent >= 0) {
+            if (callCount > 0) {
+              bytesSent = Math.round(totalSent / callCount)
+            } else {
+              bytesSent = totalSent
+            }
+          }
+        } 
+        // Fallback to bytes_sent (individual request data)
+        else if ('bytes_sent' in call && call.bytes_sent != null) {
+          const sent = Number(call.bytes_sent)
+          if (!isNaN(sent) && sent >= 0) {
+            bytesSent = sent
+          }
+        } 
+        // Fallback to request_size
+        else if ('request_size' in call && call.request_size != null) {
+          const sent = Number(call.request_size)
+          if (!isNaN(sent) && sent >= 0) {
+            bytesSent = sent
+          }
+        }
+        
+        // Extract bytes_received - handle both total_bytes_received and bytes_received, ensure proper type conversion
+        let bytesReceived = 0
+        // Try total_bytes_received first (aggregated data from API)
+        if ('total_bytes_received' in call && call.total_bytes_received != null) {
+          const totalRecv = Number(call.total_bytes_received)
+          if (!isNaN(totalRecv) && totalRecv >= 0) {
+            if (callCount > 0) {
+              bytesReceived = Math.round(totalRecv / callCount)
+            } else {
+              bytesReceived = totalRecv
+            }
+          }
+        } 
+        // Fallback to bytes_received (individual request data)
+        else if ('bytes_received' in call && call.bytes_received != null) {
+          const recv = Number(call.bytes_received)
+          if (!isNaN(recv) && recv >= 0) {
+            bytesReceived = recv
+          }
+        } 
+        // Fallback to response_size
+        else if ('response_size' in call && call.response_size != null) {
+          const respSize = Number(call.response_size)
+          if (!isNaN(respSize) && respSize >= 0) {
+            bytesReceived = respSize
+          }
         }
         
         // Create a representative request (use average values)
@@ -122,8 +178,8 @@ function LiveHttp() {
           response_headers: {},
           request_body: null,
           response_body: null,
-          bytes_sent: call.total_bytes_sent ? Math.round(call.total_bytes_sent / callCount) : 0,
-          bytes_received: call.total_bytes_received ? Math.round(call.total_bytes_received / callCount) : 0,
+          bytes_sent: bytesSent,
+          bytes_received: bytesReceived,
           query_string: '',
         }]
       })
@@ -253,6 +309,44 @@ function LiveHttp() {
                 }
               }
               
+              // Extract bytes_sent - check multiple possible field names and ensure proper type conversion
+              let bytesSent = 0
+              if (httpData.bytes_sent !== undefined && httpData.bytes_sent !== null) {
+                const sent = Number(httpData.bytes_sent)
+                if (!isNaN(sent) && sent >= 0) {
+                  bytesSent = sent
+                }
+              } else if (httpData.request_size !== undefined && httpData.request_size !== null) {
+                const sent = Number(httpData.request_size)
+                if (!isNaN(sent) && sent >= 0) {
+                  bytesSent = sent
+                }
+              } else if (httpData.curl_bytes_sent !== undefined && httpData.curl_bytes_sent !== null) {
+                const sent = Number(httpData.curl_bytes_sent)
+                if (!isNaN(sent) && sent >= 0) {
+                  bytesSent = sent
+                }
+              }
+              
+              // Extract bytes_received - check multiple possible field names and ensure proper type conversion
+              let bytesReceived = 0
+              if (httpData.bytes_received !== undefined && httpData.bytes_received !== null) {
+                const recv = Number(httpData.bytes_received)
+                if (!isNaN(recv) && recv >= 0) {
+                  bytesReceived = recv
+                }
+              } else if (httpData.response_size !== undefined && httpData.response_size !== null) {
+                const recv = Number(httpData.response_size)
+                if (!isNaN(recv) && recv >= 0) {
+                  bytesReceived = recv
+                }
+              } else if (httpData.curl_bytes_received !== undefined && httpData.curl_bytes_received !== null) {
+                const recv = Number(httpData.curl_bytes_received)
+                if (!isNaN(recv) && recv >= 0) {
+                  bytesReceived = recv
+                }
+              }
+              
               const newRequest = {
                 id: requestId,
                 trace_id: httpData.trace_id || '',
@@ -269,8 +363,8 @@ function LiveHttp() {
                 response_headers: httpData.response_headers || {},
                 request_body: httpData.request_body || null,
                 response_body: httpData.response_body || null,
-                bytes_sent: httpData.bytes_sent || 0,
-                bytes_received: httpData.bytes_received || httpData.response_size || 0,
+                bytes_sent: bytesSent,
+                bytes_received: bytesReceived,
                 query_string: httpData.query_string || '',
               }
               
@@ -563,9 +657,14 @@ function LiveHttp() {
                     </div>
                     <div className="col-duration">{formatDuration(request.duration_ms)}</div>
                     <div className="col-size">
-                      {request.bytes_sent > 0 && <span className="size-sent">{formatBytes(request.bytes_sent)}↑</span>}
-                      {request.bytes_received > 0 && <span className="size-recv">{formatBytes(request.bytes_received)}↓</span>}
-                      {request.bytes_sent === 0 && request.bytes_received === 0 && '-'}
+                      {(request.bytes_sent > 0 || request.bytes_received > 0) ? (
+                        <>
+                          {request.bytes_sent > 0 && <span className="size-sent">{formatBytes(request.bytes_sent)}↑</span>}
+                          {request.bytes_received > 0 && <span className="size-recv">{formatBytes(request.bytes_received)}↓</span>}
+                        </>
+                      ) : (
+                        <span>-</span>
+                      )}
                     </div>
                   </div>
                 ))}
