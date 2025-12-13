@@ -403,6 +403,8 @@ function LiveHttp() {
       case 'PUT': return 'put'
       case 'DELETE': return 'delete'
       case 'PATCH': return 'patch'
+      case 'HEAD': return 'head'
+      case 'OPTIONS': return 'options'
       default: return 'other'
     }
   }
@@ -541,7 +543,7 @@ function LiveHttp() {
                 {httpRequests.map((request) => (
                   <div
                     key={request.id}
-                    className={`request-row ${selectedRequest?.id === request.id ? 'selected' : ''}`}
+                    className={`request-row method-${getMethodColor(request.method)} ${selectedRequest?.id === request.id ? 'selected' : ''}`}
                     onClick={() => handleRequestClick(request)}
                   >
                     <div className="col-time">{formatTimestamp(request.timestamp)}</div>

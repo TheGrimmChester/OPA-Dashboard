@@ -174,13 +174,111 @@
   font-size: var(--font-size-xs);
 }
 
-.request-row:hover {
-  background-color: var(--bg-tertiary);
+/* Method-based background colors - subtle tints */
+.request-row.method-get {
+  background-color: rgba(34, 197, 94, 0.05);
 }
 
-.request-row.selected {
-  background-color: var(--bg-tertiary);
-  border-left: 3px solid var(--color-primary-blue);
+.request-row.method-post {
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.request-row.method-put {
+  background-color: rgba(252, 161, 48, 0.08);
+}
+
+.request-row.method-patch {
+  background-color: rgba(80, 227, 194, 0.08);
+}
+
+.request-row.method-delete {
+  background-color: rgba(249, 62, 62, 0.05);
+}
+
+.request-row.method-head {
+  background-color: rgba(144, 18, 254, 0.05);
+}
+
+.request-row.method-options {
+  background-color: rgba(13, 90, 167, 0.05);
+}
+
+.request-row.method-other {
+  background-color: rgba(107, 114, 128, 0.03);
+}
+
+/* Hover state - slightly enhance method color */
+.request-row.method-get:hover {
+  background-color: rgba(34, 197, 94, 0.1);
+}
+
+.request-row.method-post:hover {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.request-row.method-put:hover {
+  background-color: rgba(252, 161, 48, 0.12);
+}
+
+.request-row.method-patch:hover {
+  background-color: rgba(80, 227, 194, 0.12);
+}
+
+.request-row.method-delete:hover {
+  background-color: rgba(249, 62, 62, 0.1);
+}
+
+.request-row.method-head:hover {
+  background-color: rgba(144, 18, 254, 0.1);
+}
+
+.request-row.method-options:hover {
+  background-color: rgba(13, 90, 167, 0.1);
+}
+
+.request-row.method-other:hover {
+  background-color: rgba(107, 114, 128, 0.08);
+}
+
+/* Selected state - use method color with stronger tint */
+.request-row.method-get.selected {
+  background-color: rgba(34, 197, 94, 0.12);
+  border-left: 3px solid #22c55e;
+}
+
+.request-row.method-post.selected {
+  background-color: rgba(59, 130, 246, 0.12);
+  border-left: 3px solid #3b82f6;
+}
+
+.request-row.method-put.selected {
+  background-color: rgba(252, 161, 48, 0.15);
+  border-left: 3px solid #fca130;
+}
+
+.request-row.method-patch.selected {
+  background-color: rgba(80, 227, 194, 0.15);
+  border-left: 3px solid #50e3c2;
+}
+
+.request-row.method-delete.selected {
+  background-color: rgba(249, 62, 62, 0.12);
+  border-left: 3px solid #f93e3e;
+}
+
+.request-row.method-head.selected {
+  background-color: rgba(144, 18, 254, 0.12);
+  border-left: 3px solid #9012fe;
+}
+
+.request-row.method-options.selected {
+  background-color: rgba(13, 90, 167, 0.12);
+  border-left: 3px solid #0d5aa7;
+}
+
+.request-row.method-other.selected {
+  background-color: rgba(107, 114, 128, 0.1);
+  border-left: 3px solid #6b7280;
 }
 
 .col-time {
@@ -196,14 +294,18 @@
 
 .method-badge {
   display: inline-block;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  border: none;
+  color: white;
+  font-family: var(--font-family-mono);
 }
 
+/* Swagger-style colors */
 .method-badge.method-get {
   background-color: rgba(34, 197, 94, 0.2);
   color: #22c55e;
@@ -217,21 +319,33 @@
 }
 
 .method-badge.method-put {
-  background-color: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.3);
-}
-
-.method-badge.method-delete {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background-color: rgba(252, 161, 48, 0.2);
+  color: #fca130;
+  border: 1px solid rgba(252, 161, 48, 0.3);
 }
 
 .method-badge.method-patch {
-  background-color: rgba(168, 85, 247, 0.2);
-  color: #a855f7;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background-color: rgba(80, 227, 194, 0.2);
+  color: #50e3c2;
+  border: 1px solid rgba(80, 227, 194, 0.3);
+}
+
+.method-badge.method-delete {
+  background-color: rgba(249, 62, 62, 0.2);
+  color: #f93e3e;
+  border: 1px solid rgba(249, 62, 62, 0.3);
+}
+
+.method-badge.method-head {
+  background-color: rgba(144, 18, 254, 0.2);
+  color: #9012fe;
+  border: 1px solid rgba(144, 18, 254, 0.3);
+}
+
+.method-badge.method-options {
+  background-color: rgba(13, 90, 167, 0.2);
+  color: #0d5aa7;
+  border: 1px solid rgba(13, 90, 167, 0.3);
 }
 
 .method-badge.method-other {
