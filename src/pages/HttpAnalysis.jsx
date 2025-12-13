@@ -279,8 +279,12 @@ function HttpAnalysis({ autoRefresh = true }) {
                       <td className={call.error_rate > 0 ? 'error' : ''} style={{ textAlign: 'right' }}>
                         {call.error_rate ? `${call.error_rate.toFixed(2)}%` : '0%'}
                       </td>
-                      <td style={{ textAlign: 'right' }}>{formatBytes(call.total_bytes_sent)}</td>
-                      <td style={{ textAlign: 'right' }}>{formatBytes(call.total_bytes_received)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {formatBytes(call.total_bytes_sent != null ? Number(call.total_bytes_sent) : 0)}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {formatBytes(call.total_bytes_received != null ? Number(call.total_bytes_received) : 0)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -444,7 +448,7 @@ function HttpAnalysis({ autoRefresh = true }) {
                         </div>
                         <div className="metric-info">
                           <div className="metric-label">Total Bytes Sent</div>
-                          <div className="metric-value">{formatBytes(call.total_bytes_sent)}</div>
+                          <div className="metric-value">{formatBytes(call.total_bytes_sent != null ? Number(call.total_bytes_sent) : 0)}</div>
                         </div>
                       </div>
                       <div className="metric-card">
@@ -453,7 +457,7 @@ function HttpAnalysis({ autoRefresh = true }) {
                         </div>
                         <div className="metric-info">
                           <div className="metric-label">Total Bytes Received</div>
-                          <div className="metric-value">{formatBytes(call.total_bytes_received)}</div>
+                          <div className="metric-value">{formatBytes(call.total_bytes_received != null ? Number(call.total_bytes_received) : 0)}</div>
                         </div>
                       </div>
                     </div>
