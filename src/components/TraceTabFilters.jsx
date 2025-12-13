@@ -4,10 +4,10 @@ import HelpIcon from './HelpIcon'
 import './TraceTabFilters.css'
 
 const DEFAULT_THRESHOLDS = {
-  duration: 10, // ms
-  memory: 0.1, // bytes
-  network: 0, // bytes (0 - no filter by default)
-  cpu: 0.1, // ms
+  duration: 0, // ms
+  memory: 0, // bytes
+  network: 0, // bytes
+  cpu: 0, // ms
 }
 
 function TraceTabFilters({ 

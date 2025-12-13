@@ -157,6 +157,15 @@ function HttpAnalysis({ autoRefresh = true }) {
     return uriOrUrl
   }
 
+  const cleanUri = (uri) => {
+    if (!uri) return uri
+    // Remove /index.php prefix if present
+    if (uri.startsWith('/index.php')) {
+      return uri.length === 10 ? '/' : uri.substring(10)
+    }
+    return uri
+  }
+
   const getMethodColor = (method) => {
     const methodUpper = (method || 'GET').toUpperCase()
     switch (methodUpper) {
@@ -257,7 +266,7 @@ function HttpAnalysis({ autoRefresh = true }) {
                         </span>
                       </td>
                       <td className="url-cell">
-                        <code>{stripQueryParams(call.uri || call.url) || 'N/A'}</code>
+                        <code>{stripQueryParams(call.request_uri || call.uri || call.url) || 'N/A'}</code>
                       </td>
                       <td className="service-cell" title={call.service || 'N/A'}>{call.service || 'N/A'}</td>
                       <td style={{ textAlign: 'right' }}>{call.call_count?.toLocaleString() || 0}</td>
@@ -323,7 +332,7 @@ function HttpAnalysis({ autoRefresh = true }) {
                           {call.method || 'GET'}
                         </span>
                         {' '}
-                        {stripQueryParams(call.uri || call.url) || 'N/A'}
+                        {stripQueryParams(call.request_uri || call.uri || call.url) || 'N/A'}
                       </h3>
                       {call.service && (
                         <div className="details-service">
@@ -359,7 +368,7 @@ function HttpAnalysis({ autoRefresh = true }) {
                           <div className="metric-label">URI</div>
                           <div className="metric-value">
                             <code style={{ fontSize: '0.85em', wordBreak: 'break-all' }}>
-                              {stripQueryParams(call.url || call.uri) || 'N/A'}
+                              {stripQueryParams(call.request_uri || call.url || call.uri) || 'N/A'}
                             </code>
                           </div>
                         </div>
