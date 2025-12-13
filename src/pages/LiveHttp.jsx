@@ -14,7 +14,8 @@ import {
   FiUpload,
   FiCode,
   FiFileText,
-  FiChevronRight
+  FiChevronRight,
+  FiLink
 } from 'react-icons/fi'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -79,7 +80,17 @@ function LiveHttp() {
         // Create a representative request for each aggregated call
         // Use a timestamp that's recent but spread out
         const timestamp = now.getTime() - (index * 60000) // Spread over time
-        const uri = call.uri || call.url || ''
+        // Use request_uri if available (contains actual path), otherwise use uri/url
+        let uri = call.request_uri || call.uri || call.url || ''
+        // If it's a full URL, extract just the path
+        if (uri && !uri.startsWith('/')) {
+          try {
+            const urlObj = new URL(uri)
+            uri = urlObj.pathname + urlObj.search
+          } catch (e) {
+            // Not a valid URL, use as-is
+          }
+        }
         const url = call.url || ''
         
         // Estimate error count based on error_rate
@@ -95,6 +106,7 @@ function LiveHttp() {
           service: call.service || '',
           method: call.method || 'GET',
           uri: uri,
+          request_uri: call.request_uri || uri,
           url: url,
           status_code: hasErrors ? 500 : 200, // Use 500 if there were errors, otherwise 200
           duration_ms: call.avg_duration || 0,
@@ -200,6 +212,20 @@ function LiveHttp() {
             if (message.channel === 'http' && message.data) {
               const httpData = message.data
               
+              // Debug: log all available fields to see what we have
+              console.log('[LiveHttp] Received HTTP data - Full object:', JSON.stringify(httpData, null, 2))
+              console.log('[LiveHttp] Available fields:', Object.keys(httpData))
+              console.log('[LiveHttp] URI-related fields:', {
+                uri: httpData.uri,
+                url: httpData.url,
+                request_uri: httpData.request_uri,
+                path_info: httpData.path_info,
+                'http_request object': httpData.http_request,
+                'http_request?.uri': httpData.http_request?.uri,
+                'http_request?.request_uri': httpData.http_request?.request_uri,
+                'http_request?.path_info': httpData.http_request?.path_info,
+              })
+              
               // Apply filters
               if (serviceFilter && httpData.service !== serviceFilter) {
                 return
@@ -207,13 +233,27 @@ function LiveHttp() {
               
               const requestId = `${httpData.trace_id}-${httpData.span_id}-${httpData.timestamp || Date.now()}`
               
+              // Use request_uri if available (contains actual path), otherwise fall back to uri/url
+              // Based on ClickHouse data: uri contains "/index.php", request_uri contains actual path
+              let uri = httpData.http_request?.request_uri || httpData.request_uri || httpData.http_request?.uri || httpData.uri || httpData.url || ''
+              if (uri && !uri.startsWith('/') && !uri.startsWith('http')) {
+                // If it looks like a full URL, extract just the path
+                try {
+                  const urlObj = new URL(uri)
+                  uri = urlObj.pathname + urlObj.search
+                } catch (e) {
+                  // Not a valid URL, use as-is
+                }
+              }
+              
               const newRequest = {
                 id: requestId,
                 trace_id: httpData.trace_id || '',
                 span_id: httpData.span_id || '',
                 service: httpData.service || '',
                 method: httpData.method || 'GET',
-                uri: httpData.uri || httpData.url || '',
+                uri: uri,
+                request_uri: httpData.http_request?.request_uri || httpData.request_uri || uri,
                 url: httpData.url || '',
                 status_code: httpData.status_code || 200,
                 duration_ms: httpData.duration_ms || 0,
@@ -389,6 +429,15 @@ function LiveHttp() {
     return uriOrUrl
   }
 
+  const cleanUri = (uri) => {
+    if (!uri) return uri
+    // Remove /index.php prefix if present
+    if (uri.startsWith('/index.php')) {
+      return uri.length === 10 ? '/' : uri.substring(10)
+    }
+    return uri
+  }
+
   const handleRequestClick = (request) => {
     setSelectedRequest(request)
     setIsDetailsPanelOpen(true)
@@ -495,7 +544,7 @@ function LiveHttp() {
                       </span>
                     </div>
                     <div className="col-uri" title={request.url || request.uri}>
-                      <code>{stripQueryParams(request.uri || request.url) || 'N/A'}</code>
+                      <code>{stripQueryParams(request.request_uri || request.uri || request.url) || 'N/A'}</code>
                     </div>
                     <div className="col-service">{request.service || 'N/A'}</div>
                     <div className="col-status">
@@ -530,7 +579,7 @@ function LiveHttp() {
                       {selectedRequest.method || 'GET'}
                     </span>
                     {' '}
-                    {stripQueryParams(selectedRequest.uri || selectedRequest.url) || 'N/A'}
+                    {stripQueryParams(selectedRequest.request_uri || selectedRequest.uri || selectedRequest.url) || 'N/A'}
                   </h3>
                   <div className="details-service">
                     <FiServer /> {selectedRequest.service || 'N/A'}
