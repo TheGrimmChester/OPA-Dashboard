@@ -98,6 +98,13 @@ function LiveHttp() {
         const callCount = call.call_count || 1
         const hasErrors = errorCount > 0
         
+        // Use actual status code from the data if available, otherwise infer from error state
+        // Default to 200 if no status code and no errors, or 500 if errors but no status code
+        let statusCode = call.status_code || 0
+        if (statusCode === 0) {
+          statusCode = hasErrors ? 500 : 200
+        }
+        
         // Create a representative request (use average values)
         return [{
           id: `historical-${call.url}-${call.method}-${timestamp}-${index}`,
@@ -108,7 +115,7 @@ function LiveHttp() {
           uri: uri,
           request_uri: call.request_uri || uri,
           url: url,
-          status_code: hasErrors ? 500 : 200, // Use 500 if there were errors, otherwise 200
+          status_code: statusCode, // Use actual status code from data
           duration_ms: call.avg_duration || 0,
           timestamp: timestamp,
           request_headers: {},
