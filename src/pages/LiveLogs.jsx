@@ -15,6 +15,7 @@ import {
 } from 'react-icons/fi'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import FilterBuilder from '../components/FilterBuilder'
 import './LiveLogs.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -36,6 +37,10 @@ function LiveLogs() {
   const [isPaused, setIsPaused] = useState(isPausedParam === 'true')
   const levelFilter = searchParams.get('level') || 'all'
   const serviceFilter = searchParams.get('service') || ''
+  const filterQuery = searchParams.get('filter') || ''
+  // Initialize filter with level/service if they exist but filter doesn't
+  const initialFilter = filterQuery || (levelFilter !== 'all' ? `level:${levelFilter}` : '') + (serviceFilter ? (levelFilter !== 'all' ? ' AND ' : '') + `service:${serviceFilter}` : '')
+  const [filter, setFilter] = useState(initialFilter)
   const wsRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   const containerRef = useRef(null)
@@ -98,12 +103,16 @@ function LiveLogs() {
         params.append('cursor', cursor.toString())
       }
       
-      if (levelFilter && levelFilter !== 'all') {
-        params.append('level', levelFilter)
-      }
-      
-      if (serviceFilter) {
-        params.append('service', serviceFilter)
+      if (filter) {
+        params.append('filter', filter)
+      } else {
+        // Backward compatibility: use level/service if filter not set
+        if (levelFilter && levelFilter !== 'all') {
+          params.append('level', levelFilter)
+        }
+        if (serviceFilter) {
+          params.append('service', serviceFilter)
+        }
       }
       
       const response = await axios.get(`${API_URL}/api/logs?${params}`)
@@ -146,7 +155,7 @@ function LiveLogs() {
       setLoadingMore(false)
       isLoadingMoreRef.current = false
     }
-  }, [levelFilter, serviceFilter])
+  }, [filter, levelFilter, serviceFilter])
 
   // Sync autoScroll, isPaused, and filters to URL params
   useEffect(() => {
@@ -158,14 +167,23 @@ function LiveLogs() {
     if (isPaused) params.set('isPaused', 'true')
     else params.delete('isPaused')
     
-    if (levelFilter && levelFilter !== 'all') params.set('level', levelFilter)
-    else params.delete('level')
+    if (filter) params.set('filter', filter)
+    else params.delete('filter')
     
-    if (serviceFilter) params.set('service', serviceFilter)
-    else params.delete('service')
+    // Keep level/service for backward compatibility, but prefer filter
+    if (!filter) {
+      if (levelFilter && levelFilter !== 'all') params.set('level', levelFilter)
+      else params.delete('level')
+      
+      if (serviceFilter) params.set('service', serviceFilter)
+      else params.delete('service')
+    } else {
+      params.delete('level')
+      params.delete('service')
+    }
     
     setSearchParams(params, { replace: true })
-  }, [autoScroll, isPaused, levelFilter, serviceFilter, searchParams, setSearchParams])
+  }, [autoScroll, isPaused, filter, levelFilter, serviceFilter, searchParams, setSearchParams])
 
   // Load more logs when scrolling to bottom
   const loadMore = useCallback(() => {
@@ -206,7 +224,7 @@ function LiveLogs() {
   // Initial fetch of historical logs (runs on mount and when filters change)
   useEffect(() => {
     fetchLogs()
-  }, [levelFilter, serviceFilter]) // Re-fetch when filters change
+  }, [filter, levelFilter, serviceFilter]) // Re-fetch when filters change
 
   // WebSocket connection
   useEffect(() => {
@@ -307,21 +325,50 @@ function LiveLogs() {
             if (message.channel === 'logs' && message.data) {
               const { trace_id, span_id, service, level, message: logMessage, timestamp, fields } = message.data
               
-              // Apply filters
-              if (levelFilter && levelFilter !== 'all') {
-                const logLevel = level?.toLowerCase() || ''
-                const filterLevel = levelFilter.toLowerCase()
-                if (filterLevel === 'critical') {
-                  if (logLevel !== 'critical' && logLevel !== 'crit') {
+              // Apply filters (for WebSocket messages, we check filter string or fallback to level/service)
+              // Note: Full filter parsing would require importing filterParser, but for WebSocket
+              // we'll do simple checks. The main filtering happens in fetchLogs via API.
+              if (filter) {
+                // Simple filter check for WebSocket messages
+                // For complex filters, rely on API filtering
+                const lowerFilter = filter.toLowerCase()
+                if (lowerFilter.includes('level:')) {
+                  const levelMatch = lowerFilter.match(/level:(\w+)/i)
+                  if (levelMatch) {
+                    const filterLevel = levelMatch[1].toLowerCase()
+                    const logLevel = level?.toLowerCase() || ''
+                    if (filterLevel === 'critical') {
+                      if (logLevel !== 'critical' && logLevel !== 'crit') {
+                        return
+                      }
+                    } else if (logLevel !== filterLevel) {
+                      return
+                    }
+                  }
+                }
+                if (lowerFilter.includes('service:')) {
+                  const serviceMatch = lowerFilter.match(/service:(\w+)/i)
+                  if (serviceMatch && service !== serviceMatch[1]) {
                     return
                   }
-                } else if (logLevel !== filterLevel) {
+                }
+              } else {
+                // Backward compatibility: use level/service filters
+                if (levelFilter && levelFilter !== 'all') {
+                  const logLevel = level?.toLowerCase() || ''
+                  const filterLevel = levelFilter.toLowerCase()
+                  if (filterLevel === 'critical') {
+                    if (logLevel !== 'critical' && logLevel !== 'crit') {
+                      return
+                    }
+                  } else if (logLevel !== filterLevel) {
+                    return
+                  }
+                }
+                
+                if (serviceFilter && service !== serviceFilter) {
                   return
                 }
-              }
-              
-              if (serviceFilter && service !== serviceFilter) {
-                return
               }
               
               // Create log entry
@@ -425,7 +472,7 @@ function LiveLogs() {
         wsRef.current = null
       }
     }
-  }, [autoScroll, fetchLogs, isPaused, levelFilter, serviceFilter, services])
+  }, [autoScroll, fetchLogs, isPaused, filter, levelFilter, serviceFilter, services])
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A'
@@ -439,31 +486,6 @@ function LiveLogs() {
     fetchLogs()
   }
 
-  const handleLevelFilterChange = (e) => {
-    const newLevel = e.target.value
-    setSearchParams(prev => {
-      const params = new URLSearchParams(prev)
-      if (newLevel && newLevel !== 'all') {
-        params.set('level', newLevel)
-      } else {
-        params.delete('level')
-      }
-      return params
-    })
-  }
-
-  const handleServiceFilterChange = (e) => {
-    const newService = e.target.value
-    setSearchParams(prev => {
-      const params = new URLSearchParams(prev)
-      if (newService) {
-        params.set('service', newService)
-      } else {
-        params.delete('service')
-      }
-      return params
-    })
-  }
 
   if (loading) {
     return <LoadingSpinner message="Loading logs..." />
@@ -481,29 +503,15 @@ function LiveLogs() {
           </div>
         </div>
         <div className="live-logs-header-right">
-          <div className="filters">
-            <select
-              value={levelFilter}
-              onChange={handleLevelFilterChange}
-              className="filter-select"
-            >
-              <option value="all">All Levels</option>
-              <option value="critical">Critical</option>
-              <option value="error">Error</option>
-              <option value="warn">Warning</option>
-              <option value="info">Info</option>
-              <option value="debug">Debug</option>
-            </select>
-            <select
-              value={serviceFilter}
-              onChange={handleServiceFilterChange}
-              className="filter-select"
-            >
-              <option value="">All Services</option>
-              {services.map(service => (
-                <option key={service} value={service}>{service}</option>
-              ))}
-            </select>
+          <div className="live-logs-filters">
+            <div className="filter-group filter-group-full">
+              <label>Filter:</label>
+              <FilterBuilder
+                value={filter}
+                onChange={setFilter}
+                placeholder="e.g., level:error, service:api, (level:error AND service:api)"
+              />
+            </div>
           </div>
           <button 
             className={`btn ${isPaused ? 'btn-primary' : 'btn-secondary'}`}

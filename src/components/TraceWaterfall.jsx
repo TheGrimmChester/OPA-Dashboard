@@ -528,7 +528,41 @@ function TraceWaterfall({ trace, traceId }) {
             {selectedNode.redis_operations && Array.isArray(selectedNode.redis_operations) && selectedNode.redis_operations.length > 0 && (
               <div className="detail-section">
                 <h4>Redis Operations ({selectedNode.redis_operations.length})</h4>
-                <pre>{JSON.stringify(selectedNode.redis_operations, null, 2)}</pre>
+                {selectedNode.redis_operations.map((op, idx) => (
+                  <div key={idx} className="redis-operation-item">
+                    <div className="redis-op-header">
+                      <code className="redis-command">{op.command || 'N/A'}</code>
+                      {op.key && (
+                        <span className="redis-key">{op.key}</span>
+                      )}
+                    </div>
+                    <div className="redis-op-details">
+                      {op.duration_ms !== undefined && (
+                        <div className="detail-row">
+                          <strong>Duration:</strong> {formatDuration(op.duration_ms)}
+                        </div>
+                      )}
+                      {op.hit !== undefined && (
+                        <div className="detail-row">
+                          <strong>Hit/Miss:</strong> 
+                          <span className={`hit-miss-badge ${op.hit ? 'hit' : 'miss'}`}>
+                            {op.hit ? 'HIT' : 'MISS'}
+                          </span>
+                        </div>
+                      )}
+                      {op.timestamp && (
+                        <div className="detail-row">
+                          <strong>Timestamp:</strong> {new Date(op.timestamp * 1000).toLocaleString()}
+                        </div>
+                      )}
+                      {op.error && (
+                        <div className="detail-row">
+                          <strong>Error:</strong> <span className="error-text">{op.error}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

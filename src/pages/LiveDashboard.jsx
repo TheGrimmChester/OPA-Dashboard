@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { FiRefreshCw, FiPause, FiPlay, FiRadio, FiActivity } from 'react-icons/fi'
 import LiveServiceMapMini from '../components/LiveServiceMapMini'
 import LiveSqlMini from '../components/LiveSqlMini'
+import LiveRedisMini from '../components/LiveRedisMini'
 import LiveLogsMini from '../components/LiveLogsMini'
 import LiveDumpsMini from '../components/LiveDumpsMini'
 import HelpIcon from '../components/HelpIcon'
@@ -20,6 +21,7 @@ function LiveDashboard() {
   const dataStatusRef = useRef({
     serviceMap: false,
     sql: false,
+    redis: false,
     logs: false,
     dumps: false
   })
@@ -169,13 +171,20 @@ function LiveDashboard() {
           />
         </div>
 
-        {/* Bottom Grid - SQL, Logs, Dumps */}
+        {/* Bottom Grid - SQL, Redis, Logs, Dumps */}
         <div className="dashboard-grid">
           <div className="dashboard-section sql-section">
             <LiveSqlMini 
               isPaused={isPaused} 
               onRefresh={refreshTrigger}
               onDataStatusChange={(hasData) => updateDataStatus('sql', hasData)}
+            />
+          </div>
+          <div className="dashboard-section redis-section">
+            <LiveRedisMini 
+              isPaused={isPaused} 
+              onRefresh={refreshTrigger}
+              onDataStatusChange={(hasData) => updateDataStatus('redis', hasData)}
             />
           </div>
           <div className="dashboard-section logs-section">

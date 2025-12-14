@@ -498,6 +498,71 @@
   font-family: var(--font-family-mono);
 }
 
+.redis-operation-item {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.redis-op-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.redis-command {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
+  font-weight: 600;
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+}
+
+.redis-key {
+  font-family: var(--font-family-mono);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+.redis-op-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.hit-miss-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-left: var(--spacing-xs);
+}
+
+.hit-miss-badge.hit {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.hit-miss-badge.miss {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.error-text {
+  color: var(--color-error);
+}
+
 .waterfall-details {
   background: var(--bg-secondary);
   padding: var(--spacing-lg);

@@ -115,6 +115,9 @@
   gap: var(--spacing-md);
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .sql-section,
@@ -122,6 +125,9 @@
 .dumps-section {
   min-height: 300px;
   height: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .btn {
