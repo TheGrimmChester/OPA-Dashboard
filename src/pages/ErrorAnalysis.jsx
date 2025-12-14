@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
-import { FiAlertCircle, FiRefreshCw, FiArrowLeft, FiChevronLeft, FiChevronRight } from 'react-icons/fi'
+import { FiAlertCircle, FiRefreshCw, FiArrowLeft, FiChevronLeft, FiChevronRight, FiArrowUp, FiArrowDown } from 'react-icons/fi'
 import { errorService } from '../services/errorApi'
 import StackTraceViewer from '../components/StackTraceViewer'
 import ShareButton from '../components/ShareButton'
 import LoadingSpinner from '../components/LoadingSpinner'
 import TimeRangePicker from '../components/TimeRangePicker'
+import FilterBuilder from '../components/FilterBuilder'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './ErrorAnalysis.css'
 
@@ -26,6 +27,12 @@ function ErrorAnalysis() {
   const [offset, setOffset] = useState(offsetParam ? parseInt(offsetParam, 10) : 0)
   const [service, setService] = useState(searchParams.get('service') || '')
   const [timeRange, setTimeRange] = useState(searchParams.get('timeRange') || '24h')
+  const filterQuery = searchParams.get('filter') || ''
+  const [filter, setFilter] = useState(filterQuery)
+  const sortByParam = searchParams.get('sortBy')
+  const sortOrderParam = searchParams.get('sortOrder')
+  const [sortBy, setSortBy] = useState(sortByParam || 'last_seen')
+  const [sortOrder, setSortOrder] = useState(sortOrderParam || 'desc')
 
   const getTimeRangeParams = () => {
     const now = new Date()
@@ -55,8 +62,12 @@ function ErrorAnalysis() {
     return { from, to }
   }
 
-  const fetchErrors = useCallback(async () => {
-    setRefreshing(true)
+  const fetchErrors = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
     setError(null)
     
     try {
@@ -66,9 +77,13 @@ function ErrorAnalysis() {
         to,
         limit,
         offset,
+        sort: sortBy,
+        order: sortOrder,
       }
       
-      if (service) params.service = service
+      if (filter) params.filter = filter
+      // Keep service for backward compatibility during transition
+      else if (service) params.service = service
       
       const data = await errorService.listErrors(params)
       setErrors(data.errors || [])
@@ -80,7 +95,7 @@ function ErrorAnalysis() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [service, timeRange, limit, offset])
+  }, [filter, service, timeRange, limit, offset, sortBy, sortOrder])
 
   const fetchErrorDetail = useCallback(async () => {
     if (!errorId) return
@@ -111,12 +126,16 @@ function ErrorAnalysis() {
     if (!errorId) {
       setOffset(0)
     }
-  }, [service, timeRange, errorId])
+  }, [filter, service, timeRange, errorId])
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams)
     
-    if (service) params.set('service', service)
+    if (filter) params.set('filter', filter)
+    else params.delete('filter')
+    
+    // Keep service for backward compatibility, but prefer filter
+    if (!filter && service) params.set('service', service)
     else params.delete('service')
     
     if (timeRange && timeRange !== '24h') params.set('timeRange', timeRange)
@@ -128,12 +147,43 @@ function ErrorAnalysis() {
     if (offset !== 0) params.set('offset', offset.toString())
     else params.delete('offset')
     
+    if (sortBy !== 'last_seen') params.set('sortBy', sortBy)
+    else params.delete('sortBy')
+    
+    if (sortOrder !== 'desc') params.set('sortOrder', sortOrder)
+    else params.delete('sortOrder')
+    
     setSearchParams(params, { replace: true })
-  }, [service, timeRange, limit, offset, searchParams, setSearchParams])
+  }, [filter, service, timeRange, limit, offset, sortBy, sortOrder, searchParams, setSearchParams])
+  
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(column)
+      setSortOrder('desc')
+    }
+    setOffset(0)
+  }
 
   const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A'
     try {
-      const date = new Date(dateStr)
+      // Handle ClickHouse datetime format: "2006-01-02 15:04:05.000"
+      // Convert to ISO format for reliable parsing
+      let isoStr = dateStr
+      if (typeof dateStr === 'string' && dateStr.includes(' ') && !dateStr.includes('T')) {
+        // Replace space with T and add Z if no timezone
+        isoStr = dateStr.replace(' ', 'T')
+        if (!isoStr.includes('Z') && !isoStr.match(/[+-]\d{2}:\d{2}$/)) {
+          isoStr += 'Z'
+        }
+      }
+      const date = new Date(isoStr)
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return dateStr
+      }
       return date.toLocaleString()
     } catch {
       return dateStr
@@ -236,18 +286,29 @@ function ErrorAnalysis() {
 
       <div className="error-analysis-filters">
         <div className="filter-group">
-          <label>Service:</label>
-          <input
-            type="text"
-            value={service}
-            onChange={(e) => setService(e.target.value)}
-            placeholder="Filter by service"
-            className="filter-input"
-          />
-        </div>
-        <div className="filter-group">
           <label>Time Range:</label>
           <TimeRangePicker value={timeRange} onChange={setTimeRange} />
+        </div>
+        <div className="filter-group filter-group-full">
+          <label>Filter:</label>
+          <FilterBuilder
+            value={filter}
+            onChange={(newFilter) => {
+              setFilter(newFilter)
+              // Extract service from filter if present, or remove it if not
+              const serviceMatch = newFilter.match(/service:(\w+)/i)
+              if (serviceMatch) {
+                const newService = serviceMatch[1]
+                if (newService !== service) {
+                  setService(newService)
+                }
+              } else if (service) {
+                // Service was removed from filter, clear it
+                setService('')
+              }
+            }}
+            placeholder="e.g., service:api, error_type:Exception, (service:api AND count:>10)"
+          />
         </div>
         {refreshing && <span className="refresh-indicator">🔄 Refreshing...</span>}
       </div>
@@ -274,11 +335,46 @@ function ErrorAnalysis() {
               <table className="errors-table">
                 <thead>
                   <tr>
-                    <th>Error Message</th>
-                    <th>Service</th>
-                    <th>Count</th>
-                    <th>First Seen</th>
-                    <th>Last Seen</th>
+                    <th onClick={() => handleSort('error_message')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Error Message</span>
+                        {sortBy === 'error_message' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('service')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Service</span>
+                        {sortBy === 'service' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('count')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Count</span>
+                        {sortBy === 'count' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('first_seen')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>First Seen</span>
+                        {sortBy === 'first_seen' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('last_seen')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Last Seen</span>
+                        {sortBy === 'last_seen' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
                     <th>Actions</th>
                   </tr>
                 </thead>
