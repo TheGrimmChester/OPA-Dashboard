@@ -2,16 +2,16 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
-const sqlApi = axios.create({
+const redisApi = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-export const sqlService = {
-  // List SQL queries with stats
-  listQueries: async (params = {}) => {
+export const redisService = {
+  // List Redis operations with stats
+  listOperations: async (params = {}) => {
     const queryParams = new URLSearchParams()
     if (params.service) queryParams.append('service', params.service)
     if (params.from) queryParams.append('from', params.from)
@@ -23,16 +23,9 @@ export const sqlService = {
     if (params.sort) queryParams.append('sort', params.sort)
     if (params.order) queryParams.append('order', params.order)
 
-    const response = await sqlApi.get(`/api/sql/queries?${queryParams}`)
-    return response.data
-  },
-
-  // Get SQL query details by fingerprint
-  getQueryDetails: async (fingerprint) => {
-    const response = await sqlApi.get(`/api/sql/queries/${encodeURIComponent(fingerprint)}`)
+    const response = await redisApi.get(`/api/redis/operations?${queryParams}`)
     return response.data
   },
 }
 
-export default sqlService
-
+export default redisService

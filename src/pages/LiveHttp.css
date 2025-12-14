@@ -76,6 +76,11 @@
   gap: var(--spacing-sm);
 }
 
+.filter-group-full {
+  flex: 1;
+  min-width: 300px;
+}
+
 .filter-group label {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);

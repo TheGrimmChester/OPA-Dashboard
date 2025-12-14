@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FiGlobe, FiRefreshCw, FiChevronLeft, FiChevronRight, FiX, FiClock, FiAlertCircle, FiTrendingUp, FiServer } from 'react-icons/fi'
+import { FiGlobe, FiRefreshCw, FiChevronLeft, FiChevronRight, FiX, FiClock, FiAlertCircle, FiTrendingUp, FiServer, FiArrowUp, FiArrowDown } from 'react-icons/fi'
 import { httpService } from '../services/httpApi'
 import ShareButton from '../components/ShareButton'
 import LoadingSpinner from '../components/LoadingSpinner'
 import TimeRangePicker from '../components/TimeRangePicker'
 import HelpIcon from '../components/HelpIcon'
+import FilterBuilder from '../components/FilterBuilder'
 import axios from 'axios'
 import './HttpAnalysis.css'
 
@@ -29,6 +30,12 @@ function HttpAnalysis({ autoRefresh = true }) {
   const [offset, setOffset] = useState(offsetParam ? parseInt(offsetParam, 10) : 0)
   const [service, setService] = useState(searchParams.get('service') || '')
   const [timeRange, setTimeRange] = useState(searchParams.get('timeRange') || '24h')
+  const filterQuery = searchParams.get('filter') || ''
+  const [filter, setFilter] = useState(filterQuery)
+  const sortByParam = searchParams.get('sortBy')
+  const sortOrderParam = searchParams.get('sortOrder')
+  const [sortBy, setSortBy] = useState(sortByParam || 'last_created_at')
+  const [sortOrder, setSortOrder] = useState(sortOrderParam || 'desc')
 
   // Fetch available services
   useEffect(() => {
@@ -68,8 +75,12 @@ function HttpAnalysis({ autoRefresh = true }) {
     return { from, to }
   }
 
-  const fetchHttpCalls = useCallback(async () => {
-    setRefreshing(true)
+  const fetchHttpCalls = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
     setError(null)
     
     try {
@@ -79,22 +90,37 @@ function HttpAnalysis({ autoRefresh = true }) {
         to,
         limit,
         offset,
+        sort: sortBy,
+        order: sortOrder,
       }
       
       if (service) params.service = service
+      if (filter) params.filter = filter
       
       const data = await httpService.listHttpCalls(params)
       setHttpCalls(data.http_calls || [])
       setTotal(data.total || data.http_calls?.length || 0)
       setTotalCalls(data.total_calls || 0)
     } catch (err) {
-      setError(err.response?.data?.error || 'Error fetching HTTP calls')
+      let errorMessage = 'Error fetching HTTP calls'
+      if (err.response?.status === 400) {
+        errorMessage = err.response?.data?.error || err.response?.data?.message || 'Invalid filter query. Please check your filter syntax.'
+        // If it's a filter error, suggest clearing the filter
+        if (filter && errorMessage.includes('filter')) {
+          errorMessage += ' Try clearing or fixing the filter.'
+        }
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      setError(errorMessage)
       console.error('Fetch HTTP calls error:', err)
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [service, timeRange, limit, offset])
+  }, [service, timeRange, limit, offset, filter, sortBy, sortOrder])
 
   useEffect(() => {
     fetchHttpCalls()
@@ -104,15 +130,25 @@ function HttpAnalysis({ autoRefresh = true }) {
     if (!autoRefresh) return
     
     const interval = setInterval(() => {
-      fetchHttpCalls()
+      fetchHttpCalls(true)
     }, 5000) // Refresh every 5s
     
     return () => clearInterval(interval)
   }, [autoRefresh, fetchHttpCalls])
+  
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(column)
+      setSortOrder('desc')
+    }
+    setOffset(0)
+  }
 
   useEffect(() => {
     setOffset(0)
-  }, [service, timeRange])
+  }, [service, timeRange, filter])
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams)
@@ -123,14 +159,23 @@ function HttpAnalysis({ autoRefresh = true }) {
     if (timeRange && timeRange !== '24h') params.set('timeRange', timeRange)
     else params.delete('timeRange')
     
+    if (filter) params.set('filter', filter)
+    else params.delete('filter')
+    
     if (limit !== 50) params.set('limit', limit.toString())
     else params.delete('limit')
     
     if (offset !== 0) params.set('offset', offset.toString())
     else params.delete('offset')
     
+    if (sortBy !== 'last_created_at') params.set('sortBy', sortBy)
+    else params.delete('sortBy')
+    
+    if (sortOrder !== 'desc') params.set('sortOrder', sortOrder)
+    else params.delete('sortOrder')
+    
     setSearchParams(params, { replace: true })
-  }, [service, timeRange, limit, offset, searchParams, setSearchParams])
+  }, [service, timeRange, filter, limit, offset, sortBy, sortOrder, searchParams, setSearchParams])
 
   const formatDuration = (ms) => {
     if (!ms && ms !== 0) return 'N/A'
@@ -191,21 +236,33 @@ function HttpAnalysis({ autoRefresh = true }) {
 
       <div className="http-analysis-filters">
         <div className="filter-group">
-          <label>Service:</label>
-          <select
-            value={service}
-            onChange={(e) => setService(e.target.value)}
-            className="filter-select"
-          >
-            <option value="">All Services</option>
-            {services.map((svc) => (
-              <option key={svc} value={svc}>{svc}</option>
-            ))}
-          </select>
-        </div>
-        <div className="filter-group">
           <label>Time Range:</label>
           <TimeRangePicker value={timeRange} onChange={setTimeRange} />
+        </div>
+        <div className="filter-group filter-group-full">
+          <label>Filter:</label>
+          <FilterBuilder
+            value={filter}
+            onChange={(newFilter) => {
+              setFilter(newFilter)
+              // Extract service from filter if present, or remove it if not
+              // Match service:value where value can contain word characters, hyphens, dots, etc.
+              // The filter parser allows values with hyphens, so we need to match until whitespace or logical operators
+              const serviceMatch = newFilter.match(/\bservice:([^\s()]+?)(?:\s+(?:AND|OR|NOT|$)|$)/i) || 
+                                   newFilter.match(/\bservice:([^\s()]+)$/i)
+              if (serviceMatch && serviceMatch[1]) {
+                const newService = serviceMatch[1].trim()
+                // Only update if we have a valid service name (not empty, not just operators)
+                if (newService && !/^(AND|OR|NOT|>|<|>=|<=|!=|LIKE|IN)$/i.test(newService) && newService !== service) {
+                  setService(newService)
+                }
+              } else if (service && !newFilter.match(/\bservice:/i)) {
+                // Service was removed from filter, clear it
+                setService('')
+              }
+            }}
+            placeholder="e.g., service:api, status_code:500, (service:api AND http.method:POST)"
+          />
         </div>
         {refreshing && <span className="refresh-indicator">🔄 Refreshing...</span>}
       </div>
@@ -238,15 +295,58 @@ function HttpAnalysis({ autoRefresh = true }) {
                   <tr>
                     <th style={{ width: '60px' }}>Method</th>
                     <th style={{ minWidth: '250px' }}>URI/Endpoint</th>
-                    <th style={{ width: '120px' }}>Service</th>
-                    <th style={{ width: '80px', textAlign: 'right' }}>Count</th>
-                    <th style={{ width: '90px', textAlign: 'right' }}>Avg</th>
+                    <th onClick={() => handleSort('service')} className="sortable" style={{ width: '120px', textAlign: 'left', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '4px' }}>
+                        <span>Service</span>
+                        {sortBy === 'service' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('call_count')} className="sortable" style={{ width: '80px', textAlign: 'right', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                        <span>Count</span>
+                        {sortBy === 'call_count' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('avg_duration')} className="sortable" style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                        <span>Avg</span>
+                        {sortBy === 'avg_duration' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
                     <th style={{ width: '80px', textAlign: 'right' }}>Min</th>
                     <th style={{ width: '80px', textAlign: 'right' }}>Max</th>
-                    <th style={{ width: '80px', textAlign: 'right' }}>Errors</th>
-                    <th style={{ width: '80px', textAlign: 'right' }}>Rate</th>
+                    <th onClick={() => handleSort('error_count')} className="sortable" style={{ width: '80px', textAlign: 'right', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                        <span>Errors</span>
+                        {sortBy === 'error_count' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('error_rate')} className="sortable" style={{ width: '80px', textAlign: 'right', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                        <span>Rate</span>
+                        {sortBy === 'error_rate' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
                     <th style={{ width: '100px', textAlign: 'right' }}>Sent</th>
                     <th style={{ width: '100px', textAlign: 'right' }}>Recv</th>
+                    <th onClick={() => handleSort('last_created_at')} className="sortable" style={{ width: '120px', textAlign: 'right', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                        <span>Last Created</span>
+                        {sortBy === 'last_created_at' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -284,6 +384,9 @@ function HttpAnalysis({ autoRefresh = true }) {
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         {formatBytes(call.total_bytes_received != null ? Number(call.total_bytes_received) : 0)}
+                      </td>
+                      <td style={{ textAlign: 'right', fontSize: '0.85em' }}>
+                        {call.last_created_at ? new Date(call.last_created_at).toLocaleString() : 'N/A'}
                       </td>
                     </tr>
                   ))}

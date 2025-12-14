@@ -1,0 +1,183 @@
+/* LiveRedisMini - Mini component for Redis operations in live dashboard */
+.live-redis-mini {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm);
+}
+
+.live-redis-mini .mini-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.live-redis-mini .mini-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.live-redis-mini .view-all-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  transition: color 0.2s;
+}
+
+.live-redis-mini .view-all-link:hover {
+  color: var(--color-primary-hover);
+}
+
+.live-redis-mini .mini-content {
+  flex: 1;
+  position: relative;
+  overflow-y: auto;
+  min-height: 200px;
+}
+
+.live-redis-mini .mini-content.loading,
+.live-redis-mini .mini-content.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-secondary);
+}
+
+.live-redis-mini .loading-spinner {
+  animation: spin 1s linear infinite;
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.live-redis-mini .refresh-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.live-redis-mini .refresh-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.live-redis-mini .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.live-redis-mini .empty-icon {
+  font-size: 2rem;
+  margin-bottom: var(--spacing-sm);
+  opacity: 0.5;
+}
+
+.live-redis-mini .operations-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.live-redis-mini .operation-item {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.live-redis-mini .operation-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--color-primary);
+  transform: translateX(2px);
+}
+
+.live-redis-mini .operation-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.live-redis-mini .operation-command {
+  background: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-redis-mini .operation-key {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.live-redis-mini .arrow-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.live-redis-mini .operation-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.live-redis-mini .operation-stats .stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.live-redis-mini .operation-stats .stat strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
