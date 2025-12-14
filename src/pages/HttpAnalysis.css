@@ -25,10 +25,10 @@
 
 .http-analysis-filters {
   display: flex;
-  gap: var(--spacing-sm);
-  align-items: center;
+  gap: var(--spacing-md);
+  align-items: flex-start;
   margin-bottom: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-md);
   background-color: var(--bg-secondary);
   border-radius: var(--radius-md);
   flex-wrap: wrap;
@@ -40,12 +40,32 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  min-height: 44px;
+}
+
+.filter-group-full {
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.filter-group-full .filter-builder {
+  flex: 1;
+  min-width: 0;
 }
 
 .filter-group label {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
+  font-weight: var(--font-weight-medium);
+  min-width: fit-content;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  height: 44px;
 }
 
 .filter-select {
@@ -69,6 +89,11 @@
 .refresh-indicator {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  height: 44px;
+  margin-left: auto;
+  padding-left: var(--spacing-sm);
 }
 
 .http-calls-list {
@@ -137,6 +162,7 @@
 .http-calls-table td {
   padding: var(--spacing-xs) var(--spacing-sm);
   text-align: left;
+  vertical-align: middle;
   border-bottom: 1px solid var(--border-light);
   color: var(--text-primary);
   font-size: var(--font-size-xs);
@@ -150,52 +176,68 @@
   top: 0;
   background-color: var(--bg-tertiary);
   z-index: 10;
+  vertical-align: middle;
+}
+
+.http-calls-table th > div {
+  display: flex;
+  align-items: center;
+  min-height: 1.5em;
+  line-height: 1.5;
 }
 
 .method-badge {
   display: inline-block;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  border: none;
+  color: white;
+  font-family: var(--font-family-mono);
 }
 
+/* Swagger-style colors */
 .method-badge.method-get {
-  background-color: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background-color: #61affe;
+  color: white;
 }
 
 .method-badge.method-post {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background-color: #49cc90;
+  color: white;
 }
 
 .method-badge.method-put {
-  background-color: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.3);
-}
-
-.method-badge.method-delete {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background-color: #fca130;
+  color: white;
 }
 
 .method-badge.method-patch {
-  background-color: rgba(168, 85, 247, 0.2);
-  color: #a855f7;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background-color: #50e3c2;
+  color: white;
+}
+
+.method-badge.method-delete {
+  background-color: #f93e3e;
+  color: white;
+}
+
+.method-badge.method-head {
+  background-color: #9012fe;
+  color: white;
+}
+
+.method-badge.method-options {
+  background-color: #0d5aa7;
+  color: white;
 }
 
 .method-badge.method-other {
-  background-color: rgba(107, 114, 128, 0.2);
-  color: #6b7280;
-  border: 1px solid rgba(107, 114, 128, 0.3);
+  background-color: #6b7280;
+  color: white;
 }
 
 .url-cell {
@@ -229,6 +271,11 @@
 
 .http-calls-table tbody tr {
   transition: background-color var(--transition-base);
+  height: auto;
+}
+
+.http-calls-table tbody td {
+  vertical-align: middle;
 }
 
 .http-calls-table tbody tr:hover {

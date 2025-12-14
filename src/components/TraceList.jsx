@@ -38,7 +38,7 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
   
   const [limit, setLimit] = useState(limitParam ? parseInt(limitParam, 10) : 50)
   const [offset, setOffset] = useState(offsetParam ? parseInt(offsetParam, 10) : 0)
-  const [sortBy, setSortBy] = useState(sortByParam || 'time')
+  const [sortBy, setSortBy] = useState(sortByParam || 'created_at')
   const [sortOrder, setSortOrder] = useState(sortOrderParam || 'desc')
   const [refreshing, setRefreshing] = useState(false)
   const [selectedTraces, setSelectedTraces] = useState(new Set())
@@ -53,24 +53,26 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
     navigate(`/traces/${trace.trace_id}`)
   }
 
-  const fetchTraces = useCallback(async () => {
-    setRefreshing(true)
+  const fetchTraces = useCallback(async (isRefresh = false) => {
+    // Only show loading spinner on initial load, not on refresh
+    if (!isRefresh) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
     setError(null)
     
     try {
       const params = new URLSearchParams({
         limit: limit.toString(),
         offset: offset.toString(),
-        sort: sortBy,
+        sort: sortBy === 'created_at' ? 'created_at' : sortBy, // Map created_at to backend
         order: sortOrder,
       })
       
-      if (filters?.service) params.append('service', filters.service)
-      if (filters?.status) params.append('status', filters.status)
+      if (filters?.filter) params.append('filter', filters.filter)
       if (filters?.from) params.append('from', filters.from)
       if (filters?.to) params.append('to', filters.to)
-      if (filters?.min_duration) params.append('min_duration', filters.min_duration)
-      if (filters?.max_duration) params.append('max_duration', filters.max_duration)
       
       // Ensure no trailing slash in API_URL
       const baseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL
@@ -99,7 +101,7 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
     if (offset !== 0) params.set('offset', offset.toString())
     else params.delete('offset')
     
-    if (sortBy !== 'time') params.set('sortBy', sortBy)
+    if (sortBy !== 'created_at') params.set('sortBy', sortBy)
     else params.delete('sortBy')
     
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder)
@@ -111,7 +113,7 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
   // Reset offset when filters change
   useEffect(() => {
     setOffset(0)
-  }, [filters?.service, filters?.status, filters?.from, filters?.min_duration, filters?.max_duration])
+  }, [filters?.filter, filters?.from])
 
   useEffect(() => {
     setLoading(true)
@@ -122,7 +124,7 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
     if (!autoRefresh) return
     
     const interval = setInterval(() => {
-      fetchTraces()
+      fetchTraces(true) // Pass true to indicate this is a refresh
     }, 5000) // 5 seconds
     
     return () => clearInterval(interval)
@@ -168,8 +170,23 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
   }
 
   const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A'
     try {
-      const date = new Date(dateStr)
+      // Handle ClickHouse datetime format: "2006-01-02 15:04:05.000"
+      // Convert to ISO format for reliable parsing
+      let isoStr = dateStr
+      if (typeof dateStr === 'string' && dateStr.includes(' ') && !dateStr.includes('T')) {
+        // Replace space with T and add Z if no timezone
+        isoStr = dateStr.replace(' ', 'T')
+        if (!isoStr.includes('Z') && !isoStr.match(/[+-]\d{2}:\d{2}$/)) {
+          isoStr += 'Z'
+        }
+      }
+      const date = new Date(isoStr)
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return dateStr
+      }
       return format(date, 'yyyy-MM-dd HH:mm:ss.SSS')
     } catch {
       return dateStr
@@ -341,14 +358,7 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
       ) : (
         <>
           <div className={`trace-table-container ${refreshing ? 'refreshing' : ''}`}>
-            {refreshing && (
-              <div className="refresh-overlay active">
-                <div className="refresh-overlay-content">
-                  <FiRefreshCw className="spinning" />
-                  <span>Refreshing...</span>
-                </div>
-              </div>
-            )}
+            {/* Subtle refresh indicator - no overlay that blocks interaction */}
             <table className="trace-table">
               <thead>
                 <tr>
@@ -360,12 +370,12 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
                       onClick={(e) => e.stopPropagation()}
                     />
                   </th>
-                  <th onClick={() => handleSort('time')} className="sortable">
+                  <th onClick={() => handleSort('created_at')} className="sortable">
                     <div className="th-content">
                       <FiClock className="th-icon" />
-                      <span>Start Time</span>
-                      <HelpIcon text="When the trace started executing. Click to sort by time." position="right" />
-                      {sortBy === 'time' && (
+                      <span>Created At</span>
+                      <HelpIcon text="When the trace was created. Click to sort by creation time." position="right" />
+                      {sortBy === 'created_at' && (
                         sortOrder === 'asc' ? <FiArrowUp className="sort-icon" /> : <FiArrowDown className="sort-icon" />
                       )}
                     </div>
@@ -377,11 +387,14 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
                       <HelpIcon text="Unique identifier for the trace. Click to view trace details." position="right" />
                     </div>
                   </th>
-                  <th>
+                  <th onClick={() => handleSort('service')} className="sortable">
                     <div className="th-content">
                       <FiServer className="th-icon" />
                       <span>Service</span>
-                      <HelpIcon text="The service that generated this trace" position="right" />
+                      <HelpIcon text="The service that generated this trace. Click to sort by service." position="right" />
+                      {sortBy === 'service' && (
+                        sortOrder === 'asc' ? <FiArrowUp className="sort-icon" /> : <FiArrowDown className="sort-icon" />
+                      )}
                     </div>
                   </th>
                   <th onClick={() => handleSort('duration')} className="sortable">
@@ -394,8 +407,24 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
                       )}
                     </div>
                   </th>
-                  <th>Status <HelpIcon text="Trace status: OK (successful) or Error (failed)" position="right" /></th>
-                  <th>Spans <HelpIcon text="Number of individual operations (spans) in this trace" position="right" /></th>
+                  <th onClick={() => handleSort('status')} className="sortable">
+                    <div className="th-content">
+                      <span>Status</span>
+                      <HelpIcon text="Trace status: OK (successful) or Error (failed). Click to sort by status." position="right" />
+                      {sortBy === 'status' && (
+                        sortOrder === 'asc' ? <FiArrowUp className="sort-icon" /> : <FiArrowDown className="sort-icon" />
+                      )}
+                    </div>
+                  </th>
+                  <th onClick={() => handleSort('span_count')} className="sortable">
+                    <div className="th-content">
+                      <span>Spans</span>
+                      <HelpIcon text="Number of individual operations (spans) in this trace. Click to sort by span count." position="right" />
+                      {sortBy === 'span_count' && (
+                        sortOrder === 'asc' ? <FiArrowUp className="sort-icon" /> : <FiArrowDown className="sort-icon" />
+                      )}
+                    </div>
+                  </th>
                   <th>Actions <HelpIcon text="Actions available for this trace (delete, etc.)" position="right" /></th>
                 </tr>
               </thead>
@@ -420,7 +449,7 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
                         onClick={(e) => e.stopPropagation()}
                       />
                     </td>
-                    <td>{formatDate(trace.start_ts)}</td>
+                    <td>{formatDate(trace.created_at || trace.start_ts)}</td>
                     <td className="trace-id">
                       <Link 
                         to={`/traces/${trace.trace_id}`}

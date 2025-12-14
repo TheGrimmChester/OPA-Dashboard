@@ -18,6 +18,8 @@ export const errorService = {
     if (params.to) queryParams.append('to', params.to)
     if (params.limit) queryParams.append('limit', params.limit)
     if (params.offset) queryParams.append('offset', params.offset)
+    if (params.sort) queryParams.append('sort', params.sort)
+    if (params.order) queryParams.append('order', params.order)
 
     const response = await errorApi.get(`/api/errors?${queryParams}`)
     return response.data

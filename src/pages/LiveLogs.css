@@ -68,26 +68,44 @@
   gap: var(--spacing-md);
 }
 
-.filters {
+.live-logs-filters {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-md);
+  align-items: flex-start;
   padding-right: var(--spacing-md);
   border-right: 1px solid var(--border-light);
 }
 
-.filter-select {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 44px;
 }
 
-.filter-select:hover {
-  border-color: var(--color-primary);
+.filter-group-full {
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.filter-group label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-weight: var(--font-weight-medium);
+  min-width: fit-content;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  height: 44px;
+}
+
+.filter-group-full .filter-builder {
+  flex: 1;
+  min-width: 0;
 }
 
 .auto-scroll-toggle {

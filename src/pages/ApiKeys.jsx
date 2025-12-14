@@ -108,7 +108,22 @@ function ApiKeys() {
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Never'
     try {
-      return new Date(dateStr).toLocaleString()
+      // Handle ClickHouse datetime format: "2006-01-02 15:04:05.000"
+      // Convert to ISO format for reliable parsing
+      let isoStr = dateStr
+      if (typeof dateStr === 'string' && dateStr.includes(' ') && !dateStr.includes('T')) {
+        // Replace space with T and add Z if no timezone
+        isoStr = dateStr.replace(' ', 'T')
+        if (!isoStr.includes('Z') && !isoStr.match(/[+-]\d{2}:\d{2}$/)) {
+          isoStr += 'Z'
+        }
+      }
+      const date = new Date(isoStr)
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return dateStr
+      }
+      return date.toLocaleString()
     } catch {
       return dateStr
     }

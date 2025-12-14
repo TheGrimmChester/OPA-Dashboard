@@ -1,28 +1,76 @@
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { FiAlertTriangle, FiRefreshCw, FiFilter } from 'react-icons/fi'
 import axios from 'axios'
+import FilterBuilder from '../components/FilterBuilder'
+import TimeRangePicker from '../components/TimeRangePicker'
 import './Anomalies.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
 function Anomalies() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [anomalies, setAnomalies] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({
-    service: '',
-    severity: '',
-  })
+  const filterQuery = searchParams.get('filter') || ''
+  const [filter, setFilter] = useState(filterQuery)
+  const [timeRange, setTimeRange] = useState(searchParams.get('timeRange') || '24h')
+
+  const getTimeRangeParams = () => {
+    const now = new Date()
+    let from
+    
+    switch (timeRange) {
+      case '1h':
+        from = new Date(now.getTime() - 3600000).toISOString().slice(0, 19).replace('T', ' ')
+        break
+      case '6h':
+        from = new Date(now.getTime() - 21600000).toISOString().slice(0, 19).replace('T', ' ')
+        break
+      case '24h':
+        from = new Date(now.getTime() - 86400000).toISOString().slice(0, 19).replace('T', ' ')
+        break
+      case '7d':
+        from = new Date(now.getTime() - 604800000).toISOString().slice(0, 19).replace('T', ' ')
+        break
+      case '30d':
+        from = new Date(now.getTime() - 2592000000).toISOString().slice(0, 19).replace('T', ' ')
+        break
+      default:
+        from = new Date(now.getTime() - 86400000).toISOString().slice(0, 19).replace('T', ' ')
+    }
+    
+    return { from }
+  }
 
   useEffect(() => {
     fetchAnomalies()
-  }, [filters])
+  }, [filter, timeRange])
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams)
+    
+    if (filter) params.set('filter', filter)
+    else params.delete('filter')
+    
+    if (timeRange && timeRange !== '24h') params.set('timeRange', timeRange)
+    else params.delete('timeRange')
+    
+    setSearchParams(params, { replace: true })
+  }, [filter, timeRange, searchParams, setSearchParams])
 
   const fetchAnomalies = async () => {
     setLoading(true)
     try {
+      const { from } = getTimeRangeParams()
       const params = new URLSearchParams()
-      if (filters.service) params.append('service', filters.service)
-      if (filters.severity) params.append('severity', filters.severity)
+      
+      if (filter) {
+        params.append('filter', filter)
+      }
+      if (from) {
+        params.append('from', from)
+      }
       
       const response = await axios.get(`${API_URL}/api/anomalies?${params.toString()}`)
       setAnomalies(response.data.anomalies || [])
@@ -87,26 +135,16 @@ function Anomalies() {
 
       <div className="anomalies-filters">
         <div className="filter-group">
-          <label>Service</label>
-          <input
-            type="text"
-            value={filters.service}
-            onChange={(e) => setFilters({ ...filters, service: e.target.value })}
-            placeholder="Filter by service"
-          />
+          <label>Time Range:</label>
+          <TimeRangePicker value={timeRange} onChange={setTimeRange} />
         </div>
-        <div className="filter-group">
-          <label>Severity</label>
-          <select
-            value={filters.severity}
-            onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
-          >
-            <option value="">All</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
+        <div className="filter-group filter-group-full">
+          <label>Filter:</label>
+          <FilterBuilder
+            value={filter}
+            onChange={setFilter}
+            placeholder="e.g., service:api, severity:critical, (service:api AND severity:high)"
+          />
         </div>
       </div>
 

@@ -144,6 +144,7 @@ const ServiceMap = ({ refreshTrigger }) => {
   const [nodeTypeFilter, setNodeTypeFilter] = useState('all')
   const containerRef = useRef(null)
   const networkRef = useRef(null)
+  const networkInitializedRef = useRef(false)
 
   // Load service map data
   const loadServiceMap = useCallback(async (isRefresh = false) => {
@@ -466,7 +467,6 @@ const ServiceMap = ({ refreshTrigger }) => {
           size: nodeType === 'service' ? 14 : 12,
           color: COLORS.white,
           face: 'Inter, -apple-system, sans-serif',
-          bold: nodeType === 'service',
         },
         shape: getNodeShape(nodeType),
         size: nodeSize,
@@ -563,7 +563,7 @@ const ServiceMap = ({ refreshTrigger }) => {
     return { nodes: visNodes, edges: visEdges }
   }, [filteredData])
 
-  // Initialize vis-network
+  // Initialize vis-network (recreate on viewMode change)
   useEffect(() => {
     // Wait for container to be available
     if (!containerRef.current) {
@@ -576,6 +576,7 @@ const ServiceMap = ({ refreshTrigger }) => {
       return () => clearTimeout(timeoutId)
     }
 
+    // Destroy existing network if viewMode changed
     if (networkRef.current) {
       networkRef.current.destroy()
       networkRef.current = null
@@ -685,7 +686,6 @@ const ServiceMap = ({ refreshTrigger }) => {
           background: 'rgba(30, 41, 59, 0.98)',
           strokeWidth: 3,
           strokeColor: COLORS.bgSecondary,
-          bold: true,
         },
         labelHighlightBold: true,
       },
@@ -700,6 +700,7 @@ const ServiceMap = ({ refreshTrigger }) => {
 
     const network = new Network(containerRef.current, data, options)
     networkRef.current = network
+    networkInitializedRef.current = true
 
     network.on('click', (params) => {
       if (params.nodes.length > 0) {
@@ -736,12 +737,24 @@ const ServiceMap = ({ refreshTrigger }) => {
     })
 
     setTimeout(() => {
-      network.fit({ animation: { duration: 400 } })
+      if (networkRef.current && networkRef.current.fit) {
+        try {
+          networkRef.current.fit({ animation: { duration: 400 } })
+        } catch (err) {
+          console.warn('ServiceMap: Failed to fit network', err)
+        }
+      }
     }, 200)
     
     if (viewMode === 'hierarchical') {
       setTimeout(() => {
-        network.fit({ animation: { duration: 400 } })
+        if (networkRef.current && networkRef.current.fit) {
+          try {
+            networkRef.current.fit({ animation: { duration: 400 } })
+          } catch (err) {
+            console.warn('ServiceMap: Failed to fit network (hierarchical)', err)
+          }
+        }
       }, 600)
     }
 
@@ -751,29 +764,32 @@ const ServiceMap = ({ refreshTrigger }) => {
         networkRef.current = null
       }
     }
-  }, [viewMode, graphData])
+  }, [viewMode, graphData.nodes.length]) // Recreate on viewMode change or when data first becomes available
 
-  // Update network data when graphData changes
+  // Update network data when graphData changes (smooth update)
   useEffect(() => {
-    if (networkRef.current && containerRef.current) {
+    // Only update if network is already initialized (don't update during initial creation)
+    if (networkRef.current && containerRef.current && networkInitializedRef.current && graphData.nodes.length > 0) {
       const data = {
         nodes: graphData.nodes,
         edges: graphData.edges,
       }
+      // Use setData for smooth updates without recreating the network
       networkRef.current.setData(data)
-      if (graphData.nodes.length > 0) {
+      // Smoothly fit to new data after a short delay (only if not during initial load)
+      if (!loading) {
         setTimeout(() => {
           if (networkRef.current && networkRef.current.fit) {
             try {
-              networkRef.current.fit({ animation: { duration: 400 } })
+              networkRef.current.fit({ animation: { duration: 300 } })
             } catch (err) {
               console.warn('ServiceMap: Failed to fit network after data update', err)
             }
           }
-        }, 300)
+        }, 100)
       }
     }
-  }, [graphData])
+  }, [graphData, loading])
 
   // Zoom controls
   const handleZoomIn = () => {

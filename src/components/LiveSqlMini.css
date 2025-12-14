@@ -6,6 +6,9 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .mini-header {
@@ -43,8 +46,11 @@
 .mini-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
   transition: opacity var(--transition-base);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .mini-content.refreshing {
@@ -120,6 +126,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
 }
 
 .query-item {
@@ -129,6 +138,11 @@
   border: 1px solid var(--border-light);
   cursor: pointer;
   transition: all var(--transition-base);
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .query-item:hover {
@@ -142,22 +156,33 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--spacing-xs);
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  gap: var(--spacing-xs);
+  box-sizing: border-box;
 }
 
 .query-fingerprint {
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
   font-size: var(--font-size-xs);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: 'Courier New', monospace;
+  display: block;
+  box-sizing: border-box;
 }
 
 .arrow-icon {
   color: var(--color-primary);
   opacity: 0;
   transition: opacity 0.2s;
+  flex-shrink: 0;
+  width: auto;
 }
 
 .query-item:hover .arrow-icon {
