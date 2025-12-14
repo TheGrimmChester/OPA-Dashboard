@@ -35,7 +35,7 @@
 .error-analysis-filters {
   display: flex;
   gap: var(--spacing-md);
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: var(--spacing-lg);
   padding: var(--spacing-md);
   background-color: var(--bg-secondary);
@@ -48,12 +48,32 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  min-height: 44px;
+}
+
+.filter-group-full {
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .filter-group label {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   white-space: nowrap;
+  font-weight: var(--font-weight-medium);
+  min-width: fit-content;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  height: 44px;
+}
+
+.filter-group-full .filter-builder {
+  flex: 1;
+  min-width: 0;
 }
 
 .filter-input {
@@ -76,6 +96,11 @@
 .refresh-indicator {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  height: 44px;
+  margin-left: auto;
+  padding-left: var(--spacing-sm);
 }
 
 .errors-list {

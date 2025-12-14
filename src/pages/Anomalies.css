@@ -23,30 +23,45 @@
 .anomalies-filters {
   display: flex;
   gap: var(--spacing-md);
+  align-items: flex-start;
   margin-bottom: var(--spacing-lg);
   padding: var(--spacing-md);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
+  flex-wrap: wrap;
+  border: 1px solid var(--border-light);
 }
 
 .filter-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 44px;
+}
+
+.filter-group-full {
   flex: 1;
+  min-width: 300px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .filter-group label {
-  display: block;
-  margin-bottom: var(--spacing-xs);
-  font-weight: var(--font-weight-medium);
   font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-weight: var(--font-weight-medium);
+  min-width: fit-content;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  height: 44px;
 }
 
-.filter-group input,
-.filter-group select {
-  width: 100%;
-  padding: var(--spacing-sm);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-base);
+.filter-group-full .filter-builder {
+  flex: 1;
+  min-width: 0;
 }
 
 .anomalies-list {

@@ -609,7 +609,28 @@ function TraceView() {
   }
   const collectRedis = (spans) => {
     spans.forEach(span => {
-      // Collect from call stack
+      // First, collect Redis operations directly from span level (from spans_full.redis field)
+      if (span.redis && Array.isArray(span.redis) && span.redis.length > 0) {
+        span.redis.forEach(op => {
+          allRedisOperations.push({
+            span: span.name,
+            spanId: span.span_id,
+            operation: op,
+          })
+        })
+      }
+      // Also check for RedisOperations (alternative field name)
+      if (span.RedisOperations && Array.isArray(span.RedisOperations) && span.RedisOperations.length > 0) {
+        span.RedisOperations.forEach(op => {
+          allRedisOperations.push({
+            span: span.name,
+            spanId: span.span_id,
+            operation: op,
+          })
+        })
+      }
+      
+      // Collect from call stack (for Redis operations stored in individual call nodes)
       const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
         ? span.stack_flat
         : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
@@ -1393,6 +1414,8 @@ function TraceView() {
                     <th>Key</th>
                     <th>Hit/Miss</th>
                     <th>Duration</th>
+                    <th>Timestamp</th>
+                    <th>Error</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1406,7 +1429,7 @@ function TraceView() {
                     <tr key={idx}>
                       <td>{item.span}</td>
                       <td className="span-id-cell">{item.spanId}</td>
-                      <td><code>{item.operation.command || 'N/A'}</code></td>
+                      <td><code className="command-cell">{item.operation.command || 'N/A'}</code></td>
                       <td className="key-cell">{item.operation.key || 'N/A'}</td>
                       <td>
                         {item.operation.hit !== undefined ? (
@@ -1415,7 +1438,22 @@ function TraceView() {
                           </span>
                         ) : '-'}
                       </td>
-                      <td>{formatDuration(item.operation.duration_ms || 0)}</td>
+                      <td>
+                        <div className="duration-main">{formatDuration(item.operation.duration_ms || 0)}</div>
+                        {item.operation.duration && (
+                          <div className="duration-detail">
+                            <small>{(item.operation.duration * 1000).toFixed(3)}ms</small>
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {item.operation.timestamp ? (
+                          <div className="timestamp-cell">
+                            {new Date(item.operation.timestamp * 1000).toLocaleTimeString()}
+                          </div>
+                        ) : '-'}
+                      </td>
+                      <td className="error-cell">{item.operation.error || '-'}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
-import { FiDatabase, FiRefreshCw, FiAlertCircle, FiArrowLeft, FiChevronLeft, FiChevronRight } from 'react-icons/fi'
+import { FiDatabase, FiRefreshCw, FiAlertCircle, FiArrowLeft, FiChevronLeft, FiChevronRight, FiArrowUp, FiArrowDown } from 'react-icons/fi'
 import { sqlService } from '../services/sqlApi'
 import SqlQueryViewer from '../components/SqlQueryViewer'
 import ShareButton from '../components/ShareButton'
 import LoadingSpinner from '../components/LoadingSpinner'
 import TimeRangePicker from '../components/TimeRangePicker'
 import HelpIcon from '../components/HelpIcon'
+import FilterBuilder from '../components/FilterBuilder'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './SqlAnalysis.css'
 
@@ -27,7 +28,12 @@ function SqlAnalysis({ refreshTrigger }) {
   const [offset, setOffset] = useState(offsetParam ? parseInt(offsetParam, 10) : 0)
   const [service, setService] = useState(searchParams.get('service') || '')
   const [timeRange, setTimeRange] = useState(searchParams.get('timeRange') || '24h')
-  const [minDuration, setMinDuration] = useState(searchParams.get('minDuration') || '')
+  const filterQuery = searchParams.get('filter') || ''
+  const [filter, setFilter] = useState(filterQuery)
+  const sortByParam = searchParams.get('sortBy')
+  const sortOrderParam = searchParams.get('sortOrder')
+  const [sortBy, setSortBy] = useState(sortByParam || 'last_created_at')
+  const [sortOrder, setSortOrder] = useState(sortOrderParam || 'desc')
 
   const getTimeRangeParams = () => {
     const now = new Date()
@@ -71,7 +77,7 @@ function SqlAnalysis({ refreshTrigger }) {
       }
       
       if (service) params.service = service
-      if (minDuration) params.min_duration = minDuration
+      if (filter) params.filter = filter
       
       const data = await sqlService.listQueries(params)
       setQueries(data.queries || [])
@@ -83,7 +89,7 @@ function SqlAnalysis({ refreshTrigger }) {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [service, timeRange, minDuration, limit, offset])
+  }, [service, timeRange, limit, offset, filter])
 
   const fetchQueryDetail = useCallback(async () => {
     if (!fingerprint) return
@@ -114,14 +120,24 @@ function SqlAnalysis({ refreshTrigger }) {
     if (!fingerprint) {
       setOffset(0)
     }
-  }, [service, timeRange, minDuration, fingerprint])
+  }, [service, timeRange, filter, fingerprint])
 
   // Handle external refresh trigger
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0 && !fingerprint && !loading) {
-      fetchQueries()
+      fetchQueries(true)
     }
   }, [refreshTrigger, fetchQueries, fingerprint, loading])
+  
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(column)
+      setSortOrder('desc')
+    }
+    setOffset(0)
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams)
@@ -132,8 +148,8 @@ function SqlAnalysis({ refreshTrigger }) {
     if (timeRange && timeRange !== '24h') params.set('timeRange', timeRange)
     else params.delete('timeRange')
     
-    if (minDuration) params.set('minDuration', minDuration)
-    else params.delete('minDuration')
+    if (filter) params.set('filter', filter)
+    else params.delete('filter')
     
     if (limit !== 50) params.set('limit', limit.toString())
     else params.delete('limit')
@@ -141,8 +157,14 @@ function SqlAnalysis({ refreshTrigger }) {
     if (offset !== 0) params.set('offset', offset.toString())
     else params.delete('offset')
     
+    if (sortBy !== 'last_created_at') params.set('sortBy', sortBy)
+    else params.delete('sortBy')
+    
+    if (sortOrder !== 'desc') params.set('sortOrder', sortOrder)
+    else params.delete('sortOrder')
+    
     setSearchParams(params, { replace: true })
-  }, [service, timeRange, minDuration, limit, offset, searchParams, setSearchParams])
+  }, [service, timeRange, filter, limit, offset, sortBy, sortOrder, searchParams, setSearchParams])
 
   const formatDuration = (ms) => {
     if (!ms && ms !== 0) return 'N/A'
@@ -232,27 +254,27 @@ function SqlAnalysis({ refreshTrigger }) {
 
       <div className="sql-analysis-filters">
         <div className="filter-group">
-          <label>Service:</label>
-          <input
-            type="text"
-            value={service}
-            onChange={(e) => setService(e.target.value)}
-            placeholder="Filter by service"
-            className="filter-input"
-          />
-        </div>
-        <div className="filter-group">
           <label>Time Range:</label>
           <TimeRangePicker value={timeRange} onChange={setTimeRange} />
         </div>
-        <div className="filter-group">
-          <label>Min Duration (ms):</label>
-          <input
-            type="number"
-            value={minDuration}
-            onChange={(e) => setMinDuration(e.target.value)}
-            placeholder="Filter by min duration"
-            className="filter-input"
+        <div className="filter-group filter-group-full">
+          <label>Filter:</label>
+          <FilterBuilder
+            value={filter}
+            onChange={(newFilter) => {
+              setFilter(newFilter)
+              // Extract service from filter if present
+              const serviceMatch = newFilter.match(/service:(\w+)/i)
+              if (serviceMatch) {
+                const newService = serviceMatch[1]
+                if (newService !== service) {
+                  setService(newService)
+                }
+              } else if (service) {
+                setService('')
+              }
+            }}
+            placeholder="e.g., service:api, sql.duration_ms:>1000, (service:api AND sql.duration_ms:>100)"
           />
         </div>
         {refreshing && <span className="refresh-indicator">🔄 Refreshing...</span>}
@@ -281,11 +303,54 @@ function SqlAnalysis({ refreshTrigger }) {
                 <thead>
                   <tr>
                     <th>Query Fingerprint</th>
-                    <th>Executions</th>
-                    <th>Avg Duration</th>
-                    <th>P95 Duration</th>
-                    <th>P99 Duration</th>
-                    <th>Max Duration</th>
+                    <th onClick={() => handleSort('execution_count')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Executions</span>
+                        {sortBy === 'execution_count' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('avg_duration')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Avg Duration</span>
+                        {sortBy === 'avg_duration' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('p95_duration')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>P95 Duration</span>
+                        {sortBy === 'p95_duration' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('p99_duration')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>P99 Duration</span>
+                        {sortBy === 'p99_duration' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('max_duration')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Max Duration</span>
+                        {sortBy === 'max_duration' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('last_created_at')} className="sortable" style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Last Created</span>
+                        {sortBy === 'last_created_at' && (
+                          sortOrder === 'asc' ? <FiArrowUp /> : <FiArrowDown />
+                        )}
+                      </div>
+                    </th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -300,6 +365,9 @@ function SqlAnalysis({ refreshTrigger }) {
                       <td>{formatDuration(query.p95_duration)}</td>
                       <td>{formatDuration(query.p99_duration)}</td>
                       <td>{formatDuration(query.max_duration)}</td>
+                      <td style={{ fontSize: '0.85em' }}>
+                        {query.last_created_at ? new Date(query.last_created_at).toLocaleString() : 'N/A'}
+                      </td>
                       <td>
                         <button
                           className="view-details-btn"
