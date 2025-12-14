@@ -17,6 +17,8 @@ import {
   FiTerminal,
   FiFileText,
   FiRadio,
+  FiBarChart2,
+  FiHardDrive,
 } from 'react-icons/fi'
 import ErrorBoundary from './components/ErrorBoundary'
 import ServiceOverview from './components/ServiceOverview.jsx'
@@ -37,11 +39,13 @@ import LiveHttp from './pages/LiveHttp'
 import LiveDashboard from './pages/LiveDashboard'
 import LiveServiceMap from './pages/LiveServiceMap'
 import LiveSql from './pages/LiveSql'
+import LiveRedis from './pages/LiveRedis'
 import ServiceMap from './components/ServiceMap'
 import PurgeButton from './components/PurgeButton'
 import HelpIcon from './components/HelpIcon'
 import TenantSwitcher from './components/TenantSwitcher'
 import { TenantProvider } from './contexts/TenantContext'
+import Stats from './pages/Stats'
 import './App.css'
 
 function Navigation() {
@@ -121,6 +125,7 @@ function Navigation() {
         { path: '/', label: 'Overview', icon: FiHome, helpText: 'View aggregated metrics and statistics for all services' },
         { path: '/traces', label: 'Traces', icon: FiActivity, helpText: 'Browse and search through collected traces' },
         { path: '/services', label: 'Services', icon: FiServer, helpText: 'View detailed information about each service' },
+        { path: '/stats', label: 'Statistics', icon: FiBarChart2, helpText: 'View system statistics, traces metrics, and database size' },
       ]
     },
     {
@@ -146,6 +151,7 @@ function Navigation() {
         { path: '/live-http', label: 'Live HTTP', icon: FiGlobe, helpText: 'Monitor incoming and outgoing HTTP requests in real-time with detailed request/response data' },
         { path: '/live/service-map', label: 'Live Service Map', icon: FiServer, helpText: 'Real-time service dependency visualization with auto-refresh' },
         { path: '/live/sql', label: 'Live SQL', icon: FiDatabase, helpText: 'Real-time SQL query monitoring with auto-refresh' },
+        { path: '/live/redis', label: 'Live Redis', icon: FiHardDrive, helpText: 'Real-time Redis operation monitoring with auto-refresh' },
       ]
     },
     {
@@ -362,6 +368,10 @@ function App() {
               } 
             />
             <Route 
+              path="/stats" 
+              element={<Stats autoRefresh={autoRefresh} />} 
+            />
+            <Route 
               path="/traces/:traceId" 
               element={<TraceView />} 
             />
@@ -428,6 +438,10 @@ function App() {
             <Route 
               path="/live/sql" 
               element={<LiveSql />} 
+            />
+            <Route 
+              path="/live/redis" 
+              element={<LiveRedis />} 
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
