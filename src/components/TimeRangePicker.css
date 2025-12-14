@@ -1,9 +1,10 @@
 .time-range-picker {
   display: inline-block;
+  height: 44px;
 }
 
 .time-range-select {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-md);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
@@ -11,16 +12,21 @@
   color: var(--text-primary);
   cursor: pointer;
   min-width: 150px;
+  min-height: 44px;
+  line-height: 1.5;
   transition: all var(--transition-base);
+  box-sizing: border-box;
 }
 
 .time-range-select:hover {
   border-color: var(--border-medium);
+  background-color: var(--bg-elevated);
 }
 
 .time-range-select:focus {
   outline: none;
   border-color: var(--color-primary-blue);
   box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
+  background-color: var(--bg-elevated);
 }
 

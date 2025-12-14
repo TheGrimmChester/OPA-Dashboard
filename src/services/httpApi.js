@@ -18,6 +18,9 @@ export const httpService = {
     if (params.to) queryParams.append('to', params.to)
     if (params.limit) queryParams.append('limit', params.limit)
     if (params.offset) queryParams.append('offset', params.offset)
+    if (params.filter) queryParams.append('filter', params.filter)
+    if (params.sort) queryParams.append('sort', params.sort)
+    if (params.order) queryParams.append('order', params.order)
 
     const response = await httpApi.get(`/api/http-calls?${queryParams}`)
     return response.data

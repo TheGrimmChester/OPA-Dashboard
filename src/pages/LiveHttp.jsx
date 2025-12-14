@@ -20,6 +20,8 @@ import {
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
 import HelpIcon from '../components/HelpIcon'
+import FilterBuilder from '../components/FilterBuilder'
+import { parseFilterQuery } from '../utils/filterParser'
 import './LiveHttp.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -35,7 +37,11 @@ function LiveHttp() {
   const autoScrollParam = searchParams.get('autoScroll')
   const [autoScroll, setAutoScroll] = useState(autoScrollParam !== null ? autoScrollParam === 'true' : true)
   const [isPaused, setIsPaused] = useState(searchParams.get('isPaused') === 'true')
-  const serviceFilter = searchParams.get('service') || ''
+  const serviceFilterParam = searchParams.get('service') || ''
+  const filterQuery = searchParams.get('filter') || ''
+  // Initialize filter with service if service param exists but not in filter
+  const initialFilter = filterQuery || (serviceFilterParam ? `service:${serviceFilterParam}` : '')
+  const [filter, setFilter] = useState(initialFilter)
   const wsRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   const containerRef = useRef(null)
@@ -67,8 +73,9 @@ function LiveHttp() {
         to,
       })
       
-      if (serviceFilter) {
-        params.append('service', serviceFilter)
+      // Service is now part of filter query
+      if (filter) {
+        params.append('filter', filter)
       }
       
       const response = await axios.get(`${API_URL}/api/http-calls?${params}`)
@@ -195,7 +202,7 @@ function LiveHttp() {
     } finally {
       setLoading(false)
     }
-  }, [serviceFilter])
+  }, [filter])
 
   // Load historical requests on mount
   useEffect(() => {
@@ -289,9 +296,18 @@ function LiveHttp() {
                 'http_request?.path_info': httpData.http_request?.path_info,
               })
               
-              // Apply filters
-              if (serviceFilter && httpData.service !== serviceFilter) {
-                return
+              // Apply filter query if provided
+              if (filter) {
+                try {
+                  const filterAST = parseFilterQuery(filter)
+                  if (filterAST && !matchesFilter(httpData, filterAST)) {
+                    return
+                  }
+                } catch (error) {
+                  // If filter parsing fails, skip this request
+                  console.warn('Filter parse error:', error)
+                  return
+                }
               }
               
               const requestId = `${httpData.trace_id}-${httpData.span_id}-${httpData.timestamp || Date.now()}`
@@ -460,7 +476,7 @@ function LiveHttp() {
       }
       wsRef.current = null
     }
-  }, [isPaused, serviceFilter, autoScroll])
+  }, [isPaused, filter, autoScroll])
 
   // Auto-scroll effect
   useEffect(() => {
@@ -476,10 +492,95 @@ function LiveHttp() {
     else params.delete('autoScroll')
     if (isPaused) params.set('isPaused', 'true')
     else params.delete('isPaused')
-    if (serviceFilter) params.set('service', serviceFilter)
-    else params.delete('service')
+    // Service is now part of filter, so remove it from URL
+    params.delete('service')
+    if (filter) params.set('filter', filter)
+    else params.delete('filter')
     setSearchParams(params, { replace: true })
-  }, [autoScroll, isPaused, serviceFilter, searchParams, setSearchParams])
+  }, [autoScroll, isPaused, filter, searchParams, setSearchParams])
+
+  // Helper function to check if a request matches the filter
+  const matchesFilter = (request, filterAST) => {
+    if (!filterAST) return true
+    
+    const evaluate = (node) => {
+      if (node.type === 'comparison') {
+        return evaluateComparison(request, node)
+      } else if (node.type === 'logical') {
+        if (node.LogicalOp === 'AND') {
+          return evaluate(node.Left) && evaluate(node.Right)
+        } else if (node.LogicalOp === 'OR') {
+          return evaluate(node.Left) || evaluate(node.Right)
+        } else if (node.LogicalOp === 'NOT') {
+          return !evaluate(node.Operand)
+        }
+      }
+      return true
+    }
+    
+    return evaluate(filterAST)
+  }
+  
+  const evaluateComparison = (request, comparison) => {
+    const field = comparison.Field
+    const operator = comparison.Operator
+    const value = comparison.Value
+    
+    // Get field value from request
+    let fieldValue = null
+    if (field.startsWith('tags.')) {
+      const parts = field.split('.')
+      let obj = request
+      for (const part of parts) {
+        if (obj && typeof obj === 'object') {
+          obj = obj[part]
+        } else {
+          obj = null
+          break
+        }
+      }
+      fieldValue = obj
+    } else if (field.startsWith('http.')) {
+      const httpField = field.substring(5)
+      fieldValue = request[httpField] || request.http_request?.[httpField]
+    } else {
+      fieldValue = request[field]
+    }
+    
+    if (fieldValue === null || fieldValue === undefined) {
+      return false
+    }
+    
+    // Compare based on operator
+    switch (operator) {
+      case 'EQUALS':
+        return String(fieldValue) === String(value)
+      case 'NOT_EQUALS':
+        return String(fieldValue) !== String(value)
+      case 'GREATER_THAN':
+        return Number(fieldValue) > Number(value)
+      case 'LESS_THAN':
+        return Number(fieldValue) < Number(value)
+      case 'GREATER_THAN_OR_EQUAL':
+        return Number(fieldValue) >= Number(value)
+      case 'LESS_THAN_OR_EQUAL':
+        return Number(fieldValue) <= Number(value)
+      case 'LIKE':
+        const pattern = String(value).replace(/\*/g, '.*')
+        return new RegExp(pattern, 'i').test(String(fieldValue))
+      case 'NOT_LIKE':
+        const notPattern = String(value).replace(/\*/g, '.*')
+        return !new RegExp(notPattern, 'i').test(String(fieldValue))
+      case 'IN':
+        const valueList = Array.isArray(value) ? value : [value]
+        return valueList.some(v => String(fieldValue) === String(v))
+      case 'NOT_IN':
+        const notValueList = Array.isArray(value) ? value : [value]
+        return !notValueList.some(v => String(fieldValue) === String(v))
+      default:
+        return true
+    }
+  }
 
   const getStatusColor = (statusCode) => {
     if (!statusCode) return 'unknown'
@@ -589,26 +690,13 @@ function LiveHttp() {
       </div>
 
       <div className="live-http-filters">
-        <div className="filter-group">
-          <label>Service:</label>
-          <select
-            value={serviceFilter}
-            onChange={(e) => {
-              const params = new URLSearchParams(searchParams)
-              if (e.target.value) {
-                params.set('service', e.target.value)
-              } else {
-                params.delete('service')
-              }
-              setSearchParams(params, { replace: true })
-            }}
-            className="filter-select"
-          >
-            <option value="">All Services</option>
-            {services.map((svc) => (
-              <option key={svc} value={svc}>{svc}</option>
-            ))}
-          </select>
+        <div className="filter-group filter-group-full">
+          <label>Filter:</label>
+          <FilterBuilder
+            value={filter}
+            onChange={setFilter}
+            placeholder="e.g., service:api, status_code:500, (service:api AND http.method:POST)"
+          />
         </div>
       </div>
 
