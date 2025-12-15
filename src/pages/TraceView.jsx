@@ -578,7 +578,28 @@ function TraceView() {
   }
   const collectCache = (spans) => {
     spans.forEach(span => {
-      // Collect from call stack
+      // First, collect cache operations directly from span level (from spans_full.cache field)
+      if (span.cache && Array.isArray(span.cache) && span.cache.length > 0) {
+        span.cache.forEach(op => {
+          allCacheOperations.push({
+            span: span.name,
+            spanId: span.span_id,
+            operation: op,
+          })
+        })
+      }
+      // Also check for CacheOperations (alternative field name)
+      if (span.CacheOperations && Array.isArray(span.CacheOperations) && span.CacheOperations.length > 0) {
+        span.CacheOperations.forEach(op => {
+          allCacheOperations.push({
+            span: span.name,
+            spanId: span.span_id,
+            operation: op,
+          })
+        })
+      }
+      
+      // Collect from call stack (for cache operations stored in individual call nodes)
       const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
         ? span.stack_flat
         : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
@@ -899,7 +920,7 @@ function TraceView() {
             <FiZap className="tab-icon" />
             <span>Cache</span>
             <span className="tab-badge">{allCacheOperations.length}</span>
-            <HelpIcon text="View cache operations (APCu, Symfony Cache) with hit/miss information" position="right" />
+            <HelpIcon text="View cache operations (APCu, Symfony Cache, etc.) with hit/miss information and cache type" position="right" />
           </button>
         )}
         {allRedisOperations.length > 0 && (
@@ -1373,19 +1394,20 @@ function TraceView() {
               onFiltersChange={setCacheFilters}
               availableFilters={['duration', 'memory']}
             />
-            <h2>Cache Operations (APCu, Symfony Cache)</h2>
+            <h2>Cache Operations</h2>
             <div className="cache-table-container">
               <table className="cache-table">
                 <thead>
                   <tr>
                     <th>Span</th>
                     <th>Span ID</th>
+                    <th>Cache Type</th>
                     <th>Operation</th>
                     <th>Key</th>
-                    <th>Cache Type</th>
                     <th>Hit/Miss</th>
                     <th>Duration</th>
                     <th>Data Size</th>
+                    <th>Timestamp</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1397,22 +1419,47 @@ function TraceView() {
                       return duration >= (cacheFilters.thresholds.duration || 0) &&
                              dataSize >= (cacheFilters.thresholds.memory || 0)
                     })
-                    .map((item, idx) => (
-                    <tr key={idx}>
-                      <td>{item.span}</td>
-                      <td className="span-id-cell">{item.spanId}</td>
-                      <td><code>{item.operation.operation || 'N/A'}</code></td>
-                      <td className="key-cell">{item.operation.key || 'N/A'}</td>
-                      <td>{item.operation.cache_type || 'apcu'}</td>
-                      <td>
-                        <span className={`hit-miss-badge ${item.operation.hit ? 'hit' : 'miss'}`}>
-                          {item.operation.hit ? 'HIT' : 'MISS'}
-                        </span>
-                      </td>
-                      <td>{formatDuration(item.operation.duration_ms || 0)}</td>
-                      <td>{item.operation.data_size ? `${(item.operation.data_size / 1024).toFixed(2)} KB` : '-'}</td>
-                    </tr>
-                  ))}
+                    .map((item, idx) => {
+                      const cacheType = item.operation?.cache_type || item.operation?.CacheType || 'unknown'
+                      const cacheTypeLabel = cacheType === 'apcu' ? 'APCu' : 
+                                           cacheType === 'symfony' ? 'Symfony Cache' : 
+                                           cacheType.charAt(0).toUpperCase() + cacheType.slice(1)
+                      return (
+                      <tr key={idx}>
+                        <td>{item.span}</td>
+                        <td className="span-id-cell">{item.spanId}</td>
+                        <td>
+                          <span className="cache-type-badge">
+                            {cacheTypeLabel}
+                          </span>
+                        </td>
+                        <td><code className="operation-cell">{item.operation.operation || 'N/A'}</code></td>
+                        <td className="key-cell">{item.operation.key || 'N/A'}</td>
+                        <td>
+                          {item.operation.hit !== undefined ? (
+                            <span className={`hit-miss-badge ${item.operation.hit ? 'hit' : 'miss'}`}>
+                              {item.operation.hit ? 'HIT' : 'MISS'}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        <td>
+                          <div className="duration-main">{formatDuration(item.operation.duration_ms || 0)}</div>
+                          {item.operation.duration && (
+                            <div className="duration-detail">
+                              <small>{(item.operation.duration * 1000).toFixed(3)}ms</small>
+                            </div>
+                          )}
+                        </td>
+                        <td>{item.operation.data_size ? formatBytes(item.operation.data_size) : '-'}</td>
+                        <td>
+                          {item.operation.timestamp ? (
+                            <div className="timestamp-cell">
+                              {new Date(item.operation.timestamp * 1000).toLocaleTimeString()}
+                            </div>
+                          ) : '-'}
+                        </td>
+                      </tr>
+                    )})}
                 </tbody>
               </table>
             </div>

@@ -428,6 +428,7 @@
 
 .network-table-container,
 .cache-table-container,
+.apcu-table-container,
 .redis-table-container {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -438,6 +439,7 @@
 
 .network-table,
 .cache-table,
+.apcu-table,
 .redis-table {
   width: 100%;
   border-collapse: collapse;
@@ -445,6 +447,7 @@
 
 .network-table thead,
 .cache-table thead,
+.apcu-table thead,
 .redis-table thead {
   background-color: var(--bg-tertiary);
 }
@@ -453,6 +456,8 @@
 .network-table td,
 .cache-table th,
 .cache-table td,
+.apcu-table th,
+.apcu-table td,
 .redis-table th,
 .redis-table td {
   padding: var(--spacing-sm);
@@ -463,6 +468,7 @@
 
 .network-table th,
 .cache-table th,
+.apcu-table th,
 .redis-table th {
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
@@ -522,7 +528,8 @@
   color: var(--color-error);
 }
 
-.command-cell {
+.command-cell,
+.operation-cell {
   background: var(--bg-primary);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
@@ -530,6 +537,19 @@
   font-weight: 600;
   color: var(--color-primary);
   font-size: var(--font-size-sm);
+}
+
+.cache-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary-border);
 }
 
 .timestamp-cell {
