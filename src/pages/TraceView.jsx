@@ -171,6 +171,22 @@ function TraceView() {
     return { rootSpan: root, callStack: stack }
   }, [trace])
 
+  // Extract client IP from trace data
+  const clientIp = useMemo(() => {
+    if (!trace || !trace.spans) {
+      return null
+    }
+    const rootSpan = trace.spans?.find(s => !s.parent_id) || trace.spans?.[0]
+    if (rootSpan?.tags?.http_request?.ip) {
+      return rootSpan.tags.http_request.ip
+    }
+    // Also check remote_addr as fallback
+    if (rootSpan?.tags?.http_request?.remote_addr) {
+      return rootSpan.tags.http_request.remote_addr
+    }
+    return null
+  }, [trace])
+
   // Collect all tags using useMemo before any early returns
   // This ensures stable references and follows Rules of Hooks
   const allTags = useMemo(() => {
@@ -962,6 +978,12 @@ function TraceView() {
                       {trace.spans?.[0]?.status === 'error' || trace.spans?.[0]?.status === '0' ? 'Error' : 'OK'}
                     </span>
                   </dd>
+                  {clientIp && (
+                    <>
+                      <dt>Client IP</dt>
+                      <dd><code>{clientIp}</code></dd>
+                    </>
+                  )}
                 </dl>
               </div>
               <div className="overview-card">
@@ -1412,6 +1434,8 @@ function TraceView() {
                     <th>Span ID</th>
                     <th>Command</th>
                     <th>Key</th>
+                    <th>Host</th>
+                    <th>Port</th>
                     <th>Hit/Miss</th>
                     <th>Duration</th>
                     <th>Timestamp</th>
@@ -1431,6 +1455,8 @@ function TraceView() {
                       <td className="span-id-cell">{item.spanId}</td>
                       <td><code className="command-cell">{item.operation.command || 'N/A'}</code></td>
                       <td className="key-cell">{item.operation.key || 'N/A'}</td>
+                      <td>{item.operation.host || '-'}</td>
+                      <td>{item.operation.port || '-'}</td>
                       <td>
                         {item.operation.hit !== undefined ? (
                           <span className={`hit-miss-badge ${item.operation.hit ? 'hit' : 'miss'}`}>
