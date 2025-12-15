@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { FiCpu, FiClock, FiHardDrive, FiGlobe, FiChevronRight, FiChevronDown, FiCode, FiFile } from 'react-icons/fi'
 import TraceTabFilters from './TraceTabFilters'
 import './ExecutionStackTree.css'
@@ -7,6 +7,11 @@ function ExecutionStackTree({ callStack }) {
   const [expandedNodes, setExpandedNodes] = useState(new Set())
   const [filters, setFilters] = useState({ enabled: false, thresholds: {} })
   const [loadedChildren, setLoadedChildren] = useState(new Map()) // Cache of loaded children by parent_id
+
+  // Clear loaded children cache when filters change
+  useEffect(() => {
+    setLoadedChildren(new Map())
+  }, [filters])
 
   // Normalize nodes - handle both flat and hierarchical structures
   const normalizeNode = useCallback((node) => {
@@ -90,6 +95,38 @@ function ExecutionStackTree({ callStack }) {
     return false
   }, [nodeMap])
 
+  // Filter function - shared for both root nodes and children
+  const shouldIncludeNode = useCallback((node) => {
+    if (!filters.enabled) {
+      return true
+    }
+
+    const thresholds = filters.thresholds || {}
+    
+    // Check duration threshold
+    if (thresholds.duration !== undefined && node.duration_ms < thresholds.duration) {
+      return false
+    }
+    
+    // Check memory threshold (absolute value)
+    if (thresholds.memory !== undefined && Math.abs(node.memory_delta) < thresholds.memory) {
+      return false
+    }
+    
+    // Check network threshold (total bytes)
+    const totalNetwork = (node.network_bytes_sent || 0) + (node.network_bytes_received || 0)
+    if (thresholds.network !== undefined && totalNetwork < thresholds.network) {
+      return false
+    }
+    
+    // Check CPU threshold
+    if (thresholds.cpu !== undefined && node.cpu_ms < thresholds.cpu) {
+      return false
+    }
+    
+    return true
+  }, [filters])
+
   // Get children for a specific node (lazy loading)
   const getChildren = useCallback((parentId) => {
     // Check cache first
@@ -116,15 +153,20 @@ function ExecutionStackTree({ callStack }) {
       return 0
     })
 
+    // Apply filters to children if filters are enabled
+    const filteredChildren = shouldIncludeNode 
+      ? children.filter(shouldIncludeNode)
+      : children
+
     // Cache the result
     setLoadedChildren(prev => {
       const newMap = new Map(prev)
-      newMap.set(parentId, children)
+      newMap.set(parentId, filteredChildren)
       return newMap
     })
 
-    return children
-  }, [nodeMap, hasChildren, loadedChildren])
+    return filteredChildren
+  }, [nodeMap, hasChildren, loadedChildren, shouldIncludeNode])
 
   // Build tree structure with lazy-loaded children
   const treeData = useMemo(() => {
@@ -135,40 +177,14 @@ function ExecutionStackTree({ callStack }) {
     }))
   }, [rootNodes, hasChildren])
 
-  // Filter tree data based on thresholds (only applies to root nodes initially)
+  // Filter tree data based on thresholds (applies to root nodes)
   const filteredTreeData = useMemo(() => {
-    if (!filters.enabled || !treeData || treeData.length === 0) {
+    if (!treeData || treeData.length === 0) {
       return treeData
     }
 
-    const thresholds = filters.thresholds || {}
-    const shouldIncludeNode = (node) => {
-      // Check duration threshold
-      if (thresholds.duration !== undefined && node.duration_ms < thresholds.duration) {
-        return false
-      }
-      
-      // Check memory threshold (absolute value)
-      if (thresholds.memory !== undefined && Math.abs(node.memory_delta) < thresholds.memory) {
-        return false
-      }
-      
-      // Check network threshold (total bytes)
-      const totalNetwork = (node.network_bytes_sent || 0) + (node.network_bytes_received || 0)
-      if (thresholds.network !== undefined && totalNetwork < thresholds.network) {
-        return false
-      }
-      
-      // Check CPU threshold
-      if (thresholds.cpu !== undefined && node.cpu_ms < thresholds.cpu) {
-        return false
-      }
-      
-      return true
-    }
-
     return treeData.filter(shouldIncludeNode)
-  }, [treeData, filters])
+  }, [treeData, shouldIncludeNode])
 
   const toggleNode = useCallback((callId) => {
     const newExpanded = new Set(expandedNodes)
