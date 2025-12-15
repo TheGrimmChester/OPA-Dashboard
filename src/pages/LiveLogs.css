@@ -84,8 +84,9 @@
 }
 
 .filter-group-full {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 300px;
+  max-width: 600px;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -104,8 +105,9 @@
 }
 
 .filter-group-full .filter-builder {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
 }
 
 .auto-scroll-toggle {

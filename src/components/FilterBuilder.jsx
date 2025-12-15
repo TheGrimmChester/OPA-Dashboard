@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react'
-import { FiX, FiSearch, FiAlertCircle, FiCheckCircle, FiFilter, FiHash, FiType, FiClock, FiTag } from 'react-icons/fi'
+import { FiX, FiSearch, FiAlertCircle, FiCheckCircle, FiFilter, FiHash, FiType, FiClock, FiTag, FiChevronDown, FiChevronUp } from 'react-icons/fi'
 import { parseFilterQuery, validateFilterQuery, removeFilterCondition, extractChipsWithPositions } from '../utils/filterParser'
 import { getFilterKeySuggestions, getFilterValueSuggestions } from '../services/filterApi'
 import './FilterBuilder.css'
@@ -247,6 +247,7 @@ function FilterBuilder({ value = '', onChange, placeholder = 'Search and filter.
   const [showExamples, setShowExamples] = useState(false)
   const [editingChipIndex, setEditingChipIndex] = useState(null)
   const [chipPositions, setChipPositions] = useState([])
+  const [isCollapsed, setIsCollapsed] = useState(true)
   
   // Refs
   const inputRef = useRef(null)
@@ -1065,7 +1066,20 @@ function FilterBuilder({ value = '', onChange, placeholder = 'Search and filter.
   
   return (
     <div className="filter-builder" ref={containerRef}>
+      {/* Collapse Toggle Button */}
+      <button
+        type="button"
+        className="filter-collapse-toggle"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        aria-label={isCollapsed ? 'Expand filters' : 'Collapse filters'}
+        aria-expanded={!isCollapsed}
+      >
+        {isCollapsed ? <FiChevronDown /> : <FiChevronUp />}
+        <span>{isCollapsed ? 'Show Filters' : 'Hide Filters'}</span>
+      </button>
+      
       {/* Standard Filter Dropdowns */}
+      {!isCollapsed && (
       <div className="filter-fields-grid">
         {STANDARD_FILTER_FIELDS.map(field => (
           <div key={field.key} className="filter-field-group">
@@ -1107,6 +1121,7 @@ function FilterBuilder({ value = '', onChange, placeholder = 'Search and filter.
           </button>
         </div>
       </div>
+      )}
 
       {/* Query String Input - Hidden but preserved for future use */}
       {false && (
