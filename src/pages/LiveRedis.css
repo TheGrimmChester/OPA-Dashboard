@@ -55,8 +55,15 @@
 }
 
 .filter-group-full {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 300px;
+  max-width: 600px;
+}
+
+.filter-group-full .filter-builder {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .filter-group label {

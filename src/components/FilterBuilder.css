@@ -5,12 +5,55 @@
   position: relative;
 }
 
+/* Collapse Toggle Button */
+.filter-collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-base);
+  margin-bottom: var(--spacing-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.filter-collapse-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--color-primary-blue);
+}
+
+.filter-collapse-toggle svg {
+  width: 16px;
+  height: 16px;
+  transition: transform var(--transition-base);
+}
+
 /* Standard Filter Dropdowns */
 .filter-fields-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
 }
 
 .filter-field-group {
@@ -18,6 +61,8 @@
   flex-direction: column;
   gap: 6px;
   position: relative;
+  min-width: 150px;
+  flex: 0 0 auto;
 }
 
 .filter-field-group label {
@@ -938,8 +983,13 @@
 /* Responsive */
 @media (max-width: 768px) {
   .filter-fields-grid {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
     gap: 12px;
+  }
+  
+  .filter-field-group {
+    min-width: 100%;
   }
   
   .filter-clear-group {
