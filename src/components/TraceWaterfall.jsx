@@ -7,6 +7,37 @@ import './TraceWaterfall.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
+// Operation type -> color convention shared with the flame graph
+// (function=blue, sql=purple, http=orange, redis=red, cache=green).
+const TYPE_COLOR_VARS = {
+  function: 'var(--color-primary-blue)',
+  sql: 'var(--color-primary-purple)',
+  http: 'var(--color-primary-orange)',
+  redis: 'var(--color-primary-red)',
+  cache: 'var(--color-primary-green)',
+}
+
+// Detect operation type from the presence of detail arrays or a type field.
+function detectNodeType(node) {
+  if (!node) return null
+  const explicit = node.type || node.Type
+  if (explicit && TYPE_COLOR_VARS[String(explicit).toLowerCase()]) {
+    return String(explicit).toLowerCase()
+  }
+  if (Array.isArray(node.sql_queries) && node.sql_queries.length > 0) return 'sql'
+  if (Array.isArray(node.http_requests) && node.http_requests.length > 0) return 'http'
+  if (Array.isArray(node.redis_operations) && node.redis_operations.length > 0) return 'redis'
+  if (Array.isArray(node.cache_operations) && node.cache_operations.length > 0) return 'cache'
+  const name = node.function || node.name
+  if (!name || name === 'unknown') return null
+  return 'function'
+}
+
+function getTypeColor(node) {
+  const type = detectNodeType(node)
+  return type ? TYPE_COLOR_VARS[type] : 'var(--bg-tertiary)'
+}
+
 function TraceWaterfall({ trace, traceId }) {
   // Start with root nodes expanded by default
   const [expandedNodes, setExpandedNodes] = useState(new Set())
@@ -215,18 +246,6 @@ function TraceWaterfall({ trace, traceId }) {
   const minTime = allStartTimes.length > 0 ? Math.min(...allStartTimes) : 0
   const maxTime = allEndTimes.length > 0 ? Math.max(...allEndTimes) : (minTime + Math.max(...filteredNodes.map(n => n.duration_ms || 0), 0))
 
-  const getStatusColor = (node) => {
-    // Determine status from node data - could check for errors in sql_queries, http_requests, etc.
-    if (node.http_requests && Array.isArray(node.http_requests) && node.http_requests.length > 0) {
-      const hasError = node.http_requests.some(req => {
-        const status = req.status_code || req.statusCode
-        return status && status >= 400
-      })
-      if (hasError) return '#dc3545'
-    }
-    return '#28a745'
-  }
-
   const getLeft = (startTs) => {
     const start = parseTimestamp(startTs)
     if (maxTime === minTime || !start || start === 0) return 0
@@ -341,7 +360,12 @@ function TraceWaterfall({ trace, traceId }) {
           {filteredNodes.map((node, idx) => {
             const left = getLeft(node.start_ts)
             const width = getWidth(node)
-            const color = getStatusColor(node)
+            const color = getTypeColor(node)
+            const nodeType = detectNodeType(node)
+            const childrenDuration = (node.children || []).reduce(
+              (sum, child) => sum + (child.duration_ms || 0), 0
+            )
+            const selfDuration = Math.max(0, (node.duration_ms || 0) - childrenDuration)
             const hasChildren = node.children && node.children.length > 0
             const isExpanded = expandedNodes.has(node.call_id)
             const isSelected = selectedNode?.call_id === node.call_id
@@ -408,7 +432,7 @@ function TraceWaterfall({ trace, traceId }) {
                       backgroundColor: color,
                     }}
                     onClick={() => setSelectedNode(node)}
-                    title={`${node.displayName} - ${formatDuration(node.duration_ms)}`}
+                    title={`${node.displayName}${nodeType ? ` (${nodeType})` : ''}\nself ${formatDuration(selfDuration)} / total ${formatDuration(node.duration_ms)}`}
                   >
                     <div className="bar-content">
                       <span className="bar-label">{node.displayName}</span>
@@ -423,16 +447,28 @@ function TraceWaterfall({ trace, traceId }) {
         </div>
         <div className="waterfall-legend">
           <div className="legend-item">
-            <span className="legend-color ok"></span>
-            <span>OK</span>
+            <span className="legend-color type-function"></span>
+            <span>Function</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color error"></span>
-            <span>Error</span>
+            <span className="legend-color type-sql"></span>
+            <span>SQL</span>
           </div>
           <div className="legend-item">
-            <span className="legend-color unknown"></span>
-            <span>Unknown</span>
+            <span className="legend-color type-http"></span>
+            <span>HTTP</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-color type-redis"></span>
+            <span>Redis</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-color type-cache"></span>
+            <span>Cache</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-color type-neutral"></span>
+            <span>Other</span>
           </div>
         </div>
       </div>

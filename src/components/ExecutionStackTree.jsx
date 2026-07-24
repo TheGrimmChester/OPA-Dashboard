@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { FiCpu, FiClock, FiHardDrive, FiGlobe, FiChevronRight, FiChevronDown, FiCode, FiFile } from 'react-icons/fi'
 import TraceTabFilters from './TraceTabFilters'
 import './ExecutionStackTree.css'
@@ -6,12 +6,6 @@ import './ExecutionStackTree.css'
 function ExecutionStackTree({ callStack }) {
   const [expandedNodes, setExpandedNodes] = useState(new Set())
   const [filters, setFilters] = useState({ enabled: false, thresholds: {} })
-  const [loadedChildren, setLoadedChildren] = useState(new Map()) // Cache of loaded children by parent_id
-
-  // Clear loaded children cache when filters change
-  useEffect(() => {
-    setLoadedChildren(new Map())
-  }, [filters])
 
   // Normalize nodes - handle both flat and hierarchical structures
   const normalizeNode = useCallback((node) => {
@@ -33,10 +27,10 @@ function ExecutionStackTree({ callStack }) {
     }
   }, [])
 
-  // Build flat node map and root nodes - lazy loading approach
-  const { nodeMap, rootNodes } = useMemo(() => {
+  // Build flat node map, root nodes, and a parentId -> children[] index
+  const { nodeMap, rootNodes, childrenMap } = useMemo(() => {
     if (!callStack || (Array.isArray(callStack) && callStack.length === 0)) {
-      return { nodeMap: new Map(), rootNodes: [] }
+      return { nodeMap: new Map(), rootNodes: [], childrenMap: new Map() }
     }
 
     // Flatten hierarchical structure if needed
@@ -64,36 +58,37 @@ function ExecutionStackTree({ callStack }) {
     const normalizedNodes = allNodesFlat.map(normalizeNode)
     const map = new Map()
     const roots = []
+    const childIndex = new Map()
 
-    // Create map and identify roots
+    // Create map, identify roots, and index children by parent_id (O(n))
     normalizedNodes.forEach(node => {
       map.set(node.call_id, node)
       if (!node.parent_id || node.parent_id === '') {
         roots.push(node)
+      } else {
+        const siblings = childIndex.get(node.parent_id)
+        if (siblings) {
+          siblings.push(node)
+        } else {
+          childIndex.set(node.parent_id, [node])
+        }
       }
     })
 
-    // Sort root nodes by depth or original order
-    roots.sort((a, b) => {
+    // Stable child sort by depth (matches previous getChildren ordering)
+    const byDepth = (a, b) => {
       if (a.depth !== undefined && b.depth !== undefined) {
         return a.depth - b.depth
       }
       return 0
-    })
-
-    return { nodeMap: map, rootNodes: roots }
-  }, [callStack, normalizeNode])
-
-  // Check if a node has children (without loading them)
-  const hasChildren = useCallback((nodeId) => {
-    // Quick check: iterate through nodeMap to see if any node has this as parent
-    for (const node of nodeMap.values()) {
-      if (node.parent_id === nodeId) {
-        return true
-      }
     }
-    return false
-  }, [nodeMap])
+    childIndex.forEach(siblings => siblings.sort(byDepth))
+
+    // Sort root nodes by depth or original order
+    roots.sort(byDepth)
+
+    return { nodeMap: map, rootNodes: roots, childrenMap: childIndex }
+  }, [callStack, normalizeNode])
 
   // Filter function - shared for both root nodes and children
   const shouldIncludeNode = useCallback((node) => {
@@ -127,46 +122,35 @@ function ExecutionStackTree({ callStack }) {
     return true
   }, [filters])
 
-  // Get children for a specific node (lazy loading)
+  // Check if a node has (visible) children - O(1) lookup in the precomputed index.
+  // When a filter is active, only count children that pass the filter, so we don't
+  // show an expand chevron for a subtree that would render empty.
+  const hasChildren = useCallback((nodeId) => {
+    const children = childrenMap.get(nodeId)
+    if (!children || children.length === 0) {
+      return false
+    }
+    if (!filters.enabled) {
+      return true
+    }
+    return children.some(shouldIncludeNode)
+  }, [childrenMap, filters.enabled, shouldIncludeNode])
+
+  // Get children for a specific node - pure O(1) lookup, no state mutation.
   const getChildren = useCallback((parentId) => {
-    // Check cache first
-    if (loadedChildren.has(parentId)) {
-      return loadedChildren.get(parentId)
+    const children = childrenMap.get(parentId)
+    if (!children || children.length === 0) {
+      return []
     }
 
-    // Find all nodes with this parent_id
-    const children = []
-    nodeMap.forEach(node => {
-      if (node.parent_id === parentId) {
-        children.push({
-          ...node,
-          _hasChildren: hasChildren(node.call_id)
-        })
-      }
-    })
-
-    // Sort children by depth
-    children.sort((a, b) => {
-      if (a.depth !== undefined && b.depth !== undefined) {
-        return a.depth - b.depth
-      }
-      return 0
-    })
-
-    // Apply filters to children if filters are enabled
-    const filteredChildren = shouldIncludeNode 
-      ? children.filter(shouldIncludeNode)
-      : children
-
-    // Cache the result
-    setLoadedChildren(prev => {
-      const newMap = new Map(prev)
-      newMap.set(parentId, filteredChildren)
-      return newMap
-    })
-
-    return filteredChildren
-  }, [nodeMap, hasChildren, loadedChildren, shouldIncludeNode])
+    // Apply filters (shouldIncludeNode is a no-op when filters are disabled)
+    return children
+      .filter(shouldIncludeNode)
+      .map(node => ({
+        ...node,
+        _hasChildren: hasChildren(node.call_id)
+      }))
+  }, [childrenMap, hasChildren, shouldIncludeNode])
 
   // Build tree structure with lazy-loaded children
   const treeData = useMemo(() => {
@@ -187,40 +171,31 @@ function ExecutionStackTree({ callStack }) {
   }, [treeData, shouldIncludeNode])
 
   const toggleNode = useCallback((callId) => {
-    const newExpanded = new Set(expandedNodes)
-    if (newExpanded.has(callId)) {
-      newExpanded.delete(callId)
-    } else {
-      // When expanding, load children if not already loaded
-      newExpanded.add(callId)
-      if (!loadedChildren.has(callId)) {
-        getChildren(callId)
+    setExpandedNodes(prev => {
+      const newExpanded = new Set(prev)
+      if (newExpanded.has(callId)) {
+        newExpanded.delete(callId)
+      } else {
+        newExpanded.add(callId)
       }
-    }
-    setExpandedNodes(newExpanded)
-  }, [expandedNodes, loadedChildren, getChildren])
+      return newExpanded
+    })
+  }, [])
 
   const expandAll = useCallback(() => {
-    // Note: expandAll will still need to load all children, which may be slow for large trees
-    // For now, we'll just expand what's visible - full expand all would require loading everything
     const allVisibleNodeIds = new Set()
     const collectVisibleIds = (nodes) => {
       nodes.forEach(node => {
         if (hasChildren(node.call_id)) {
           allVisibleNodeIds.add(node.call_id)
-          // Load children to make them visible
-          if (!loadedChildren.has(node.call_id)) {
-            getChildren(node.call_id)
-          }
-          // Recursively collect from loaded children
-          const children = loadedChildren.get(node.call_id) || []
-          collectVisibleIds(children)
+          // Recurse using the freshly computed children, not stale state
+          collectVisibleIds(getChildren(node.call_id))
         }
       })
     }
     collectVisibleIds(filteredTreeData)
     setExpandedNodes(allVisibleNodeIds)
-  }, [filteredTreeData, hasChildren, loadedChildren, getChildren])
+  }, [filteredTreeData, hasChildren, getChildren])
 
   const collapseAll = () => {
     setExpandedNodes(new Set())
@@ -284,6 +259,9 @@ function ExecutionStackTree({ callStack }) {
           </button>
         </div>
       </div>
+      {/* TODO(perf): for very large traces, flatten the currently-expanded nodes
+          into a linear list and window/virtualize the rows (e.g. react-window)
+          so only on-screen rows are mounted. Deferred: needs a new dependency. */}
       <div className="execution-stack-tree-content">
         {filteredTreeData.map((node, idx) => (
           <StackTreeNode
@@ -297,7 +275,6 @@ function ExecutionStackTree({ callStack }) {
             formatDuration={formatDuration}
             getChildren={getChildren}
             hasChildren={hasChildren}
-            loadedChildren={loadedChildren}
           />
         ))}
       </div>
@@ -305,15 +282,15 @@ function ExecutionStackTree({ callStack }) {
   )
 }
 
-function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, formatMemory, formatDuration, getChildren, hasChildren, loadedChildren }) {
+function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, formatMemory, formatDuration, getChildren, hasChildren }) {
   const nodeHasChildren = hasChildren ? hasChildren(node.call_id) : (node._hasChildren !== undefined ? node._hasChildren : false)
   const isExpanded = expandedNodes.has(node.call_id)
   const displayName = node.class ? `${node.class}::${node.function}` : node.function
   const functionTypeLabel = node.function_type === 1 ? 'internal' : node.function_type === 2 ? 'method' : 'user'
 
-  // Get children when expanded (lazy load)
-  const children = isExpanded && nodeHasChildren && getChildren 
-    ? (loadedChildren.get(node.call_id) || getChildren(node.call_id))
+  // Get children when expanded - pure O(1) lookup, no state mutation during render
+  const children = isExpanded && nodeHasChildren && getChildren
+    ? getChildren(node.call_id)
     : []
 
   return (
@@ -411,7 +388,6 @@ function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, form
               formatDuration={formatDuration}
               getChildren={getChildren}
               hasChildren={hasChildren}
-              loadedChildren={loadedChildren}
             />
           ))}
         </div>

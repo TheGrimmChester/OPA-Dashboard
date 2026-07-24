@@ -22,7 +22,37 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined
+          }
+          if (id.includes('vis-network') || id.includes('vis-data') || id.includes('vis-util')) {
+            return 'vis-network'
+          }
+          if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-vendor')) {
+            return 'recharts'
+          }
+          if (
+            id.includes('react-syntax-highlighter') ||
+            id.includes('refractor') ||
+            id.includes('prismjs') ||
+            id.includes('highlight.js')
+          ) {
+            return 'syntax-highlighter'
+          }
+          if (id.includes('sql-formatter')) {
+            return 'sql-formatter'
+          }
+          if (id.includes('react-dom') || id.includes('/react/') || id.includes('react-router')) {
+            return 'react-vendor'
+          }
+          return undefined
+        }
+      }
+    }
   }
 })
 
