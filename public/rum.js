@@ -6,9 +6,44 @@
 (function() {
     'use strict';
     
+    // Resolve the agent endpoint. Prefer a same-origin default; only honor the
+    // configurable global override when it stays same-origin so a compromised or
+    // hijacked global cannot exfiltrate telemetry (and any query-string tokens)
+    // to a third-party host.
+    function resolveAgentUrl() {
+        const fallback = '/api/rum';
+        const configured = window.OPA_RUM_AGENT_URL;
+        if (!configured) return fallback;
+        try {
+            const resolved = new URL(configured, window.location.href);
+            if (resolved.origin === window.location.origin) {
+                return resolved.pathname + resolved.search;
+            }
+        } catch (e) {
+            // Invalid URL - fall through to the safe default.
+        }
+        return fallback;
+    }
+
+    // Strip query strings from a URL, keeping only origin + path. Falls back to
+    // scrubbing known-sensitive params if the URL cannot be fully parsed. This
+    // prevents tokens/apikeys/session ids in query strings from being beaconed.
+    function sanitizeUrl(rawUrl) {
+        if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
+        try {
+            const u = new URL(rawUrl, window.location.href);
+            // Keep only the path (drop query string and fragment entirely).
+            return u.origin + u.pathname;
+        } catch (e) {
+            // Relative or malformed URL: scrub known-sensitive params in place.
+            const idx = rawUrl.search(/[?#]/);
+            return idx === -1 ? rawUrl : rawUrl.slice(0, idx);
+        }
+    }
+
     // Configuration
     const RUM_CONFIG = {
-        agentUrl: window.OPA_RUM_AGENT_URL || '/api/rum',
+        agentUrl: resolveAgentUrl(),
         sampleRate: window.OPA_RUM_SAMPLE_RATE || 1.0,
         trackPageLoad: true,
         trackAjax: true,
@@ -45,9 +80,9 @@
         return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
     }
     
-    // Get current page URL
+    // Get current page URL (query string stripped to avoid leaking tokens)
     function getPageUrl() {
-        return window.location.href;
+        return sanitizeUrl(window.location.href);
     }
     
     // Get user agent
@@ -106,7 +141,7 @@
         
         const resources = window.performance.getEntriesByType('resource');
         return resources.map(resource => ({
-            name: resource.name,
+            name: sanitizeUrl(resource.name),
             type: resource.initiatorType,
             duration: resource.duration,
             size: resource.transferSize || 0,
@@ -136,7 +171,7 @@
                 const duration = performance.now() - xhr._opaStartTime;
                 ajaxRequests.push({
                     method: xhr._opaMethod,
-                    url: xhr._opaUrl,
+                    url: sanitizeUrl(xhr._opaUrl),
                     status: xhr.status,
                     duration: duration,
                     size: xhr.responseText ? xhr.responseText.length : 0,
@@ -158,7 +193,7 @@
                     const duration = performance.now() - startTime;
                     ajaxRequests.push({
                         method: method,
-                        url: url,
+                        url: sanitizeUrl(url),
                         status: response.status,
                         duration: duration,
                         size: 0, // Fetch doesn't expose response size easily

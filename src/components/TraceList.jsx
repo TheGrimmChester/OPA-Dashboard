@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { 
   FiActivity, 
@@ -43,6 +43,7 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedTraces, setSelectedTraces] = useState(new Set())
   const [deleting, setDeleting] = useState(false)
+  const requestIdRef = useRef(0)
 
   const handleTraceClick = (trace, e) => {
     e?.preventDefault?.()
@@ -61,7 +62,11 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
       setRefreshing(true)
     }
     setError(null)
-    
+
+    // Capture a monotonically increasing request id so a stale response
+    // (e.g. from the 5s auto-refresh) can't clobber a newer fetch's data.
+    const requestId = ++requestIdRef.current
+
     try {
       const params = new URLSearchParams({
         limit: limit.toString(),
@@ -77,17 +82,24 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
       // Ensure no trailing slash in API_URL
       const baseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL
       const response = await axios.get(`${baseUrl}/api/traces?${params}`)
+      // Ignore this response if a newer request has started in the meantime.
+      if (requestId !== requestIdRef.current) return
       const traces = response.data.traces || []
       setTraces(traces)
       // Use traces.length as fallback if total is 0 or missing but we have traces
       const apiTotal = response.data.total || 0
       setTotal(apiTotal > 0 ? apiTotal : (traces.length > 0 ? traces.length : 0))
     } catch (err) {
+      // Don't surface errors from superseded requests.
+      if (requestId !== requestIdRef.current) return
       setError(err.response?.data?.error || 'Error fetching traces')
       console.error('Fetch traces error:', err)
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      // Only clear loading state for the latest request.
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }, [limit, offset, sortBy, sortOrder, filters])
 
@@ -113,7 +125,7 @@ function TraceList({ onTraceSelect, filters, autoRefresh = true }) {
   // Reset offset when filters change
   useEffect(() => {
     setOffset(0)
-  }, [filters?.filter, filters?.from])
+  }, [filters?.filter, filters?.from, filters?.to])
 
   useEffect(() => {
     setLoading(true)

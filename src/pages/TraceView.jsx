@@ -38,6 +38,7 @@ import ShareButton from '../components/ShareButton'
 import CopyToClipboard from '../components/CopyToClipboard'
 import LoadingSpinner from '../components/LoadingSpinner'
 import TraceTabFilters from '../components/TraceTabFilters'
+import TraceNetworkView from '../components/TraceNetworkView'
 import JsonTreeViewer from '../components/JsonTreeViewer'
 import HelpIcon from '../components/HelpIcon'
 import './TraceView.css'
@@ -329,6 +330,310 @@ function TraceView() {
     }
   }, [callStack, rootSpan])
 
+  // Collect all SQL queries from spans (from span.sql and from call stack).
+  // Memoized on [trace] so it only recomputes when the fetched trace changes.
+  const allSqlQueries = useMemo(() => {
+    if (!trace || !trace.spans) return []
+    const result = []
+    const collectSQLFromStack = (stack) => {
+      if (!Array.isArray(stack)) return []
+      const queries = []
+      stack.forEach(node => {
+        if (node.sql_queries && Array.isArray(node.sql_queries) && node.sql_queries.length > 0) {
+          queries.push(...node.sql_queries)
+        }
+        if (node.SQLQueries && Array.isArray(node.SQLQueries) && node.SQLQueries.length > 0) {
+          queries.push(...node.SQLQueries)
+        }
+        if (node.children && Array.isArray(node.children) && node.children.length > 0) {
+          queries.push(...collectSQLFromStack(node.children))
+        }
+      })
+      return queries
+    }
+    const collectSql = (spans) => {
+      spans.forEach(span => {
+        if (span.sql && Array.isArray(span.sql) && span.sql.length > 0) {
+          span.sql.forEach(query => {
+            result.push({ span: span.name, spanId: span.span_id, query: query })
+          })
+        }
+        const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
+          ? span.stack_flat
+          : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
+        if (stackData) {
+          const stackQueries = collectSQLFromStack(stackData)
+          stackQueries.forEach(query => {
+            result.push({ span: span.name, spanId: span.span_id, query: query })
+          })
+        }
+        if (span.children) {
+          collectSql(span.children)
+        }
+      })
+    }
+    collectSql(trace.spans)
+    return result
+  }, [trace])
+
+  // Collect all stack traces
+  const allStackTraces = useMemo(() => {
+    if (!trace || !trace.spans) return []
+    const result = []
+    // Recursively flatten a hierarchical stack into a flat list of call nodes
+    const flattenStackRecursive = (stack) => {
+      if (!Array.isArray(stack)) return []
+      const flat = []
+      const flatten = (nodes) => {
+        nodes.forEach(node => {
+          const flatNode = {
+            call_id: node.call_id || node.CallID || node.id,
+            function: node.function || node.Function || node.name,
+            class: node.class || node.Class,
+            file: node.file || node.File,
+            line: node.line || node.Line,
+            duration_ms: node.duration_ms || node.DurationMs || node.duration,
+            cpu_ms: node.cpu_ms || node.CPUMs || node.cpu,
+            memory_delta: node.memory_delta || node.MemoryDelta,
+            network_bytes_sent: node.network_bytes_sent || node.NetworkBytesSent,
+            network_bytes_received: node.network_bytes_received || node.NetworkBytesReceived,
+            parent_id: node.parent_id || node.ParentID,
+            depth: node.depth || node.Depth,
+            function_type: node.function_type || node.FunctionType,
+            sql_queries: node.sql_queries || node.SQLQueries,
+            http_requests: node.http_requests || node.HttpRequests,
+            cache_operations: node.cache_operations || node.CacheOperations,
+            redis_operations: node.redis_operations || node.RedisOperations,
+          }
+          flat.push(flatNode)
+          if (node.children && Array.isArray(node.children) && node.children.length > 0) {
+            flatten(node.children)
+          }
+        })
+      }
+      flatten(stack)
+      return flat
+    }
+    const collectStacks = (spans) => {
+      spans.forEach(span => {
+        const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
+          ? span.stack_flat
+          : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
+        if (stackData) {
+          const flatStack = span.stack_flat || flattenStackRecursive(span.stack)
+          result.push({ span: span.name, spanId: span.span_id, stack: flatStack })
+        }
+        if (span.children) {
+          collectStacks(span.children)
+        }
+      })
+    }
+    collectStacks(trace.spans)
+    return result
+  }, [trace])
+
+  // Collect all network requests (from span.net and from call stack http_requests)
+  const allNetworkRequests = useMemo(() => {
+    if (!trace || !trace.spans) return []
+    const result = []
+    const collectHTTPFromStack = (stack) => {
+      if (!Array.isArray(stack)) return []
+      const requests = []
+      stack.forEach(node => {
+        if (node.http_requests && Array.isArray(node.http_requests) && node.http_requests.length > 0) {
+          requests.push(...node.http_requests)
+        }
+        if (node.HttpRequests && Array.isArray(node.HttpRequests) && node.HttpRequests.length > 0) {
+          requests.push(...node.HttpRequests)
+        }
+        if (node.children && Array.isArray(node.children) && node.children.length > 0) {
+          requests.push(...collectHTTPFromStack(node.children))
+        }
+      })
+      return requests
+    }
+    const collectNetwork = (spans) => {
+      spans.forEach(span => {
+        if (span.net && typeof span.net === 'object' && Object.keys(span.net).length > 0) {
+          result.push({ span: span.name, spanId: span.span_id, net: span.net, type: 'legacy' })
+        }
+        if (span.Http && Array.isArray(span.Http) && span.Http.length > 0) {
+          span.Http.forEach(request => {
+            result.push({ span: span.name, spanId: span.span_id, request: request, type: 'http' })
+          })
+        }
+        if (span.http && Array.isArray(span.http) && span.http.length > 0) {
+          span.http.forEach(request => {
+            result.push({ span: span.name, spanId: span.span_id, request: request, type: 'http' })
+          })
+        }
+        const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
+          ? span.stack_flat
+          : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
+        if (stackData) {
+          const stackRequests = collectHTTPFromStack(stackData)
+          stackRequests.forEach(request => {
+            result.push({ span: span.name, spanId: span.span_id, request: request, type: 'http' })
+          })
+        }
+        if (span.children) {
+          collectNetwork(span.children)
+        }
+      })
+    }
+    collectNetwork(trace.spans)
+    return result
+  }, [trace])
+
+  // Collect all cache operations (APCu, Symfony Cache)
+  const allCacheOperations = useMemo(() => {
+    if (!trace || !trace.spans) return []
+    const result = []
+    const collectCacheFromStack = (stack) => {
+      if (!Array.isArray(stack)) return []
+      const operations = []
+      stack.forEach(node => {
+        if (node.cache_operations && Array.isArray(node.cache_operations) && node.cache_operations.length > 0) {
+          operations.push(...node.cache_operations)
+        }
+        if (node.CacheOperations && Array.isArray(node.CacheOperations) && node.CacheOperations.length > 0) {
+          operations.push(...node.CacheOperations)
+        }
+        if (node.children && Array.isArray(node.children) && node.children.length > 0) {
+          operations.push(...collectCacheFromStack(node.children))
+        }
+      })
+      return operations
+    }
+    const collectCache = (spans) => {
+      spans.forEach(span => {
+        if (span.cache && Array.isArray(span.cache) && span.cache.length > 0) {
+          span.cache.forEach(op => {
+            result.push({ span: span.name, spanId: span.span_id, operation: op })
+          })
+        }
+        if (span.CacheOperations && Array.isArray(span.CacheOperations) && span.CacheOperations.length > 0) {
+          span.CacheOperations.forEach(op => {
+            result.push({ span: span.name, spanId: span.span_id, operation: op })
+          })
+        }
+        const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
+          ? span.stack_flat
+          : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
+        if (stackData) {
+          const stackOps = collectCacheFromStack(stackData)
+          stackOps.forEach(op => {
+            result.push({ span: span.name, spanId: span.span_id, operation: op })
+          })
+        }
+        if (span.children) {
+          collectCache(span.children)
+        }
+      })
+    }
+    collectCache(trace.spans)
+    return result
+  }, [trace])
+
+  // Collect all Redis operations
+  const allRedisOperations = useMemo(() => {
+    if (!trace || !trace.spans) return []
+    const result = []
+    const collectRedisFromStack = (stack) => {
+      if (!Array.isArray(stack)) return []
+      const operations = []
+      stack.forEach(node => {
+        if (node.redis_operations && Array.isArray(node.redis_operations) && node.redis_operations.length > 0) {
+          operations.push(...node.redis_operations)
+        }
+        if (node.RedisOperations && Array.isArray(node.RedisOperations) && node.RedisOperations.length > 0) {
+          operations.push(...node.RedisOperations)
+        }
+        if (node.children && Array.isArray(node.children) && node.children.length > 0) {
+          operations.push(...collectRedisFromStack(node.children))
+        }
+      })
+      return operations
+    }
+    const collectRedis = (spans) => {
+      spans.forEach(span => {
+        if (span.redis && Array.isArray(span.redis) && span.redis.length > 0) {
+          span.redis.forEach(op => {
+            result.push({ span: span.name, spanId: span.span_id, operation: op })
+          })
+        }
+        if (span.RedisOperations && Array.isArray(span.RedisOperations) && span.RedisOperations.length > 0) {
+          span.RedisOperations.forEach(op => {
+            result.push({ span: span.name, spanId: span.span_id, operation: op })
+          })
+        }
+        const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
+          ? span.stack_flat
+          : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
+        if (stackData) {
+          const stackOps = collectRedisFromStack(stackData)
+          stackOps.forEach(op => {
+            result.push({ span: span.name, spanId: span.span_id, operation: op })
+          })
+        }
+        if (span.children) {
+          collectRedis(span.children)
+        }
+      })
+    }
+    collectRedis(trace.spans)
+    return result
+  }, [trace])
+
+  // Collect all dumps
+  const allDumps = useMemo(() => {
+    if (!trace || !trace.spans) return []
+    const result = []
+    const collectDumps = (spans) => {
+      spans.forEach(span => {
+        if (span.dumps && Array.isArray(span.dumps) && span.dumps.length > 0) {
+          result.push({ span: span.name, spanId: span.span_id, dumps: span.dumps })
+        }
+        if (span.children) {
+          collectDumps(span.children)
+        }
+      })
+    }
+    collectDumps(trace.spans)
+    return result
+  }, [trace])
+
+  // Pre-parse / pre-stringify dump payloads once per trace so the Dumps tab
+  // does not run JSON.parse/JSON.stringify on every render.
+  const dumpsView = useMemo(() => {
+    return allDumps.map(item => ({
+      ...item,
+      dumps: item.dumps.map(dump => {
+        let parsedData = null
+        if (dump.data) {
+          try {
+            parsedData = typeof dump.data === 'string' ? JSON.parse(dump.data) : dump.data
+          } catch (e) {
+            parsedData = dump.data
+          }
+        }
+        let jsonString = 'N/A'
+        if (dump.data) {
+          if (typeof dump.data === 'string') {
+            try {
+              jsonString = JSON.stringify(JSON.parse(dump.data), null, 2)
+            } catch {
+              jsonString = dump.data
+            }
+          } else {
+            jsonString = JSON.stringify(dump.data, null, 2)
+          }
+        }
+        return { ...dump, parsedData, jsonString }
+      })
+    }))
+  }, [allDumps])
+
   if (loading) {
     return <LoadingSpinner message="Loading trace..." />
   }
@@ -347,373 +652,6 @@ function TraceView() {
     )
   }
 
-  // Collect all SQL queries from spans (from span.sql and from call stack)
-  const allSqlQueries = []
-  
-  // Helper function to recursively collect SQL queries from call stack
-  const collectSQLFromStack = (stack) => {
-    if (!Array.isArray(stack)) return []
-    const queries = []
-    stack.forEach(node => {
-      // Collect SQL queries from this node
-      if (node.sql_queries && Array.isArray(node.sql_queries) && node.sql_queries.length > 0) {
-        queries.push(...node.sql_queries)
-      }
-      // Also check for SQLQueries (capitalized, from Go struct)
-      if (node.SQLQueries && Array.isArray(node.SQLQueries) && node.SQLQueries.length > 0) {
-        queries.push(...node.SQLQueries)
-      }
-      // Recursively collect from children
-      if (node.children && Array.isArray(node.children) && node.children.length > 0) {
-        queries.push(...collectSQLFromStack(node.children))
-      }
-    })
-    return queries
-  }
-  
-  const collectSql = (spans) => {
-    spans.forEach(span => {
-      // Collect from direct span.sql field
-      if (span.sql && Array.isArray(span.sql) && span.sql.length > 0) {
-        span.sql.forEach(query => {
-          allSqlQueries.push({
-            span: span.name,
-            spanId: span.span_id,
-            query: query,
-          })
-        })
-      }
-      
-      // Collect from call stack (stack or stack_flat)
-      const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
-        ? span.stack_flat
-        : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
-      
-      if (stackData) {
-        const stackQueries = collectSQLFromStack(stackData)
-        stackQueries.forEach(query => {
-          allSqlQueries.push({
-            span: span.name,
-            spanId: span.span_id,
-            query: query,
-          })
-        })
-      }
-      
-      if (span.children) {
-        collectSql(span.children)
-      }
-    })
-  }
-  if (trace.spans) {
-    collectSql(trace.spans)
-  }
-
-  // Collect all stack traces
-  const allStackTraces = []
-  const collectStacks = (spans) => {
-    spans.forEach(span => {
-      // Use stack_flat if available (flat list of all calls), otherwise use stack (hierarchical)
-      const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
-        ? span.stack_flat
-        : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
-      
-      if (stackData) {
-        // If using hierarchical stack, flatten it recursively
-        const flatStack = span.stack_flat || flattenStackRecursive(span.stack)
-        
-        allStackTraces.push({
-          span: span.name,
-          spanId: span.span_id,
-          stack: flatStack,
-        })
-      }
-      if (span.children) {
-        collectStacks(span.children)
-      }
-    })
-  }
-  
-  // Helper function to recursively flatten hierarchical stack
-  const flattenStackRecursive = (stack) => {
-    if (!Array.isArray(stack)) return []
-    const flat = []
-    const flatten = (nodes) => {
-      nodes.forEach(node => {
-        // Create a copy without children
-        const flatNode = {
-          call_id: node.call_id || node.CallID || node.id,
-          function: node.function || node.Function || node.name,
-          class: node.class || node.Class,
-          file: node.file || node.File,
-          line: node.line || node.Line,
-          duration_ms: node.duration_ms || node.DurationMs || node.duration,
-          cpu_ms: node.cpu_ms || node.CPUMs || node.cpu,
-          memory_delta: node.memory_delta || node.MemoryDelta,
-          network_bytes_sent: node.network_bytes_sent || node.NetworkBytesSent,
-          network_bytes_received: node.network_bytes_received || node.NetworkBytesReceived,
-          parent_id: node.parent_id || node.ParentID,
-          depth: node.depth || node.Depth,
-          function_type: node.function_type || node.FunctionType,
-          sql_queries: node.sql_queries || node.SQLQueries,
-          http_requests: node.http_requests || node.HttpRequests,
-          cache_operations: node.cache_operations || node.CacheOperations,
-          redis_operations: node.redis_operations || node.RedisOperations,
-        }
-        flat.push(flatNode)
-        // Recursively flatten children
-        if (node.children && Array.isArray(node.children) && node.children.length > 0) {
-          flatten(node.children)
-        }
-      })
-    }
-    flatten(stack)
-    return flat
-  }
-  
-  if (trace.spans) {
-    collectStacks(trace.spans)
-  }
-
-  // Collect all network requests (from span.net and from call stack http_requests)
-  const allNetworkRequests = []
-  const collectHTTPFromStack = (stack) => {
-    if (!Array.isArray(stack)) return []
-    const requests = []
-    stack.forEach(node => {
-      // Collect HTTP requests from this node
-      if (node.http_requests && Array.isArray(node.http_requests) && node.http_requests.length > 0) {
-        requests.push(...node.http_requests)
-      }
-      if (node.HttpRequests && Array.isArray(node.HttpRequests) && node.HttpRequests.length > 0) {
-        requests.push(...node.HttpRequests)
-      }
-      // Recursively collect from children
-      if (node.children && Array.isArray(node.children) && node.children.length > 0) {
-        requests.push(...collectHTTPFromStack(node.children))
-      }
-    })
-    return requests
-  }
-  const collectNetwork = (spans) => {
-    spans.forEach(span => {
-      // Collect from direct span.net field (legacy format)
-      if (span.net && typeof span.net === 'object' && Object.keys(span.net).length > 0) {
-        allNetworkRequests.push({
-          span: span.name,
-          spanId: span.span_id,
-          net: span.net,
-          type: 'legacy',
-        })
-      }
-      
-      // Collect from span.Http field (HTTP requests stored at span level)
-      if (span.Http && Array.isArray(span.Http) && span.Http.length > 0) {
-        span.Http.forEach(request => {
-          allNetworkRequests.push({
-            span: span.name,
-            spanId: span.span_id,
-            request: request,
-            type: 'http',
-          })
-        })
-      }
-      // Also check lowercase 'http' for compatibility
-      if (span.http && Array.isArray(span.http) && span.http.length > 0) {
-        span.http.forEach(request => {
-          allNetworkRequests.push({
-            span: span.name,
-            spanId: span.span_id,
-            request: request,
-            type: 'http',
-          })
-        })
-      }
-      
-      // Collect from call stack (http_requests)
-      const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
-        ? span.stack_flat
-        : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
-      
-      if (stackData) {
-        const stackRequests = collectHTTPFromStack(stackData)
-        stackRequests.forEach(request => {
-          allNetworkRequests.push({
-            span: span.name,
-            spanId: span.span_id,
-            request: request,
-            type: 'http',
-          })
-        })
-      }
-      
-      if (span.children) {
-        collectNetwork(span.children)
-      }
-    })
-  }
-  if (trace.spans) {
-    collectNetwork(trace.spans)
-  }
-
-  // Collect all cache operations (APCu, Symfony Cache)
-  const allCacheOperations = []
-  const collectCacheFromStack = (stack) => {
-    if (!Array.isArray(stack)) return []
-    const operations = []
-    stack.forEach(node => {
-      // Collect cache operations from this node
-      if (node.cache_operations && Array.isArray(node.cache_operations) && node.cache_operations.length > 0) {
-        operations.push(...node.cache_operations)
-      }
-      if (node.CacheOperations && Array.isArray(node.CacheOperations) && node.CacheOperations.length > 0) {
-        operations.push(...node.CacheOperations)
-      }
-      // Recursively collect from children
-      if (node.children && Array.isArray(node.children) && node.children.length > 0) {
-        operations.push(...collectCacheFromStack(node.children))
-      }
-    })
-    return operations
-  }
-  const collectCache = (spans) => {
-    spans.forEach(span => {
-      // First, collect cache operations directly from span level (from spans_full.cache field)
-      if (span.cache && Array.isArray(span.cache) && span.cache.length > 0) {
-        span.cache.forEach(op => {
-          allCacheOperations.push({
-            span: span.name,
-            spanId: span.span_id,
-            operation: op,
-          })
-        })
-      }
-      // Also check for CacheOperations (alternative field name)
-      if (span.CacheOperations && Array.isArray(span.CacheOperations) && span.CacheOperations.length > 0) {
-        span.CacheOperations.forEach(op => {
-          allCacheOperations.push({
-            span: span.name,
-            spanId: span.span_id,
-            operation: op,
-          })
-        })
-      }
-      
-      // Collect from call stack (for cache operations stored in individual call nodes)
-      const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
-        ? span.stack_flat
-        : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
-      
-      if (stackData) {
-        const stackOps = collectCacheFromStack(stackData)
-        stackOps.forEach(op => {
-          allCacheOperations.push({
-            span: span.name,
-            spanId: span.span_id,
-            operation: op,
-          })
-        })
-      }
-      
-      if (span.children) {
-        collectCache(span.children)
-      }
-    })
-  }
-  if (trace.spans) {
-    collectCache(trace.spans)
-  }
-
-  // Collect all Redis operations
-  const allRedisOperations = []
-  const collectRedisFromStack = (stack) => {
-    if (!Array.isArray(stack)) return []
-    const operations = []
-    stack.forEach(node => {
-      // Collect Redis operations from this node
-      if (node.redis_operations && Array.isArray(node.redis_operations) && node.redis_operations.length > 0) {
-        operations.push(...node.redis_operations)
-      }
-      if (node.RedisOperations && Array.isArray(node.RedisOperations) && node.RedisOperations.length > 0) {
-        operations.push(...node.RedisOperations)
-      }
-      // Recursively collect from children
-      if (node.children && Array.isArray(node.children) && node.children.length > 0) {
-        operations.push(...collectRedisFromStack(node.children))
-      }
-    })
-    return operations
-  }
-  const collectRedis = (spans) => {
-    spans.forEach(span => {
-      // First, collect Redis operations directly from span level (from spans_full.redis field)
-      if (span.redis && Array.isArray(span.redis) && span.redis.length > 0) {
-        span.redis.forEach(op => {
-          allRedisOperations.push({
-            span: span.name,
-            spanId: span.span_id,
-            operation: op,
-          })
-        })
-      }
-      // Also check for RedisOperations (alternative field name)
-      if (span.RedisOperations && Array.isArray(span.RedisOperations) && span.RedisOperations.length > 0) {
-        span.RedisOperations.forEach(op => {
-          allRedisOperations.push({
-            span: span.name,
-            spanId: span.span_id,
-            operation: op,
-          })
-        })
-      }
-      
-      // Collect from call stack (for Redis operations stored in individual call nodes)
-      const stackData = span.stack_flat && Array.isArray(span.stack_flat) && span.stack_flat.length > 0
-        ? span.stack_flat
-        : (span.stack && Array.isArray(span.stack) && span.stack.length > 0 ? span.stack : null)
-      
-      if (stackData) {
-        const stackOps = collectRedisFromStack(stackData)
-        stackOps.forEach(op => {
-          allRedisOperations.push({
-            span: span.name,
-            spanId: span.span_id,
-            operation: op,
-          })
-        })
-      }
-      
-      if (span.children) {
-        collectRedis(span.children)
-      }
-    })
-  }
-  if (trace.spans) {
-    collectRedis(trace.spans)
-  }
-
-  // Note: allTags is now calculated using useMemo above, before early returns
-
-  // Collect all dumps
-  const allDumps = []
-  const collectDumps = (spans) => {
-    spans.forEach(span => {
-      if (span.dumps && Array.isArray(span.dumps) && span.dumps.length > 0) {
-        allDumps.push({
-          span: span.name,
-          spanId: span.span_id,
-          dumps: span.dumps,
-        })
-      }
-      if (span.children) {
-        collectDumps(span.children)
-      }
-    })
-  }
-  if (trace.spans) {
-    collectDumps(trace.spans)
-  }
-
   const formatDuration = (ms) => {
     if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`
     if (ms < 1000) return `${ms.toFixed(2)}ms`
@@ -728,6 +666,17 @@ function TraceView() {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
   }
 
+  // Render a timestamp consistently regardless of whether the source value is
+  // in seconds or milliseconds (cache/redis emit seconds, dumps emit ms).
+  // Values below ~1e12 are treated as seconds and normalized to milliseconds.
+  const formatTimestamp = (ts) => {
+    if (ts === undefined || ts === null || ts === '') return '-'
+    const num = Number(ts)
+    if (!Number.isFinite(num)) return '-'
+    const ms = num < 1e12 ? num * 1000 : num
+    return new Date(ms).toLocaleTimeString()
+  }
+
   const getDumpDisplayFormat = (spanIdx, dumpIdx) => {
     const key = `${spanIdx}-${dumpIdx}`
     return dumpFormat[key] || 'tree'
@@ -736,19 +685,6 @@ function TraceView() {
   const setDumpDisplayFormatForKey = (spanIdx, dumpIdx, format) => {
     const key = `${spanIdx}-${dumpIdx}`
     setDumpFormat(prev => ({ ...prev, [key]: format }))
-  }
-
-  const parseDumpData = (data) => {
-    if (!data) return null
-    
-    try {
-      if (typeof data === 'string') {
-        return JSON.parse(data)
-      }
-      return data
-    } catch (e) {
-      return data
-    }
   }
 
   return (
@@ -1125,266 +1061,27 @@ function TraceView() {
               availableFilters={['duration', 'network']}
             />
             <h2>HTTP Requests (cURL)</h2>
-            <div className="network-table-container">
-              <table className="network-table">
-                <thead>
-                  <tr>
-                    <th>Span</th>
-                    <th>Span ID</th>
-                    <th>Method</th>
-                    <th>URL</th>
-                    <th>Status</th>
-                    <th>Duration</th>
-                    <th>Bytes Sent</th>
-                    <th>Bytes Received</th>
-                    <th>Timing</th>
-                    <th>Details</th>
-                    <th>Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allNetworkRequests
-                    .filter(r => r.type === 'http' && r.request)
-                    .filter((item) => {
-                      if (!networkFilters.enabled) return true
-                      const duration = item.request?.duration_ms || 0
-                      // Use fallback values when bytes_sent/bytes_received are 0
-                      // Priority: curl_bytes_* > bytes_* > request_size/response_size
-                      const bytesSent = item.request?.curl_bytes_sent || 
-                                       item.request?.bytes_sent || 
-                                       item.request?.request_size || 
+            <TraceNetworkView
+              requests={allNetworkRequests
+                .filter(r => r.type === 'http' && r.request)
+                .filter((item) => {
+                  if (!networkFilters.enabled) return true
+                  const duration = item.request?.duration_ms || 0
+                  // Use fallback values when bytes_sent/bytes_received are 0
+                  // Priority: curl_bytes_* > bytes_* > request_size/response_size
+                  const bytesSent = item.request?.curl_bytes_sent ||
+                                   item.request?.bytes_sent ||
+                                   item.request?.request_size ||
+                                   0
+                  const bytesReceived = item.request?.curl_bytes_received ||
+                                       item.request?.bytes_received ||
+                                       item.request?.response_size ||
                                        0
-                      const bytesReceived = item.request?.curl_bytes_received || 
-                                           item.request?.bytes_received || 
-                                           item.request?.response_size || 
-                                           0
-                      const totalBytes = bytesSent + bytesReceived
-                      return duration >= (networkFilters.thresholds.duration || 0) &&
-                             totalBytes >= (networkFilters.thresholds.network || 0)
-                    })
-                    .map((item, idx) => (
-                    <tr key={idx}>
-                      <td>{item.span}</td>
-                      <td className="span-id-cell">{item.spanId}</td>
-                      <td><code>{item.request.method || 'GET'}</code></td>
-                      <td className="url-cell">
-                        {item.request.url || item.request.uri || 'N/A'}
-                        {item.request.query_string && (
-                          <div className="query-string"><code>?{item.request.query_string}</code></div>
-                        )}
-                        {(item.request.request_headers_raw || item.request.response_headers_raw) && (
-                          <details className="headers-details">
-                            <summary>Headers</summary>
-                            {item.request.request_headers_raw && (
-                              <div className="request-headers-section">
-                                <strong>Request:</strong>
-                                <pre>{item.request.request_headers_raw}</pre>
-                              </div>
-                            )}
-                            {item.request.response_headers_raw && (
-                              <div className="response-headers-section">
-                                <strong>Response:</strong>
-                                <pre>{item.request.response_headers_raw}</pre>
-                              </div>
-                            )}
-                          </details>
-                        )}
-                      </td>
-                      <td>
-                        <span className={`status-badge ${item.request.status_code >= 400 ? 'error' : item.request.status_code >= 300 ? 'warning' : 'ok'}`}>
-                          {item.request.status_code || 'N/A'}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="duration-main">{formatDuration(item.request.duration_ms || 0)}</div>
-                        {item.request.total_time_ms && (
-                          <div className="network-timing">
-                            <small>Total: {formatDuration(item.request.total_time_ms)}</small>
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <div className="bytes-info">
-                          {item.request.curl_bytes_sent !== undefined ? (
-                            <>
-                              <div><strong>cURL:</strong> {(item.request.curl_bytes_sent / 1024).toFixed(2)} KB</div>
-                              {item.request.system_bytes_sent !== undefined && item.request.system_bytes_sent !== item.request.curl_bytes_sent && (
-                                <div><small>System: {(item.request.system_bytes_sent / 1024).toFixed(2)} KB</small></div>
-                              )}
-                            </>
-                          ) : (
-                            <div>
-                              {(() => {
-                                // Use request_size as fallback when bytes_sent is 0
-                                const bytesSent = item.request.bytes_sent || 0;
-                                const displayBytes = (bytesSent === 0 && item.request.request_size) 
-                                  ? item.request.request_size 
-                                  : bytesSent;
-                                return displayBytes > 0 ? `${(displayBytes / 1024).toFixed(2)} KB` : '0';
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="bytes-info">
-                          {item.request.curl_bytes_received !== undefined ? (
-                            <>
-                              <div><strong>cURL:</strong> {(item.request.curl_bytes_received / 1024).toFixed(2)} KB</div>
-                              {item.request.system_bytes_received !== undefined && item.request.system_bytes_received !== item.request.curl_bytes_received && (
-                                <div><small>System: {(item.request.system_bytes_received / 1024).toFixed(2)} KB</small></div>
-                              )}
-                            </>
-                          ) : (
-                            <div>
-                              {(() => {
-                                // Use response_size as fallback when bytes_received is 0
-                                const bytesReceived = item.request.bytes_received || 0;
-                                const displayBytes = (bytesReceived === 0 && item.request.response_size) 
-                                  ? item.request.response_size 
-                                  : bytesReceived;
-                                return displayBytes > 0 ? `${(displayBytes / 1024).toFixed(2)} KB` : '0';
-                              })()}
-                            </div>
-                          )}
-                          {item.request.response_size && 
-                           item.request.response_size !== item.request.curl_bytes_received && 
-                           item.request.response_size !== item.request.bytes_received && 
-                           item.request.bytes_received !== 0 && (
-                            <div><small>Size: {(item.request.response_size / 1024).toFixed(2)} KB</small></div>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <details className="timing-details">
-                          <summary>Timing Breakdown</summary>
-                          <div className="timing-breakdown">
-                            {item.request.dns_time_ms && (
-                              <div className="timing-item">
-                                <strong>DNS Lookup:</strong> {formatDuration(item.request.dns_time_ms)}
-                              </div>
-                            )}
-                            {item.request.connect_time_ms && (
-                              <div className="timing-item">
-                                <strong>Connect:</strong> {formatDuration(item.request.connect_time_ms)}
-                              </div>
-                            )}
-                            {item.request.pretransfer_time_ms && (
-                              <div className="timing-item">
-                                <strong>Pre-Transfer:</strong> {formatDuration(item.request.pretransfer_time_ms)}
-                              </div>
-                            )}
-                            {item.request.starttransfer_time_ms && (
-                              <div className="timing-item">
-                                <strong>Start Transfer:</strong> {formatDuration(item.request.starttransfer_time_ms)}
-                              </div>
-                            )}
-                            {item.request.total_time_ms && (
-                              <div className="timing-item">
-                                <strong>Total Time:</strong> {formatDuration(item.request.total_time_ms)}
-                              </div>
-                            )}
-                            {item.request.network_time_ms && (
-                              <div className="timing-item">
-                                <strong>Network Time:</strong> {formatDuration(item.request.network_time_ms)}
-                              </div>
-                            )}
-                          </div>
-                        </details>
-                      </td>
-                      <td>
-                        <details className="request-details">
-                          <summary>View Details</summary>
-                          <div className="request-details-content">
-                            {item.request.effective_url && item.request.effective_url !== item.request.url && (
-                              <div className="detail-row">
-                                <strong>Effective URL:</strong> {item.request.effective_url}
-                              </div>
-                            )}
-                            {item.request.content_type && (
-                              <div className="detail-row">
-                                <strong>Content Type:</strong> {item.request.content_type}
-                              </div>
-                            )}
-                            {item.request.redirect_count !== undefined && item.request.redirect_count > 0 && (
-                              <div className="detail-row">
-                                <strong>Redirects:</strong> {item.request.redirect_count}
-                                {item.request.redirect_url && (
-                                  <div><small>→ {item.request.redirect_url}</small></div>
-                                )}
-                              </div>
-                            )}
-                            {item.request.ssl_verify_result !== undefined && item.request.ssl_verify_result !== 0 && (
-                              <div className="detail-row">
-                                <strong>SSL Verify Result:</strong> {item.request.ssl_verify_result}
-                              </div>
-                            )}
-                            {item.request.uri && (
-                              <div className="detail-row">
-                                <strong>URI Path:</strong> {item.request.uri}
-                              </div>
-                            )}
-                            {item.request.query_string && (
-                              <div className="detail-row">
-                                <strong>Query String:</strong> <code>{item.request.query_string}</code>
-                              </div>
-                            )}
-                            {item.request.request_body && (
-                              <div className="detail-row">
-                                <strong>Request Body:</strong>
-                                <details className="body-details">
-                                  <summary>View Body ({item.request.request_body.length} bytes)</summary>
-                                  <pre className="body-content">{item.request.request_body}</pre>
-                                </details>
-                              </div>
-                            )}
-                            {item.request.response_body && (
-                              <div className="detail-row">
-                                <strong>Response Body:</strong>
-                                <details className="body-details">
-                                  <summary>View Body ({item.request.response_body.length} bytes)</summary>
-                                  <pre className="body-content">{item.request.response_body}</pre>
-                                </details>
-                              </div>
-                            )}
-                            {(item.request.request_headers_raw || item.request.response_headers_raw) && (
-                              <div className="detail-row">
-                                <strong>Headers:</strong>
-                                <details className="headers-details">
-                                  <summary>View Headers</summary>
-                                  {item.request.request_headers_raw && (
-                                    <div className="request-headers-section">
-                                      <strong>Request Headers:</strong>
-                                      <pre>{item.request.request_headers_raw}</pre>
-                                    </div>
-                                  )}
-                                  {item.request.response_headers_raw && (
-                                    <div className="response-headers-section">
-                                      <strong>Response Headers:</strong>
-                                      <pre>{item.request.response_headers_raw}</pre>
-                                    </div>
-                                  )}
-                                </details>
-                              </div>
-                            )}
-                          </div>
-                        </details>
-                      </td>
-                      <td className="error-cell">{item.request.error || '-'}</td>
-                    </tr>
-                  ))}
-                  {allNetworkRequests.filter(r => r.type === 'legacy').map((item, idx) => (
-                    <tr key={`legacy-${idx}`}>
-                      <td>{item.span}</td>
-                      <td className="span-id-cell">{item.spanId}</td>
-                      <td colSpan="9">
-                        <pre>{JSON.stringify(item.net, null, 2)}</pre>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  const totalBytes = bytesSent + bytesReceived
+                  return duration >= (networkFilters.thresholds.duration || 0) &&
+                         totalBytes >= (networkFilters.thresholds.network || 0)
+                })}
+            />
           </div>
         )}
 
@@ -1454,7 +1151,7 @@ function TraceView() {
                         <td>
                           {item.operation.timestamp ? (
                             <div className="timestamp-cell">
-                              {new Date(item.operation.timestamp * 1000).toLocaleTimeString()}
+                              {formatTimestamp(item.operation.timestamp)}
                             </div>
                           ) : '-'}
                         </td>
@@ -1522,7 +1219,7 @@ function TraceView() {
                       <td>
                         {item.operation.timestamp ? (
                           <div className="timestamp-cell">
-                            {new Date(item.operation.timestamp * 1000).toLocaleTimeString()}
+                            {formatTimestamp(item.operation.timestamp)}
                           </div>
                         ) : '-'}
                       </td>
@@ -1674,7 +1371,7 @@ function TraceView() {
         {activeTab === 'dumps' && (
           <div className="trace-dumps">
             <h2>Variable Dumps</h2>
-            {allDumps.map((item, spanIdx) => (
+            {dumpsView.map((item, spanIdx) => (
               <div key={spanIdx} className="dumps-item">
                 <div className="dumps-header">
                   <h3>{item.span}</h3>
@@ -1683,21 +1380,9 @@ function TraceView() {
                 <div className="dumps-list">
                   {item.dumps.map((dump, dumpIdx) => {
                     const displayFormat = getDumpDisplayFormat(spanIdx, dumpIdx)
-                    const parsedData = parseDumpData(dump.data)
-                    
-                    // Get JSON string representation for raw JSON view
-                    const jsonString = dump.data 
-                      ? (typeof dump.data === 'string' 
-                          ? (() => {
-                              try {
-                                return JSON.stringify(JSON.parse(dump.data), null, 2);
-                              } catch {
-                                return dump.data;
-                              }
-                            })()
-                          : JSON.stringify(dump.data, null, 2))
-                      : 'N/A'
-                    
+                    // parsedData / jsonString are precomputed once per trace in dumpsView
+                    const { parsedData, jsonString } = dump
+
                     return (
                     <div key={dumpIdx} className="dump-entry">
                       <div className="dump-meta">
@@ -1705,7 +1390,7 @@ function TraceView() {
                         <span className="dump-line">Line {dump.line || '?'}</span>
                         {dump.timestamp && (
                           <span className="dump-timestamp">
-                            {new Date(dump.timestamp).toLocaleTimeString()}
+                            {formatTimestamp(dump.timestamp)}
                           </span>
                         )}
                           <div className="dump-format-toggle">
