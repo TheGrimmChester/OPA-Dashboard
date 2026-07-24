@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
 import { 
   FiHome, 
@@ -21,32 +21,36 @@ import {
   FiHardDrive,
 } from 'react-icons/fi'
 import ErrorBoundary from './components/ErrorBoundary'
-import ServiceOverview from './components/ServiceOverview.jsx'
-import TraceList from './components/TraceList'
 import TraceFilters from './components/TraceFilters'
-import PerformanceMetrics from './components/PerformanceMetrics'
-import NetworkView from './components/NetworkView'
-import TraceView from './pages/TraceView'
-import CompareTraces from './pages/CompareTraces'
-import ServiceProfile from './pages/ServiceProfile'
-import SqlAnalysis from './pages/SqlAnalysis'
-import ErrorAnalysis from './pages/ErrorAnalysis'
-import HttpAnalysis from './pages/HttpAnalysis'
-import ErrorViewer from './components/ErrorViewer'
-import LiveDumps from './pages/LiveDumps'
-import LiveLogs from './pages/LiveLogs'
-import LiveHttp from './pages/LiveHttp'
-import LiveDashboard from './pages/LiveDashboard'
-import LiveServiceMap from './pages/LiveServiceMap'
-import LiveSql from './pages/LiveSql'
-import LiveRedis from './pages/LiveRedis'
-import ServiceMap from './components/ServiceMap'
 import PurgeButton from './components/PurgeButton'
 import HelpIcon from './components/HelpIcon'
 import TenantSwitcher from './components/TenantSwitcher'
 import { TenantProvider } from './contexts/TenantContext'
-import Stats from './pages/Stats'
 import './App.css'
+
+// Lazily loaded route/page components so their heavy dependencies
+// (vis-network, recharts, react-syntax-highlighter, sql-formatter) are
+// split into their own chunks instead of the main bundle.
+const ServiceOverview = lazy(() => import('./components/ServiceOverview.jsx'))
+const TraceList = lazy(() => import('./components/TraceList'))
+const PerformanceMetrics = lazy(() => import('./components/PerformanceMetrics'))
+const NetworkView = lazy(() => import('./components/NetworkView'))
+const TraceView = lazy(() => import('./pages/TraceView'))
+const CompareTraces = lazy(() => import('./pages/CompareTraces'))
+const ServiceProfile = lazy(() => import('./pages/ServiceProfile'))
+const SqlAnalysis = lazy(() => import('./pages/SqlAnalysis'))
+const ErrorAnalysis = lazy(() => import('./pages/ErrorAnalysis'))
+const HttpAnalysis = lazy(() => import('./pages/HttpAnalysis'))
+const ErrorViewer = lazy(() => import('./components/ErrorViewer'))
+const LiveDumps = lazy(() => import('./pages/LiveDumps'))
+const LiveLogs = lazy(() => import('./pages/LiveLogs'))
+const LiveHttp = lazy(() => import('./pages/LiveHttp'))
+const LiveDashboard = lazy(() => import('./pages/LiveDashboard'))
+const LiveServiceMap = lazy(() => import('./pages/LiveServiceMap'))
+const LiveSql = lazy(() => import('./pages/LiveSql'))
+const LiveRedis = lazy(() => import('./pages/LiveRedis'))
+const ServiceMap = lazy(() => import('./components/ServiceMap'))
+const Stats = lazy(() => import('./pages/Stats'))
 
 function Navigation() {
   const location = useLocation()
@@ -331,6 +335,7 @@ function App() {
             <PurgeButton />
           </div>
         <main className="App-main">
+          <Suspense fallback={<div className="route-loading">Loading…</div>}>
           <Routes>
             <Route 
               path="/" 
@@ -445,6 +450,7 @@ function App() {
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </main>
       </div>
       </TenantProvider>
