@@ -1,0 +1,12 @@
+// Barrel export for the OPA design-system primitives.
+export { default as Panel } from './Panel'
+export { default as KpiTile } from './KpiTile'
+export { default as Sparkline } from './Sparkline'
+export { default as DeltaIndicator } from './DeltaIndicator'
+export { default as InlineBar } from './InlineBar'
+export { default as DataTable } from './DataTable'
+export { default as TimeSeriesChart } from './TimeSeriesChart'
+export { default as EntityHeader } from './EntityHeader'
+export { Badge, StatusPill, HealthDot, LanguageBadge } from './Badges'
+export { SegmentedControl, Tabs } from './Controls'
+export { EmptyState, ErrorState, Skeleton, SkeletonTiles } from './States'

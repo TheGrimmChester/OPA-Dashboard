@@ -28,6 +28,8 @@ import PurgeButton from './components/PurgeButton'
 import HelpIcon from './components/HelpIcon'
 import TenantSwitcher from './components/TenantSwitcher'
 import { TenantProvider } from './contexts/TenantContext'
+import { TimeRangeProvider } from './contexts/TimeRangeContext'
+import AppShell from './components/shell/AppShell'
 import './App.css'
 
 // Lazily loaded route/page components so their heavy dependencies
@@ -55,6 +57,17 @@ const ServiceMap = lazy(() => import('./components/ServiceMap'))
 const Stats = lazy(() => import('./pages/Stats'))
 const RumDashboard = lazy(() => import('./components/RumDashboard'))
 const ContinuousProfiling = lazy(() => import('./components/ContinuousProfiling'))
+const Overview = lazy(() => import('./pages/Overview'))
+const ServiceDetail = lazy(() => import('./pages/ServiceDetail'))
+const TraceDetail = lazy(() => import('./pages/TraceDetail'))
+const ProfilingView = lazy(() => import('./pages/ProfilingView'))
+const TraceExplorer = lazy(() => import('./pages/TraceExplorer'))
+const Databases = lazy(() => import('./pages/Databases'))
+const ErrorsInbox = lazy(() => import('./pages/ErrorsInbox'))
+const ServiceMapView = lazy(() => import('./pages/ServiceMapView'))
+const BrowserRum = lazy(() => import('./pages/BrowserRum'))
+const ExternalHttp = lazy(() => import('./pages/ExternalHttp'))
+const PerformanceView = lazy(() => import('./pages/PerformanceView'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 
@@ -335,78 +348,49 @@ function App() {
   return (
     <ErrorBoundary>
       <TenantProvider>
-        <div className="App">
-          <Navigation />
-          <div className="app-toolbar">
-            <label className="refresh-toggle">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-                aria-label="Auto-refresh"
-              />
-              <FiRefreshCw className={autoRefresh ? 'spinning' : ''} />
-              <span>Auto-refresh</span>
-            </label>
-            <PurgeButton />
-          </div>
-        <main className="App-main">
-          <Suspense fallback={<div className="route-loading">Loading…</div>}>
+        <TimeRangeProvider>
+        <AppShell>
+          <Suspense fallback={<div className="route-loading" style={{ padding: 24, color: 'var(--text-muted)' }}>Loading…</div>}>
           <Routes>
-            <Route 
-              path="/" 
-              element={
-                <ServiceOverview 
-                  onServiceSelect={handleServiceSelect}
-                  autoRefresh={autoRefresh}
-                />
-              } 
+            <Route
+              path="/"
+              element={<Overview />}
             />
-            <Route 
-              path="/services" 
-              element={
-          <ServiceOverview 
-            onServiceSelect={handleServiceSelect}
-            autoRefresh={autoRefresh}
-          />
-              } 
+            <Route
+              path="/services"
+              element={<Overview />}
             />
-            <Route 
-              path="/services/:serviceName" 
-              element={<ServiceProfile />} 
+            <Route
+              path="/services/:serviceName"
+              element={<ServiceDetail />}
             />
-            <Route 
-              path="/traces" 
-              element={
-          <div className="traces-view">
-            <TraceFilters onFiltersChange={setFilters} />
-            <TraceList 
-              filters={filters}
-              onTraceSelect={handleTraceSelect}
-              autoRefresh={autoRefresh}
+            <Route
+              path="/traces"
+              element={<TraceExplorer />}
             />
-          </div>
-              } 
+            <Route
+              path="/stats"
+              element={<Stats autoRefresh={autoRefresh} />}
             />
-            <Route 
-              path="/stats" 
-              element={<Stats autoRefresh={autoRefresh} />} 
+            <Route
+              path="/system"
+              element={<Stats autoRefresh={autoRefresh} />}
             />
-            <Route 
-              path="/traces/:traceId" 
-              element={<TraceView />} 
+            <Route
+              path="/traces/:traceId"
+              element={<TraceDetail />}
             />
-            <Route 
-              path="/traces/:traceId/flame" 
-              element={<TraceView />} 
+            <Route
+              path="/traces/:traceId/flame"
+              element={<TraceView />}
             />
             <Route 
               path="/compare" 
               element={<CompareTraces />} 
             />
-            <Route 
-              path="/performance" 
-              element={<PerformanceMetrics autoRefresh={autoRefresh} />} 
+            <Route
+              path="/performance"
+              element={<PerformanceView />}
             />
             <Route
               path="/network"
@@ -414,11 +398,11 @@ function App() {
             />
             <Route
               path="/profiling"
-              element={<ContinuousProfiling />}
+              element={<ProfilingView />}
             />
             <Route
               path="/rum"
-              element={<RumDashboard />}
+              element={<BrowserRum />}
             />
             <Route
               path="/login"
@@ -428,25 +412,25 @@ function App() {
               path="/users"
               element={<Users />}
             />
-            <Route 
-              path="/service-map" 
-              element={<ServiceMap />} 
+            <Route
+              path="/service-map"
+              element={<ServiceMapView />}
             />
-            <Route 
-              path="/sql" 
-              element={<SqlAnalysis />} 
+            <Route
+              path="/sql"
+              element={<Databases />}
             />
-            <Route 
-              path="/sql/:fingerprint" 
-              element={<SqlAnalysis />} 
+            <Route
+              path="/sql/:fingerprint"
+              element={<SqlAnalysis />}
             />
-            <Route 
-              path="/http" 
-              element={<HttpAnalysis autoRefresh={autoRefresh} />} 
+            <Route
+              path="/http"
+              element={<ExternalHttp />}
             />
-            <Route 
-              path="/errors" 
-              element={<ErrorViewer />} 
+            <Route
+              path="/errors"
+              element={<ErrorsInbox />}
             />
             <Route 
               path="/errors/:errorId" 
@@ -483,8 +467,8 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
-        </main>
-      </div>
+        </AppShell>
+        </TimeRangeProvider>
       </TenantProvider>
     </ErrorBoundary>
   )

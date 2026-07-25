@@ -1,0 +1,36 @@
+/* Dual-tier data-transfer bar for outbound HTTP bytes (out / in) */
+.opa-xfer {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 90px;
+  vertical-align: middle;
+}
+.opa-xfer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 6px);
+  justify-content: flex-end;
+}
+.opa-xfer-track {
+  position: relative;
+  height: 5px;
+  width: 60px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.opa-xfer-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 3px;
+}
+.opa-xfer-val {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11, 11px);
+  min-width: 58px;
+  text-align: right;
+}
