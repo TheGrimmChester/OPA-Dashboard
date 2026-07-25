@@ -109,6 +109,33 @@ const RumDashboard = () => {
         </div>
       </div>
 
+      {metrics.core_web_vitals && (
+        <div className="rum-cwv-section">
+          <h3 style={{ margin: '20px 0 8px' }}>Core Web Vitals <span style={{ fontSize: '0.75em', opacity: 0.6 }}>(p75)</span></h3>
+          <div className="rum-metrics-grid">
+            {[
+              { key: 'lcp', label: 'LCP', hint: 'Largest Contentful Paint' },
+              { key: 'inp', label: 'INP', hint: 'Interaction to Next Paint' },
+              { key: 'cls', label: 'CLS', hint: 'Cumulative Layout Shift' },
+              { key: 'fcp', label: 'FCP', hint: 'First Contentful Paint' },
+              { key: 'ttfb', label: 'TTFB', hint: 'Time To First Byte' },
+              { key: 'fid', label: 'FID', hint: 'First Input Delay' },
+            ].map(({ key, label, hint }) => {
+              const m = metrics.core_web_vitals[key] || {}
+              const color = m.rating === 'good' ? '#22c55e' : m.rating === 'needs-improvement' ? '#f59e0b' : m.rating === 'poor' ? '#ef4444' : 'inherit'
+              const disp = m.p75 == null || m.p75 === 0 ? 'N/A' : (key === 'cls' ? Number(m.p75).toFixed(3) : `${Math.round(m.p75)}${m.unit || ''}`)
+              return (
+                <div className="rum-metric-card" key={key} title={hint}>
+                  <div className="rum-metric-label">{label}</div>
+                  <div className="rum-metric-value" style={{ color }}>{disp}</div>
+                  <div className="rum-metric-trend">{m.rating ? m.rating.replace('-', ' ') : hint}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {metrics.timeline && metrics.timeline.length > 0 && (
         <div className="rum-chart-container">
           <h3>Page Load Time Over Time</h3>

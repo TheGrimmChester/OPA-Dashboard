@@ -229,12 +229,33 @@
         });
     }
     
+    // ---- Core Web Vitals (LCP, CLS, FID, INP, FCP, TTFB) via PerformanceObserver ----
+    var webVitals = { lcp: null, cls: 0, fid: null, inp: null, fcp: null, ttfb: null };
+    function initWebVitals() {
+        try {
+            var nav = window.performance && window.performance.getEntriesByType && window.performance.getEntriesByType('navigation')[0];
+            if (nav) webVitals.ttfb = Math.round(nav.responseStart);
+        } catch (e) {}
+        if (!('PerformanceObserver' in window)) return;
+        var obs = function (type, cb, opts) {
+            try { new PerformanceObserver(cb).observe(Object.assign({ type: type, buffered: true }, opts || {})); } catch (e) {}
+        };
+        obs('paint', function (l) { l.getEntries().forEach(function (e) { if (e.name === 'first-contentful-paint') webVitals.fcp = Math.round(e.startTime); }); });
+        obs('largest-contentful-paint', function (l) { var es = l.getEntries(); var last = es[es.length - 1]; if (last) webVitals.lcp = Math.round(last.renderTime || last.loadTime || last.startTime); });
+        obs('layout-shift', function (l) { l.getEntries().forEach(function (e) { if (!e.hadRecentInput) webVitals.cls += e.value; }); });
+        obs('first-input', function (l) { var e = l.getEntries()[0]; if (e && webVitals.fid == null) webVitals.fid = Math.round(e.processingStart - e.startTime); });
+        obs('event', function (l) { l.getEntries().forEach(function (e) { if (e.duration && (webVitals.inp == null || e.duration > webVitals.inp)) webVitals.inp = Math.round(e.duration); }); }, { durationThreshold: 40 });
+    }
+    function snapshotWebVitals() {
+        return { lcp: webVitals.lcp, cls: Math.round(webVitals.cls * 1000) / 1000, fid: webVitals.fid, inp: webVitals.inp, fcp: webVitals.fcp, ttfb: webVitals.ttfb };
+    }
+
     // Send RUM data to agent
     function sendRUMData() {
         const viewport = getViewportSize();
         const perfTiming = collectPerformanceTiming();
         const resources = collectResourceTiming();
-        
+
         const rumData = {
             type: 'rum',
             session_id: sessionId,
@@ -243,6 +264,7 @@
             user_agent: getUserAgent(),
             viewport: viewport,
             navigation_timing: perfTiming,
+            web_vitals: snapshotWebVitals(),
             resource_timing: resources,
             ajax_requests: ajaxRequests,
             errors: errors,
@@ -266,6 +288,16 @@
         }
     }
     
+    // Start Core Web Vitals observers as early as possible (buffered:true also
+    // captures entries dispatched before this point).
+    initWebVitals();
+
+    // Send a final beacon (with settled LCP/CLS/INP) when the page is hidden.
+    var sentFinal = false;
+    function sendFinal() { if (!sentFinal) { sentFinal = true; sendRUMData(); } }
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') sendFinal(); });
+    window.addEventListener('pagehide', sendFinal);
+
     // Initialize tracking
     if (RUM_CONFIG.trackPageLoad) {
         // Wait for page load
