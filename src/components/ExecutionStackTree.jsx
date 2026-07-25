@@ -1,7 +1,13 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useRef } from 'react'
 import { FiCpu, FiClock, FiHardDrive, FiGlobe, FiChevronRight, FiChevronDown, FiCode, FiFile } from 'react-icons/fi'
 import TraceTabFilters from './TraceTabFilters'
+import { VIZ_V2_ENABLED } from '../utils/chartTheme'
 import './ExecutionStackTree.css'
+
+// Row virtualization tuning (only used when VIZ_V2 is enabled).
+const ROW_HEIGHT = 44        // fixed windowed-row height in px
+const OVERSCAN = 6           // extra rows rendered above/below the viewport
+const VIEWPORT_MAX = 640     // max scroll-container height in px
 
 function ExecutionStackTree({ callStack }) {
   const [expandedNodes, setExpandedNodes] = useState(new Set())
@@ -201,6 +207,34 @@ function ExecutionStackTree({ callStack }) {
     setExpandedNodes(new Set())
   }
 
+  // --- Row virtualization (opt-in via VIZ_V2) -----------------------------
+  // Flatten the currently-visible rows (respecting expand state AND active
+  // filters) into a linear list so we can window it. This walks the same
+  // O(1) childrenMap via getChildren(), so filtering/expand semantics match
+  // the recursive renderer exactly.
+  const scrollRef = useRef(null)
+  const [scrollTop, setScrollTop] = useState(0)
+
+  const flatRows = useMemo(() => {
+    if (!VIZ_V2_ENABLED) return []
+    const rows = []
+    const walk = (nodes, depth) => {
+      for (const node of nodes) {
+        const expandable = hasChildren(node.call_id)
+        rows.push({ node, depth, expandable })
+        if (expandable && expandedNodes.has(node.call_id)) {
+          walk(getChildren(node.call_id), depth + 1)
+        }
+      }
+    }
+    walk(filteredTreeData, 0)
+    return rows
+  }, [filteredTreeData, expandedNodes, hasChildren, getChildren])
+
+  const handleScroll = useCallback((e) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
+
   const formatBytes = (bytes) => {
     if (bytes === 0) return '0 B'
     if (bytes < 1024) return `${bytes} B`
@@ -242,6 +276,13 @@ function ExecutionStackTree({ callStack }) {
     )
   }
 
+  // Windowed slice (only meaningful when VIZ_V2 is enabled; cheap no-op otherwise)
+  const total = flatRows.length
+  const viewportHeight = Math.min(VIEWPORT_MAX, Math.max(total, 1) * ROW_HEIGHT)
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endIndex = Math.min(total, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
+  const visibleSlice = flatRows.slice(startIndex, endIndex)
+
   return (
     <div className="execution-stack-tree">
       <TraceTabFilters
@@ -259,25 +300,56 @@ function ExecutionStackTree({ callStack }) {
           </button>
         </div>
       </div>
-      {/* TODO(perf): for very large traces, flatten the currently-expanded nodes
-          into a linear list and window/virtualize the rows (e.g. react-window)
-          so only on-screen rows are mounted. Deferred: needs a new dependency. */}
-      <div className="execution-stack-tree-content">
-        {filteredTreeData.map((node, idx) => (
-          <StackTreeNode
-            key={node.call_id || idx}
-            node={node}
-            expandedNodes={expandedNodes}
-            onToggle={toggleNode}
-            depth={0}
-            formatBytes={formatBytes}
-            formatMemory={formatMemory}
-            formatDuration={formatDuration}
-            getChildren={getChildren}
-            hasChildren={hasChildren}
-          />
-        ))}
-      </div>
+      {/* Large traces: hand-rolled row windowing (no extra deps). Flatten the
+          visible rows, then render only the slice inside the scroll viewport
+          plus a small overscan. Opt-in via VIZ_V2 so default behavior (full
+          recursive render) is unchanged. */}
+      {VIZ_V2_ENABLED ? (
+        <div
+          className="execution-stack-tree-content execution-stack-tree-content--virtual"
+          ref={scrollRef}
+          onScroll={handleScroll}
+          style={{ height: viewportHeight, overflowY: 'auto', position: 'relative' }}
+        >
+          <div style={{ height: total * ROW_HEIGHT, position: 'relative' }}>
+            {visibleSlice.map(({ node, depth, expandable }, i) => {
+              const index = startIndex + i
+              return (
+                <FlatStackRow
+                  key={node.call_id || index}
+                  node={node}
+                  depth={depth}
+                  expandable={expandable}
+                  isExpanded={expandedNodes.has(node.call_id)}
+                  onToggle={toggleNode}
+                  top={index * ROW_HEIGHT}
+                  height={ROW_HEIGHT}
+                  formatBytes={formatBytes}
+                  formatMemory={formatMemory}
+                  formatDuration={formatDuration}
+                />
+              )
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="execution-stack-tree-content">
+          {filteredTreeData.map((node, idx) => (
+            <StackTreeNode
+              key={node.call_id || idx}
+              node={node}
+              expandedNodes={expandedNodes}
+              onToggle={toggleNode}
+              depth={0}
+              formatBytes={formatBytes}
+              formatMemory={formatMemory}
+              formatDuration={formatDuration}
+              getChildren={getChildren}
+              hasChildren={hasChildren}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -392,6 +464,94 @@ function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, form
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// Compact, fixed-height row used by the windowed renderer. Renders the same
+// information as StackTreeNode but on a single constrained line so every row is
+// exactly ROW_HEIGHT tall (a prerequisite for scrollTop-based windowing).
+function FlatStackRow({ node, depth, expandable, isExpanded, onToggle, top, height, formatBytes, formatMemory, formatDuration }) {
+  const displayName = node.class ? `${node.class}::${node.function}` : node.function
+  const functionTypeLabel = node.function_type === 1 ? 'internal' : node.function_type === 2 ? 'method' : 'user'
+
+  return (
+    <div
+      className="stack-tree-node-content stack-tree-node-content--virtual"
+      style={{
+        position: 'absolute',
+        top,
+        left: 0,
+        right: 0,
+        height,
+        paddingLeft: `${depth * 24 + 8}px`,
+        display: 'flex',
+        alignItems: 'center',
+        overflow: 'hidden',
+      }}
+    >
+      <div className="stack-tree-node-main" style={{ minWidth: 0, width: '100%' }}>
+        {expandable ? (
+          <button
+            className="stack-tree-expand-btn"
+            onClick={() => onToggle(node.call_id)}
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            {isExpanded ? <FiChevronDown /> : <FiChevronRight />}
+          </button>
+        ) : (
+          <div className="stack-tree-spacer" />
+        )}
+
+        <div className="stack-tree-node-info" style={{ minWidth: 0 }}>
+          <div className="stack-tree-node-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <FiCode className="stack-tree-icon" />
+            <strong>{displayName}</strong>
+            {node.file && (
+              <span className="stack-tree-file-info">
+                <FiFile className="stack-tree-icon-small" />
+                {node.file.split('/').pop()}
+                {node.line > 0 && `:${node.line}`}
+              </span>
+            )}
+            <span className={`stack-tree-function-type ${functionTypeLabel}`}>
+              {functionTypeLabel}
+            </span>
+            <span className="stack-tree-metric" style={{ marginLeft: 'auto' }}>
+              <FiClock className="stack-tree-metric-icon" />
+              <span className="stack-tree-metric-value">{formatDuration(node.duration_ms)}</span>
+            </span>
+            {node.cpu_ms > 0 && (
+              <span className="stack-tree-metric">
+                <FiCpu className="stack-tree-metric-icon" />
+                <span className="stack-tree-metric-value">{formatDuration(node.cpu_ms)}</span>
+              </span>
+            )}
+            {node.memory_delta !== 0 && (
+              <span className="stack-tree-metric">
+                <FiHardDrive className="stack-tree-metric-icon" />
+                <span className={`stack-tree-metric-value ${node.memory_delta < 0 ? 'negative' : 'positive'}`}>
+                  {formatMemory(node.memory_delta)}
+                </span>
+              </span>
+            )}
+            {(node.network_bytes_sent > 0 || node.network_bytes_received > 0) && (
+              <span className="stack-tree-metric network-metric">
+                <FiGlobe className="stack-tree-metric-icon" />
+                <span className="stack-tree-metric-value">
+                  {node.network_bytes_sent > 0 && (
+                    <span className="network-sent">↑ {formatBytes(node.network_bytes_sent)}</span>
+                  )}
+                  {node.network_bytes_sent > 0 && node.network_bytes_received > 0 && <span> / </span>}
+                  {node.network_bytes_received > 0 && (
+                    <span className="network-received">↓ {formatBytes(node.network_bytes_received)}</span>
+                  )}
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
