@@ -7,6 +7,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+# Opt-in reworked visualizations (charts v2 + trace-tree virtualization).
+# Default false => original UI. Build with --build-arg VITE_VIZ_V2=true to enable.
+ARG VITE_VIZ_V2=false
+ENV VITE_VIZ_V2=$VITE_VIZ_V2
 RUN npm run build
 
 # Runtime stage
