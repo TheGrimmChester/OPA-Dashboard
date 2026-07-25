@@ -20,6 +20,7 @@ import {
   FiBarChart2,
   FiHardDrive,
   FiCpu,
+  FiUsers,
 } from 'react-icons/fi'
 import ErrorBoundary from './components/ErrorBoundary'
 import TraceFilters from './components/TraceFilters'
@@ -54,6 +55,8 @@ const ServiceMap = lazy(() => import('./components/ServiceMap'))
 const Stats = lazy(() => import('./pages/Stats'))
 const RumDashboard = lazy(() => import('./components/RumDashboard'))
 const ContinuousProfiling = lazy(() => import('./components/ContinuousProfiling'))
+const Login = lazy(() => import('./pages/Login'))
+const Users = lazy(() => import('./pages/Users'))
 
 function Navigation() {
   const location = useLocation()
@@ -169,6 +172,14 @@ function Navigation() {
       helpText: 'Monitoring tools for service maps',
       items: [
         { path: '/service-map', label: 'Service Map', icon: FiServer, helpText: 'Visualize service dependencies and relationships' },
+      ]
+    },
+    {
+      label: 'Admin',
+      icon: FiUsers,
+      helpText: 'Administration: users, roles and access',
+      items: [
+        { path: '/users', label: 'Users & Roles', icon: FiUsers, helpText: 'Manage users and their roles (viewer/editor/admin)' },
       ]
     }
   ]
@@ -408,6 +419,14 @@ function App() {
             <Route
               path="/rum"
               element={<RumDashboard />}
+            />
+            <Route
+              path="/login"
+              element={<Login />}
+            />
+            <Route
+              path="/users"
+              element={<Users />}
             />
             <Route 
               path="/service-map" 
