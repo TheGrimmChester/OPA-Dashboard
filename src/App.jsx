@@ -19,6 +19,7 @@ import {
   FiRadio,
   FiBarChart2,
   FiHardDrive,
+  FiCpu,
 } from 'react-icons/fi'
 import ErrorBoundary from './components/ErrorBoundary'
 import TraceFilters from './components/TraceFilters'
@@ -51,6 +52,8 @@ const LiveSql = lazy(() => import('./pages/LiveSql'))
 const LiveRedis = lazy(() => import('./pages/LiveRedis'))
 const ServiceMap = lazy(() => import('./components/ServiceMap'))
 const Stats = lazy(() => import('./pages/Stats'))
+const RumDashboard = lazy(() => import('./components/RumDashboard'))
+const ContinuousProfiling = lazy(() => import('./components/ContinuousProfiling'))
 
 function Navigation() {
   const location = useLocation()
@@ -142,6 +145,8 @@ function Navigation() {
         { path: '/errors', label: 'Errors', icon: FiAlertCircle, helpText: 'View and analyze error occurrences and stack traces' },
         { path: '/http', label: 'HTTP Requests', icon: FiGlobe, helpText: 'Analyze HTTP request performance and execution patterns grouped by URL and method' },
         { path: '/network', label: 'Network', icon: FiGlobe, helpText: 'Monitor network traffic, latency, and bandwidth usage' },
+        { path: '/profiling', label: 'Profiling', icon: FiCpu, helpText: 'Continuous/aggregated profiler: top functions by self-time across all requests' },
+        { path: '/rum', label: 'RUM', icon: FiGlobe, helpText: 'Real User Monitoring - Core Web Vitals and page performance from real browsers' },
       ]
     },
     {
@@ -392,9 +397,17 @@ function App() {
               path="/performance" 
               element={<PerformanceMetrics autoRefresh={autoRefresh} />} 
             />
-            <Route 
-              path="/network" 
-              element={<NetworkView autoRefresh={autoRefresh} />} 
+            <Route
+              path="/network"
+              element={<NetworkView autoRefresh={autoRefresh} />}
+            />
+            <Route
+              path="/profiling"
+              element={<ContinuousProfiling />}
+            />
+            <Route
+              path="/rum"
+              element={<RumDashboard />}
             />
             <Route 
               path="/service-map" 
