@@ -6,6 +6,17 @@ import './Login.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
+// Decode a JWT payload (no verification — display only; the server verifies).
+function decodeJwt(token) {
+  try {
+    const part = token.split('.')[1]
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'))
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
 function Login() {
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
@@ -14,25 +25,46 @@ function Login() {
   const [loading, setLoading] = useState(false)
   const [ssoEnabled, setSsoEnabled] = useState(false)
 
-  // Capture the token the OIDC callback puts in the URL fragment
-  // (#token=...&username=...&role=...) and detect whether SSO is configured.
+  // Capture the token the OIDC callback puts in the URL fragment (#token=...&
+  // dnonce=...). Only accept it if dnonce matches the value this SPA stored
+  // before initiating login — this proves the token belongs to a login WE
+  // started and blocks token-fixation via a crafted /login#token=... link.
+  // username/role come from the token's own signed claims, not spoofable params.
   useEffect(() => {
     if (window.location.hash && window.location.hash.includes('token=')) {
       const p = new URLSearchParams(window.location.hash.slice(1))
       const token = p.get('token')
-      if (token) {
-        localStorage.setItem('auth_token', token)
-        if (p.get('username')) localStorage.setItem('username', p.get('username'))
-        if (p.get('role')) localStorage.setItem('role', p.get('role'))
-        window.history.replaceState(null, '', window.location.pathname)
-        navigate('/')
-        return
+      const dnonce = p.get('dnonce')
+      const expected = sessionStorage.getItem('oidc_dnonce')
+      // Strip the token from the URL immediately regardless of outcome.
+      window.history.replaceState(null, '', window.location.pathname)
+      sessionStorage.removeItem('oidc_dnonce')
+      if (token && expected && dnonce && dnonce === expected) {
+        const claims = decodeJwt(token)
+        if (claims) {
+          localStorage.setItem('auth_token', token)
+          if (claims.username) localStorage.setItem('username', claims.username)
+          if (claims.role) localStorage.setItem('role', claims.role)
+          navigate('/')
+          return
+        }
       }
+      setError('SSO login could not be verified. Please try again.')
     }
     axios.get(`${API_URL}/api/auth/oidc/status`)
       .then((r) => setSsoEnabled(!!r.data?.enabled))
       .catch(() => setSsoEnabled(false))
   }, [])
+
+  // Begin SSO: generate a one-time delivery nonce, remember it, and hand it to
+  // the agent's login endpoint, which echoes it back in the post-login fragment.
+  const startSso = () => {
+    const nonce = (window.crypto && window.crypto.randomUUID)
+      ? window.crypto.randomUUID()
+      : `${Math.random().toString(36).slice(2)}${Date.now()}`
+    sessionStorage.setItem('oidc_dnonce', nonce)
+    window.location.href = `${API_URL}/api/auth/oidc/login?dnonce=${encodeURIComponent(nonce)}`
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -113,9 +145,9 @@ function Login() {
         {ssoEnabled && (
           <div className="login-sso">
             <div className="login-divider"><span>or</span></div>
-            <a className="btn btn-block btn-sso" href={`${API_URL}/api/auth/oidc/login`}>
+            <button type="button" className="btn btn-block btn-sso" onClick={startSso}>
               <FiLogIn className="input-icon" /> Login with SSO
-            </a>
+            </button>
           </div>
         )}
 
