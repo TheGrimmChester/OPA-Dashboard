@@ -1,0 +1,47 @@
+/* Latency histogram for the Trace Explorer — dense, data-ink, New Relic style. */
+.tx-hist {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 170px;
+  padding: 4px 2px 0;
+}
+.tx-hist-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 2px 2px 0 0;
+  align-self: flex-end;
+  transition: opacity .12s ease;
+  min-height: 1px;
+}
+.tx-hist-bar:hover { opacity: .78; }
+
+/* p95 marker line overlaid on the histogram */
+.tx-hist-p95 {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed var(--p95);
+  pointer-events: none;
+}
+.tx-hist-p95-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(4px);
+  font-size: var(--fs-11);
+  color: var(--p95);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.tx-hist-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
