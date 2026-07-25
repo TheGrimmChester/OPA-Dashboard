@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FiLogIn, FiUser, FiLock } from 'react-icons/fi'
 import axios from 'axios'
@@ -12,6 +12,27 @@ function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [ssoEnabled, setSsoEnabled] = useState(false)
+
+  // Capture the token the OIDC callback puts in the URL fragment
+  // (#token=...&username=...&role=...) and detect whether SSO is configured.
+  useEffect(() => {
+    if (window.location.hash && window.location.hash.includes('token=')) {
+      const p = new URLSearchParams(window.location.hash.slice(1))
+      const token = p.get('token')
+      if (token) {
+        localStorage.setItem('auth_token', token)
+        if (p.get('username')) localStorage.setItem('username', p.get('username'))
+        if (p.get('role')) localStorage.setItem('role', p.get('role'))
+        window.history.replaceState(null, '', window.location.pathname)
+        navigate('/')
+        return
+      }
+    }
+    axios.get(`${API_URL}/api/auth/oidc/status`)
+      .then((r) => setSsoEnabled(!!r.data?.enabled))
+      .catch(() => setSsoEnabled(false))
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -80,14 +101,23 @@ function Login() {
             />
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="btn btn-primary btn-block"
             disabled={loading}
           >
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
+
+        {ssoEnabled && (
+          <div className="login-sso">
+            <div className="login-divider"><span>or</span></div>
+            <a className="btn btn-block btn-sso" href={`${API_URL}/api/auth/oidc/login`}>
+              <FiLogIn className="input-icon" /> Login with SSO
+            </a>
+          </div>
+        )}
 
         <div className="login-footer">
           <p>Default credentials: admin / admin</p>
