@@ -53,6 +53,65 @@ function formatNumber(num) {
   return num.toString()
 }
 
+// Health color derived from error rate (green < 1%, amber < 5%, red >= 5%)
+function getErrorRateColor(errorRate) {
+  if (errorRate === undefined || errorRate === null || Number.isNaN(errorRate)) {
+    return null
+  }
+  if (errorRate < 1) return '#10b981' // success
+  if (errorRate < 5) return '#f59e0b' // warning
+  return '#ef4444' // error
+}
+
+// Health tier label from error rate
+function getHealthTier(errorRate) {
+  if (errorRate === undefined || errorRate === null || Number.isNaN(errorRate)) {
+    return 'unknown'
+  }
+  if (errorRate < 1) return 'healthy'
+  if (errorRate < 5) return 'degraded'
+  return 'down'
+}
+
+// Loose IPv4/IPv6 detection
+function isIpAddress(value) {
+  if (!value || typeof value !== 'string') return false
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return true
+  if (value.includes(':') && /^[0-9a-fA-F:]+$/.test(value)) return true
+  return false
+}
+
+// Human-friendly reverse-DNS presentation
+function formatResolvedHost(resolvedHost) {
+  if (!resolvedHost) return null
+  return isIpAddress(resolvedHost)
+    ? `resolves to ${resolvedHost}`
+    : `PTR: ${resolvedHost}`
+}
+
+// Extract connection metadata (host/port/scheme/resolved_host) from a node or
+// edge payload, degrading gracefully when the backend omits any field.
+function getConnectionInfo(obj) {
+  if (!obj || typeof obj !== 'object') {
+    return { host: '', port: '', resolvedHost: '', scheme: '' }
+  }
+  return {
+    host: obj.host || '',
+    port: obj.port !== undefined && obj.port !== null ? String(obj.port) : '',
+    resolvedHost: obj.resolved_host || '',
+    scheme: obj.scheme || '',
+  }
+}
+
+// Build a "host:port" label, falling back to whatever identifier is available.
+function buildHostLabel(obj, fallback) {
+  const { host, port } = getConnectionInfo(obj)
+  if (host) {
+    return port ? `${host}:${port}` : host
+  }
+  return fallback
+}
+
 // Get CSS variable color values (matching index.css)
 const COLORS = {
   success: '#10b981',
@@ -133,6 +192,7 @@ const ServiceMap = ({ refreshTrigger }) => {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedNode, setSelectedNode] = useState(null)
+  const [selectedEdge, setSelectedEdge] = useState(null)
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false)
   const [viewMode, setViewMode] = useState('force') // 'force' or 'hierarchical'
   const [timeRange, setTimeRange] = useState('24h')
@@ -145,6 +205,9 @@ const ServiceMap = ({ refreshTrigger }) => {
   const containerRef = useRef(null)
   const networkRef = useRef(null)
   const networkInitializedRef = useRef(false)
+  // Always holds the latest transformed graph data so click handlers registered
+  // once on the network instance can resolve up-to-date node/edge payloads.
+  const graphDataRef = useRef({ nodes: [], edges: [] })
 
   // Load service map data
   const loadServiceMap = useCallback(async (isRefresh = false) => {
@@ -399,19 +462,30 @@ const ServiceMap = ({ refreshTrigger }) => {
       const nodeType = getNodeType(node)
       const color = getNodeColor(nodeType, healthStatus)
       
-      // Calculate node size based on importance
-      const connectionCount = filteredEdges.filter(e => 
+      // Calculate node size based on importance + call volume (log-scaled)
+      const connectionCount = filteredEdges.filter(e =>
         e.from === serviceName || e.to === serviceName
       ).length
+      const callVolume = (node.incoming_calls || 0) + (node.outgoing_calls || 0)
+      const volumeBoost = callVolume > 0 ? Math.log10(callVolume + 1) * 9 : 0
       const baseSize = nodeType === 'service' ? 40 : 30
-      const nodeSize = Math.max(baseSize, Math.min(100, baseSize + connectionCount * 3))
+      const nodeSize = Math.max(
+        baseSize,
+        Math.min(100, baseSize + connectionCount * 2 + volumeBoost)
+      )
       
       // Check if node is isolated (not in any edge)
       const isIsolated = !connectedServices.has(serviceName)
 
-      // Format label with metrics
+      // Connection metadata (host/port/scheme/resolved_host) from backend
+      const conn = getConnectionInfo(node)
+
+      // Format label with metrics. For external dependencies prefer a
+      // "host:port" label when the backend resolved one, else fall back.
       let label = serviceName
-      if (nodeType === 'database') {
+      if (nodeType !== 'service' && conn.host) {
+        label = conn.port ? `${conn.host}:${conn.port}` : conn.host
+      } else if (nodeType === 'database') {
         if (serviceName.startsWith('db:')) {
           label = serviceName.replace('db:', '')
         } else if (serviceName.includes('://')) {
@@ -438,10 +512,22 @@ const ServiceMap = ({ refreshTrigger }) => {
         label = label.substring(0, 22) + '...'
       }
 
+      // Health color from error rate (green<1%, amber<5%, red>=5%) used to
+      // outline external dependency nodes so both type and health are encoded.
+      const errorHealthColor = getErrorRateColor(node.error_rate)
+      const borderColor = (nodeType !== 'service' && errorHealthColor)
+        ? errorHealthColor
+        : COLORS.white
+
       // Build title with complete metrics
+      const resolvedLabel = formatResolvedHost(conn.resolvedHost)
       const title = `${serviceName}\n` +
         `Type: ${nodeType}\n` +
         `Status: ${healthStatus}\n` +
+        (conn.scheme ? `Scheme: ${conn.scheme}\n` : '') +
+        (conn.host ? `Host: ${conn.host}\n` : '') +
+        (conn.port ? `Port: ${conn.port}\n` : '') +
+        (resolvedLabel ? `${resolvedLabel}\n` : '') +
         `Connections: ${connectionCount}\n` +
         (node.total_spans ? `Spans: ${formatNumber(node.total_spans)}\n` : '') +
         (node.avg_duration ? `Avg Latency: ${formatDuration(node.avg_duration)}\n` : '') +
@@ -457,7 +543,7 @@ const ServiceMap = ({ refreshTrigger }) => {
         title: title,
         color: {
           background: color,
-          border: COLORS.white,
+          border: borderColor,
           highlight: {
             background: color,
             border: COLORS.primaryHover,
@@ -470,7 +556,7 @@ const ServiceMap = ({ refreshTrigger }) => {
         },
         shape: getNodeShape(nodeType),
         size: nodeSize,
-        borderWidth: healthStatus === 'down' ? 4 : healthStatus === 'degraded' ? 3 : 2,
+        borderWidth: healthStatus === 'down' ? 4 : healthStatus === 'degraded' ? 3 : (nodeType !== 'service' && errorHealthColor ? 3 : 2),
         data: { ...node, node_type: nodeType },
       }
       
@@ -495,20 +581,32 @@ const ServiceMap = ({ refreshTrigger }) => {
 
     // Create vis-network edges with complete metrics
     const visEdges = filteredEdges.map((edge, idx) => {
-      const healthStatus = edge.health_status || 'healthy'
-      const color = getHealthColor(healthStatus)
-      
-      // Calculate edge width based on call count (thinner arrows)
-      const callCount = edge.call_count || 0
-      const width = Math.max(1, Math.min(4, 1 + (callCount / maxCallCount) * 3))
-      
-      // Create edge label with key metrics
-      const latency = edge.avg_latency_ms || 0
       const errorRate = edge.error_rate || 0
-      const label = `${formatDuration(latency)} | ${errorRate.toFixed(1)}% | ${formatNumber(callCount)}`
+      // Color by health: prefer error-rate tier, fall back to reported status.
+      const errorHealthColor = getErrorRateColor(edge.error_rate)
+      const healthStatus = edge.health_status || getHealthTier(edge.error_rate)
+      const color = errorHealthColor || getHealthColor(healthStatus)
+
+      // Edge width scaled logarithmically by call volume so a few very hot
+      // edges don't flatten everything else to hairlines.
+      const callCount = edge.call_count || 0
+      const width = Math.max(1.5, Math.min(8, 1.5 + Math.log10(callCount + 1) * 2))
+
+      // Create edge label: "<calls> calls · <avg latency>"
+      const latency = edge.avg_latency_ms || 0
+      const label = `${formatNumber(callCount)} calls · ${formatDuration(latency)}`
+
+      // Connection metadata for the tooltip
+      const conn = getConnectionInfo(edge)
+      const resolvedLabel = formatResolvedHost(conn.resolvedHost)
 
       // Build title with complete metrics
       const title = `${edge.from} → ${edge.to}\n` +
+        (edge.dependency_type ? `Type: ${edge.dependency_type}\n` : '') +
+        (conn.scheme ? `Scheme: ${conn.scheme}\n` : '') +
+        (conn.host ? `Host: ${conn.host}\n` : '') +
+        (conn.port ? `Port: ${conn.port}\n` : '') +
+        (resolvedLabel ? `${resolvedLabel}\n` : '') +
         `Avg Latency: ${formatDuration(latency)}\n` +
         (edge.min_latency_ms ? `Min: ${formatDuration(edge.min_latency_ms)}\n` : '') +
         (edge.max_latency_ms ? `Max: ${formatDuration(edge.max_latency_ms)}\n` : '') +
@@ -518,8 +616,7 @@ const ServiceMap = ({ refreshTrigger }) => {
         (edge.success_rate !== undefined ? `Success Rate: ${edge.success_rate.toFixed(2)}%\n` : '') +
         `Call Count: ${formatNumber(callCount)}\n` +
         (edge.throughput ? `Throughput: ${edge.throughput.toFixed(2)} req/s\n` : '') +
-        (edge.bytes_sent || edge.bytes_received ? `Traffic: ${formatBytes((edge.bytes_sent || 0) + (edge.bytes_received || 0))}\n` : '') +
-        (edge.dependency_type ? `Type: ${edge.dependency_type}` : '')
+        (edge.bytes_sent || edge.bytes_received ? `Traffic: ${formatBytes((edge.bytes_sent || 0) + (edge.bytes_received || 0))}` : '')
 
       return {
         id: `edge-${idx}`,

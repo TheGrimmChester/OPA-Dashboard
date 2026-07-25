@@ -2,8 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FiTrendingUp, FiRefreshCw, FiAlertCircle } from 'react-icons/fi'
 import axios from 'axios'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import HelpIcon from './HelpIcon'
+import {
+  gridProps,
+  axisProps,
+  axisLabel,
+  tooltipProps,
+  legendProps,
+  semanticColors,
+  gradientId,
+  VIZ_V2_ENABLED,
+} from '../utils/chartTheme'
 import './PerformanceMetrics.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -115,71 +125,168 @@ function PerformanceMetrics({ autoRefresh = true }) {
             <div className="chart-container">
               <h3>Duration Percentiles <HelpIcon text="P50: 50% of requests complete within this time (median). P95: 95% of requests complete within this time. P99: 99% of requests complete within this time." position="right" /></h3>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={metrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="time" 
-                    tickFormatter={formatTime}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis />
-                  <Tooltip 
-                    labelFormatter={formatTime}
-                    formatter={(value) => `${value.toFixed(2)}ms`}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="p50_duration" stroke="#8884d8" name="P50" />
-                  <Line type="monotone" dataKey="p95_duration" stroke="#82ca9d" name="P95" />
-                  <Line type="monotone" dataKey="p99_duration" stroke="#ff7300" name="P99" />
-                </LineChart>
+                {VIZ_V2_ENABLED ? (
+                  /* Latency/percentiles -> multi-series Line */
+                  <LineChart data={metrics} margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
+                    <CartesianGrid {...gridProps} />
+                    <XAxis
+                      {...axisProps}
+                      dataKey="time"
+                      tickFormatter={formatTime}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis {...axisProps} label={axisLabel('Duration (ms)')} width={70} />
+                    <Tooltip
+                      {...tooltipProps}
+                      labelFormatter={formatTime}
+                      formatter={(value, name) => [`${Number(value).toFixed(2)} ms`, name]}
+                    />
+                    <Legend {...legendProps} />
+                    <Line type="monotone" dataKey="p50_duration" stroke={semanticColors.p50} strokeWidth={2} dot={false} name="P50" />
+                    <Line type="monotone" dataKey="p95_duration" stroke={semanticColors.p95} strokeWidth={2} dot={false} name="P95" />
+                    <Line type="monotone" dataKey="p99_duration" stroke={semanticColors.p99} strokeWidth={2} dot={false} name="P99" />
+                  </LineChart>
+                ) : (
+                  <LineChart data={metrics}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="time"
+                      tickFormatter={formatTime}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis />
+                    <Tooltip
+                      labelFormatter={formatTime}
+                      formatter={(value) => `${value.toFixed(2)}ms`}
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="p50_duration" stroke="#8884d8" name="P50" />
+                    <Line type="monotone" dataKey="p95_duration" stroke="#82ca9d" name="P95" />
+                    <Line type="monotone" dataKey="p99_duration" stroke="#ff7300" name="P99" />
+                  </LineChart>
+                )}
               </ResponsiveContainer>
             </div>
 
             <div className="chart-container">
               <h3>Throughput <HelpIcon text="Number of traces processed per second. Higher values indicate better system performance." position="right" /></h3>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={metrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="time" 
-                    tickFormatter={formatTime}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis />
-                  <Tooltip 
-                    labelFormatter={formatTime}
-                    formatter={(value) => value.toLocaleString()}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="throughput" stroke="#8884d8" name="Traces/sec" />
-                </LineChart>
+                {VIZ_V2_ENABLED ? (
+                  /* Throughput/volume -> filled Area */
+                  <AreaChart data={metrics} margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
+                    <defs>
+                      <linearGradient id={gradientId('throughput')} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={semanticColors.throughput} stopOpacity={0.4} />
+                        <stop offset="95%" stopColor={semanticColors.throughput} stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid {...gridProps} />
+                    <XAxis
+                      {...axisProps}
+                      dataKey="time"
+                      tickFormatter={formatTime}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis {...axisProps} label={axisLabel('Traces / sec')} width={70} />
+                    <Tooltip
+                      {...tooltipProps}
+                      labelFormatter={formatTime}
+                      formatter={(value) => [`${Number(value).toLocaleString()} /sec`, 'Throughput']}
+                    />
+                    <Legend {...legendProps} />
+                    <Area
+                      type="monotone"
+                      dataKey="throughput"
+                      stroke={semanticColors.throughput}
+                      strokeWidth={2}
+                      fill={`url(#${gradientId('throughput')})`}
+                      name="Traces/sec"
+                    />
+                  </AreaChart>
+                ) : (
+                  <LineChart data={metrics}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="time"
+                      tickFormatter={formatTime}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis />
+                    <Tooltip
+                      labelFormatter={formatTime}
+                      formatter={(value) => value.toLocaleString()}
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="throughput" stroke="#8884d8" name="Traces/sec" />
+                  </LineChart>
+                )}
               </ResponsiveContainer>
             </div>
 
             <div className="chart-container">
               <h3>Error Rate <HelpIcon text="Percentage of traces that resulted in errors. Lower values indicate better system reliability." position="right" /></h3>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={metrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="time" 
-                    tickFormatter={formatTime}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis />
-                  <Tooltip 
-                    labelFormatter={formatTime}
-                    formatter={(value) => `${value.toFixed(2)}%`}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="error_rate" stroke="#dc3545" name="Error Rate %" />
-                </LineChart>
+                {VIZ_V2_ENABLED ? (
+                  /* Error rate over time -> filled Area in the error color */
+                  <AreaChart data={metrics} margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
+                    <defs>
+                      <linearGradient id={gradientId('error_rate')} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={semanticColors.error} stopOpacity={0.4} />
+                        <stop offset="95%" stopColor={semanticColors.error} stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid {...gridProps} />
+                    <XAxis
+                      {...axisProps}
+                      dataKey="time"
+                      tickFormatter={formatTime}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis {...axisProps} unit="%" label={axisLabel('Error rate (%)')} width={70} />
+                    <Tooltip
+                      {...tooltipProps}
+                      labelFormatter={formatTime}
+                      formatter={(value) => [`${Number(value).toFixed(2)} %`, 'Error rate']}
+                    />
+                    <Legend {...legendProps} />
+                    <Area
+                      type="monotone"
+                      dataKey="error_rate"
+                      stroke={semanticColors.error}
+                      strokeWidth={2}
+                      fill={`url(#${gradientId('error_rate')})`}
+                      name="Error Rate %"
+                    />
+                  </AreaChart>
+                ) : (
+                  <LineChart data={metrics}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="time"
+                      tickFormatter={formatTime}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis />
+                    <Tooltip
+                      labelFormatter={formatTime}
+                      formatter={(value) => `${value.toFixed(2)}%`}
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="error_rate" stroke="#dc3545" name="Error Rate %" />
+                  </LineChart>
+                )}
               </ResponsiveContainer>
             </div>
           </div>

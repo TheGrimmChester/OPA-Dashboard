@@ -2,6 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import TraceList from './TraceList'
+import {
+  gridProps,
+  axisProps,
+  axisLabel,
+  tooltipProps,
+  legendProps,
+  semanticColors,
+  VIZ_V2_ENABLED,
+} from '../utils/chartTheme'
 import './ServiceDetails.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -117,6 +126,29 @@ function ServiceDetails({ service, onBack, autoRefresh = true }) {
 
           <div className="top-endpoints">
             <h3>Top Endpoints</h3>
+            {VIZ_V2_ENABLED && stats.top_endpoints && stats.top_endpoints.length > 0 && (
+              /* Per-endpoint discrete counts -> horizontal Bar (request vs error counts) */
+              <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                <ResponsiveContainer width="100%" height={Math.max(200, stats.top_endpoints.length * 40)}>
+                  <BarChart
+                    layout="vertical"
+                    data={stats.top_endpoints}
+                    margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
+                  >
+                    <CartesianGrid {...gridProps} vertical horizontal={false} />
+                    <XAxis {...axisProps} type="number" allowDecimals={false} label={axisLabel('Count', 'bottom')} height={48} />
+                    <YAxis {...axisProps} type="category" dataKey="name" width={160} tick={{ ...axisProps.tick, fontSize: 11 }} />
+                    <Tooltip
+                      {...tooltipProps}
+                      formatter={(value, name) => [Number(value).toLocaleString(), name]}
+                    />
+                    <Legend {...legendProps} />
+                    <Bar dataKey="count" fill={semanticColors.p50} name="Requests" radius={[0, 3, 3, 0]} maxBarSize={22} />
+                    <Bar dataKey="error_count" fill={semanticColors.error} name="Errors" radius={[0, 3, 3, 0]} maxBarSize={22} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
             <div className="endpoints-table-container">
               <table className="endpoints-table">
                 <thead>
