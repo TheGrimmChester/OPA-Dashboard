@@ -4,6 +4,8 @@ import { BrowserRouter } from 'react-router-dom'
 import axios from 'axios'
 import App from './App'
 import './index.css'
+import './theme/tokens.css'
+import './theme/ui.css'
 
 // Attach the bearer token to every same-origin API request so pages work when
 // OPA_AUTH_REQUIRED is enabled, without each component wiring headers by hand.
