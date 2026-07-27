@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { FiDatabase, FiHardDrive, FiLayers, FiZap, FiClock, FiActivity, FiTarget } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
@@ -33,6 +34,7 @@ function hitRate(r) {
 
 export default function Databases() {
   const [tab, setTab] = useState('sql')
+  const navigate = useNavigate()
 
   const sql = useApi('/api/sql/queries', { limit: 200, sort: 'execution_count', order: 'desc' })
   const redis = useApi('/api/redis/operations', { limit: 200 })
@@ -118,6 +120,7 @@ export default function Databases() {
             emptyText="No SQL queries captured yet"
             actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>{fmtNum(queries.length)} shown · sortable</span>}>
             <DataTable
+              onRowClick={(r) => r?.fingerprint && navigate(`/sql/${encodeURIComponent(r.fingerprint)}`)}
               columns={sqlColumns} rows={queries}
               rowKey={(r) => r.fingerprint}
               initialSort={{ key: 'execution_count', dir: 'desc' }}

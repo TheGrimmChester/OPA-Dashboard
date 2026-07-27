@@ -68,6 +68,9 @@ const ServiceMapView = lazy(() => import('./pages/ServiceMapView'))
 const BrowserRum = lazy(() => import('./pages/BrowserRum'))
 const ExternalHttp = lazy(() => import('./pages/ExternalHttp'))
 const PerformanceView = lazy(() => import('./pages/PerformanceView'))
+const LiveHub = lazy(() => import('./pages/LiveHub'))
+const SqlQueryDetail = lazy(() => import('./pages/SqlQueryDetail'))
+const ErrorDetail = lazy(() => import('./pages/ErrorDetail'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 
@@ -422,7 +425,7 @@ function App() {
             />
             <Route
               path="/sql/:fingerprint"
-              element={<SqlAnalysis />}
+              element={<SqlQueryDetail />}
             />
             <Route
               path="/http"
@@ -432,38 +435,21 @@ function App() {
               path="/errors"
               element={<ErrorsInbox />}
             />
-            <Route 
-              path="/errors/:errorId" 
-              element={<ErrorAnalysis />} 
+            <Route
+              path="/errors/:errorId"
+              element={<ErrorDetail />}
             />
-            <Route 
-              path="/live" 
-              element={<LiveDashboard />} 
+            <Route
+              path="/live"
+              element={<LiveHub />}
             />
-            <Route 
-              path="/live-dumps" 
-              element={<LiveDumps />} 
-            />
-            <Route 
-              path="/live-logs" 
-              element={<LiveLogs />} 
-            />
-            <Route 
-              path="/live-http" 
-              element={<LiveHttp />} 
-            />
-            <Route 
-              path="/live/service-map" 
-              element={<LiveServiceMap />} 
-            />
-            <Route 
-              path="/live/sql" 
-              element={<LiveSql />} 
-            />
-            <Route 
-              path="/live/redis" 
-              element={<LiveRedis />} 
-            />
+            {/* Legacy live routes now consolidated into the Live hub. */}
+            <Route path="/live-dumps" element={<Navigate to="/live" replace />} />
+            <Route path="/live-logs" element={<Navigate to="/live" replace />} />
+            <Route path="/live-http" element={<Navigate to="/live" replace />} />
+            <Route path="/live/service-map" element={<Navigate to="/live" replace />} />
+            <Route path="/live/sql" element={<Navigate to="/live" replace />} />
+            <Route path="/live/redis" element={<Navigate to="/live" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
