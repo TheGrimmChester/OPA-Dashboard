@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { FiDownload } from 'react-icons/fi'
 import axios from 'axios'
-import './ExportButton.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -43,24 +42,21 @@ function ExportButton({ filters = {}, label = 'Export' }) {
   }
 
   return (
-    <div className="ExportButton">
+    <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
       <select
         value={format}
         onChange={(e) => setFormat(e.target.value)}
-        className="format-select"
+        className="opa-select"
         disabled={exporting}
+        aria-label="Export format"
       >
         <option value="json">JSON</option>
         <option value="csv">CSV</option>
         <option value="ndjson">NDJSON</option>
       </select>
-      <button
-        className="btn btn-secondary export-btn"
-        onClick={handleExport}
-        disabled={exporting}
-      >
-        <FiDownload />
-        {exporting ? 'Exporting...' : label}
+      <button className="opa-btn" onClick={handleExport} disabled={exporting}>
+        <FiDownload size={13} />
+        {exporting ? 'Exporting…' : label}
       </button>
     </div>
   )
