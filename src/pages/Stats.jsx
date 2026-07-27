@@ -10,9 +10,28 @@ import {
   FiTrendingUp,
   FiHardDrive
 } from 'react-icons/fi'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts'
 import { statsApi } from '../services/statsApi'
 import TimeRangePicker from '../components/TimeRangePicker'
 import HelpIcon from '../components/HelpIcon'
+import {
+  gridProps,
+  axisProps,
+  axisLabel,
+  tooltipProps,
+  legendProps,
+  semanticColors,
+  VIZ_V2_ENABLED,
+} from '../utils/chartTheme'
 import './Stats.css'
 
 function Stats({ autoRefresh = true }) {
@@ -221,6 +240,35 @@ function Stats({ autoRefresh = true }) {
                 <h4 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
                   Traces by Service
                 </h4>
+                {VIZ_V2_ENABLED && (
+                  /* Discrete per-service counts -> grouped Bar */
+                  <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart
+                        data={stats.traces.by_service}
+                        margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
+                      >
+                        <CartesianGrid {...gridProps} />
+                        <XAxis
+                          {...axisProps}
+                          dataKey="service"
+                          angle={-30}
+                          textAnchor="end"
+                          height={70}
+                          interval={0}
+                        />
+                        <YAxis {...axisProps} allowDecimals={false} label={axisLabel('Count')} width={70} />
+                        <Tooltip
+                          {...tooltipProps}
+                          formatter={(value, name) => [Number(value).toLocaleString(), name]}
+                        />
+                        <Legend {...legendProps} />
+                        <Bar dataKey="traces" fill={semanticColors.p50} name="Traces" radius={[3, 3, 0, 0]} maxBarSize={48} />
+                        <Bar dataKey="spans" fill={semanticColors.throughput} name="Spans" radius={[3, 3, 0, 0]} maxBarSize={48} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
                 <table className="stats-table">
                   <thead>
                     <tr>

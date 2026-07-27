@@ -360,6 +360,31 @@
   background-color: var(--text-tertiary);
 }
 
+.legend-color.type-function {
+  background-color: var(--color-primary-blue);
+}
+
+.legend-color.type-sql {
+  background-color: var(--color-primary-purple);
+}
+
+.legend-color.type-http {
+  background-color: var(--color-primary-orange);
+}
+
+.legend-color.type-redis {
+  background-color: var(--color-primary-red);
+}
+
+.legend-color.type-cache {
+  background-color: var(--color-primary-green);
+}
+
+.legend-color.type-neutral {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+}
+
 .waterfall-empty {
   text-align: center;
   padding: var(--spacing-2xl);

@@ -1,0 +1,104 @@
+/* ============================================================================
+   OPA design system tokens — dark-first observability console
+   (New Relic One density + Blackfire forensic profiling palette).
+   New pages/components use the tokens below; legacy bg/color var names are
+   aliased at the bottom so existing pages adopt the new theme without edits.
+   ============================================================================ */
+:root {
+  /* ---- background layers ---- */
+  --bg-base: #0B0E14;      /* app canvas */
+  --bg-sunken: #070A0F;    /* code wells, chart plot areas, zebra base */
+  --surface-1: #121722;    /* panels / cards */
+  --surface-2: #1A2130;    /* elevated: popovers, table headers, drawers */
+  --surface-3: #232B3D;    /* row hover / selected */
+
+  /* ---- borders ---- */
+  --border-subtle: #222A38;
+  --border-default: #2E3748;
+  --border-strong: #3C4759;
+  --grid: rgba(255, 255, 255, 0.06);
+
+  /* ---- text ---- */
+  --text-primary: #E6EAF2;
+  --text-secondary: #9AA6BC;
+  --text-muted: #66748C;
+  --text-disabled: #47526A;
+
+  /* ---- accent / brand ---- */
+  --accent: #7C6CFF;
+  --accent-hover: #8F80FF;
+  --accent-press: #6A59F0;
+  --accent-subtle: rgba(124, 108, 255, 0.14);
+  --accent-2: #17C0C0;
+
+  /* ---- status ---- */
+  --ok: #2FD98A;        --ok-dim: rgba(47, 217, 138, 0.14);
+  --warn: #F5C451;      --warn-dim: rgba(245, 196, 81, 0.14);
+  --error: #FF5C6C;     --error-dim: rgba(255, 92, 108, 0.14);
+  --down: #FF3B5B;
+  --info: #4CA9FF;      --info-dim: rgba(76, 169, 255, 0.14);
+  --neutral: #66748C;
+
+  /* ---- categorical chart series ---- */
+  --series-1: #7C6CFF; --series-2: #17C0C0; --series-3: #4CA9FF; --series-4: #2FD98A;
+  --series-5: #F5C451; --series-6: #FF8A5C; --series-7: #FF5C9E; --series-8: #B98CFF;
+
+  /* ---- semantic time/IO breakdown tiers (fixed everywhere) ---- */
+  --tier-app: #7C6CFF;     /* application / PHP */
+  --tier-db: #4CA9FF;      /* SQL / database */
+  --tier-redis: #FF8A5C;   /* redis */
+  --tier-http: #2FD98A;    /* external HTTP */
+  --tier-cache: #F5C451;   /* cache / apcu */
+
+  /* ---- latency percentile lines ---- */
+  --p50: #2FD98A; --p95: #F5C451; --p99: #FF5C6C;
+
+  /* ---- typography ---- */
+  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px;
+  --fs-16: 16px; --fs-20: 20px; --fs-24: 24px; --fs-32: 32px;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+
+  /* ---- spacing (8px baseline) ---- */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-8: 48px;
+  --radius-sm: 4px; --radius: 6px; --radius-lg: 10px;
+  --shadow-drawer: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  /* ---- layout ---- */
+  --rail-w: 220px; --rail-w-collapsed: 56px; --topbar-h: 48px;
+
+  /* ==== legacy alias layer (keeps un-migrated pages on-theme) ==== */
+  --bg-primary: var(--surface-1);
+  --bg-secondary: var(--bg-base);
+  --bg-tertiary: var(--surface-2);
+  --bg-elevated: var(--surface-2);
+  --bg-hover: var(--surface-3);
+  --bg-overlay: rgba(7, 10, 15, 0.7);
+  --border-light: var(--border-default);
+  --border-medium: var(--border-strong);
+  --border-dark: var(--border-subtle);
+  --border-focus: var(--accent);
+  --color-primary: var(--accent);
+  --color-primary-hover: var(--accent-hover);
+  --color-primary-dark: var(--accent-press);
+  --color-primary-light: var(--accent-subtle);
+  --color-primary-blue: var(--info);
+  --color-primary-green: var(--ok);
+  --color-primary-purple: var(--accent);
+  --color-primary-orange: var(--tier-redis);
+  --color-primary-red: var(--error);
+  --color-success: var(--ok); --color-success-light: var(--ok-dim); --color-success-dark: var(--ok);
+  --color-success-bg: var(--ok-dim); --color-success-border: var(--ok);
+  --color-warning: var(--warn); --color-warning-light: var(--warn-dim); --color-warning-dark: var(--warn);
+  --color-warning-bg: var(--warn-dim); --color-warning-border: var(--warn);
+  --color-error: var(--error); --color-error-light: var(--error-dim); --color-error-dark: var(--error);
+  --color-error-bg: var(--error-dim); --color-error-border: var(--error);
+  --color-info: var(--info); --color-info-light: var(--info-dim); --color-info-dark: var(--info);
+  --color-info-bg: var(--info-dim); --color-info-border: var(--info);
+  --font-family-base: var(--font-ui);
+  --font-family-mono: var(--font-mono);
+  --accent-color: var(--accent);
+  --border-color: var(--border-default);
+}
