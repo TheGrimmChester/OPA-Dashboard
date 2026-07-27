@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FiSearch, FiSun, FiRefreshCw, FiCornerDownLeft } from 'react-icons/fi'
 import { NAV_GROUPS } from './SideRail'
 import { useTimeRange } from '../../contexts/TimeRangeContext'
+import { applyTheme } from './ThemeToggle'
 import './CommandPalette.css'
 
 // ---- helpers -------------------------------------------------------------
@@ -28,14 +29,11 @@ function fuzzy(text, q) {
   return true
 }
 
-// THEME CONTRACT: dark is the default (no attribute); light = data-theme="light"
-// on <html>; persisted in localStorage "opa_theme" ("light"|"dark", absent=dark).
+// Flip the theme through the shared applyTheme() so the TopBar ThemeToggle
+// (and other tabs) re-sync — no stale icon / dead click.
 function toggleTheme() {
-  const current = localStorage.getItem('opa_theme') || 'dark'
-  const next = current === 'light' ? 'dark' : 'light'
-  if (next === 'light') document.documentElement.setAttribute('data-theme', 'light')
-  else document.documentElement.removeAttribute('data-theme')
-  localStorage.setItem('opa_theme', next)
+  const current = document.documentElement.getAttribute('data-theme') || 'dark'
+  applyTheme(current === 'light' ? 'dark' : 'light')
 }
 
 const IS_MAC = /mac|iphone|ipad|ipod/i.test(
@@ -110,13 +108,18 @@ export default function CommandPalette() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Reset query + selection and focus the input each time the palette opens.
+  // Reset query + selection and focus the input each time the palette opens;
+  // restore focus to the previously-focused element when it closes.
   useEffect(() => {
     if (!open) return
+    const prevFocus = document.activeElement
     setQuery('')
     setSelected(0)
     const id = requestAnimationFrame(() => inputRef.current?.focus())
-    return () => cancelAnimationFrame(id)
+    return () => {
+      cancelAnimationFrame(id)
+      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus()
+    }
   }, [open])
 
   // Keep the highlighted row in view while arrowing through results.
