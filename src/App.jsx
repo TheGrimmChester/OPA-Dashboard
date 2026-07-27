@@ -71,6 +71,7 @@ const PerformanceView = lazy(() => import('./pages/PerformanceView'))
 const LiveHub = lazy(() => import('./pages/LiveHub'))
 const SqlQueryDetail = lazy(() => import('./pages/SqlQueryDetail'))
 const ErrorDetail = lazy(() => import('./pages/ErrorDetail'))
+const KeyTransactions = lazy(() => import('./pages/KeyTransactions'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 
@@ -368,6 +369,10 @@ function App() {
               element={<ServiceDetail />}
             />
             <Route
+              path="/key-transactions"
+              element={<KeyTransactions />}
+            />
+            <Route
               path="/traces"
               element={<TraceExplorer />}
             />
@@ -383,10 +388,8 @@ function App() {
               path="/traces/:traceId"
               element={<TraceDetail />}
             />
-            <Route
-              path="/traces/:traceId/flame"
-              element={<TraceView />}
-            />
+            {/* Legacy flame route folded into the Trace Detail waterfall. */}
+            <Route path="/traces/:traceId/flame" element={<Navigate to="/traces" replace />} />
             <Route 
               path="/compare" 
               element={<CompareTraces />} 
@@ -395,10 +398,8 @@ function App() {
               path="/performance"
               element={<PerformanceView />}
             />
-            <Route
-              path="/network"
-              element={<NetworkView autoRefresh={autoRefresh} />}
-            />
+            {/* Network folded into Performance (bandwidth panels) + Trace Detail I/O. */}
+            <Route path="/network" element={<Navigate to="/performance" replace />} />
             <Route
               path="/profiling"
               element={<ProfilingView />}
