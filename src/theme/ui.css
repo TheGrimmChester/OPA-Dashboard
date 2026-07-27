@@ -29,7 +29,7 @@
 .opa-rail-collapse:hover { color: var(--text-primary); }
 
 .opa-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.opa-topbar { position: sticky; top: 0; z-index: 20; height: var(--topbar-h); display: flex; align-items: center; gap: var(--sp-4); padding: 0 var(--sp-4); background: rgba(11,14,20,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border-subtle); overflow: hidden; }
+.opa-topbar { position: sticky; top: 0; z-index: 30; height: var(--topbar-h); display: flex; align-items: center; gap: var(--sp-4); padding: 0 var(--sp-4); background: color-mix(in srgb, var(--bg-base) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border-subtle); }
 .opa-breadcrumb { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-13); color: var(--text-secondary); flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
 .opa-breadcrumb a { color: var(--text-secondary); text-decoration: none; flex: 0 0 auto; }
 .opa-breadcrumb a:hover { color: var(--text-primary); }
