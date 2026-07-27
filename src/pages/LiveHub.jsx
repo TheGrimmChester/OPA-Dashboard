@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { FiRadio, FiPause, FiPlay, FiActivity, FiDatabase, FiHardDrive, FiGlobe, FiShare2 } from 'react-icons/fi'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { FiRadio, FiPause, FiPlay, FiActivity, FiDatabase, FiHardDrive, FiGlobe, FiShare2, FiCode } from 'react-icons/fi'
 import { usePolling } from '../hooks/useApi'
 import { Panel, DataTable, Tabs, StatusPill, HealthDot, Badge, InlineBar, SegmentedControl } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus, errorRateStatus } from '../theme/format'
@@ -10,6 +10,7 @@ const TABS = [
   { value: 'sql', label: 'SQL', icon: <FiDatabase size={13} />, path: '/api/sql/queries', params: { limit: 25 }, key: 'queries' },
   { value: 'redis', label: 'Redis', icon: <FiHardDrive size={13} />, path: '/api/redis/operations', params: { limit: 25 }, key: 'operations' },
   { value: 'http', label: 'HTTP', icon: <FiGlobe size={13} />, path: '/api/http-calls', params: { limit: 25 }, key: 'http_calls' },
+  { value: 'dumps', label: 'Dumps', icon: <FiCode size={13} />, path: '/api/dumps', params: { limit: 100 }, key: 'dumps' },
   { value: 'map', label: 'Service Map', icon: <FiShare2 size={13} />, path: '/api/service-map', params: {}, key: 'edges' },
 ]
 
@@ -19,7 +20,10 @@ const INTERVALS = [
 
 export default function LiveHub() {
   const navigate = useNavigate()
-  const [tab, setTab] = useState('traces')
+  const [searchParams] = useSearchParams()
+  // Deep-link support: /live?tab=dumps (also how the legacy /live-dumps route lands here).
+  const requested = searchParams.get('tab')
+  const [tab, setTab] = useState(TABS.some((t) => t.value === requested) ? requested : 'traces')
   const [paused, setPaused] = useState(false)
   const [intervalMs, setIntervalMs] = useState(5000)
   const active = TABS.find((t) => t.value === tab)
@@ -60,6 +64,16 @@ export default function LiveHub() {
       { key: 'avg_duration', header: 'Avg', num: true, render: (r) => fmtMs(r.avg_duration) },
       { key: 'error_rate', header: 'Err %', num: true, render: (r) => <span style={{ color: `var(--${errorRateStatus(r.error_rate)})` }}>{fmtPct(r.error_rate)}</span> },
     ],
+    dumps: [
+      { key: 'span_start_ts', header: 'When', num: true, width: 90, render: (r) => <span className="opa-muted">{fmtAgo(r.span_start_ts)}</span> },
+      { key: 'service', header: 'Service', render: (r) => <span className="opa-row"><HealthDot tone="neutral" />{r.service}</span> },
+      { key: 'span_name', header: 'Span', render: (r) => <span className="opa-muted">{r.span_name || '—'}</span> },
+      { key: 'location', header: 'Location', sortable: false, render: (r) => <span className="opa-muted opa-mono">{r.file ? `${String(r.file).split('/').pop()}${r.line ? ':' + r.line : ''}` : '—'}</span> },
+      { key: 'dump', header: 'Dump', sortable: false, render: (r) => {
+        const preview = r.text || (r.data != null ? (typeof r.data === 'string' ? r.data : JSON.stringify(r.data)) : '')
+        return <span className="opa-mono" style={{ display: 'block', maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--tier-app)' }}>{preview || '—'}</span>
+      } },
+    ],
     map: [
       { key: 'from', header: 'From → To', render: (r) => <span className="opa-mono">{r.from} <span className="opa-muted">→</span> {r.dependency_target || r.to}</span> },
       { key: 'host', header: 'Host:Port', render: (r) => <span className="opa-muted opa-mono">{r.host ? `${r.host}${r.port ? ':' + r.port : ''}` : '—'}</span> },
@@ -99,8 +113,8 @@ export default function LiveHub() {
         <DataTable
           columns={columnsByTab[tab]}
           rows={rows}
-          rowKey={(r, i) => r.trace_id || `${r.fingerprint || r.command || r.url || r.from}-${i}`}
-          onRowClick={tab === 'traces' ? (r) => navigate(`/traces/${r.trace_id}`) : undefined}
+          rowKey={(r, i) => r.id || r.trace_id || `${r.fingerprint || r.command || r.url || r.from}-${i}`}
+          onRowClick={(tab === 'traces' || tab === 'dumps') ? (r) => navigate(`/traces/${r.trace_id}`) : undefined}
         />
       </Panel>
     </div>

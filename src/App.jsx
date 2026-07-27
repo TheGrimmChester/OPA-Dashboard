@@ -174,7 +174,7 @@ function App() {
               element={<LiveHub />}
             />
             {/* Legacy live routes now consolidated into the Live hub. */}
-            <Route path="/live-dumps" element={<Navigate to="/live" replace />} />
+            <Route path="/live-dumps" element={<Navigate to="/live?tab=dumps" replace />} />
             <Route path="/live-logs" element={<Navigate to="/live" replace />} />
             <Route path="/live-http" element={<Navigate to="/live" replace />} />
             <Route path="/live/service-map" element={<Navigate to="/live" replace />} />
