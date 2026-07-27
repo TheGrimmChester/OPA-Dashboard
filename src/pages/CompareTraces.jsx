@@ -3,6 +3,7 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { FiArrowLeft, FiShuffle, FiDownload, FiRefreshCw, FiGitBranch, FiClock } from 'react-icons/fi'
 import axios from 'axios'
 import ProfileComparison from '../components/ProfileComparison'
+import CohortCompare from '../components/CohortCompare'
 import CopyToClipboard from '../components/CopyToClipboard'
 import ShareButton from '../components/ShareButton'
 import { useApi } from '../hooks/useApi'
@@ -51,6 +52,7 @@ export default function CompareTraces() {
   const [error1, setError1] = useState(null)
   const [error2, setError2] = useState(null)
   const [viewMode, setViewMode] = useState(searchParams.get('mode') || 'diff')
+  const [compareMode, setCompareMode] = useState(searchParams.get('cmp') === 'cohort' ? 'cohort' : 'trace')
 
   // Recent traces for input suggestions (same endpoint + params as before).
   const recent = useApi('/api/traces', { limit: 20 }, { noRange: true })
@@ -111,8 +113,10 @@ export default function CompareTraces() {
     else params.delete('trace2')
     if (viewMode && viewMode !== 'diff') params.set('mode', viewMode)
     else params.delete('mode')
+    if (compareMode === 'cohort') params.set('cmp', 'cohort')
+    else params.delete('cmp')
     setSearchParams(params, { replace: true })
-  }, [trace1Id, trace2Id, viewMode, searchParams, setSearchParams])
+  }, [trace1Id, trace2Id, viewMode, compareMode, searchParams, setSearchParams])
 
   // Auto-load traces from URL params on mount
   useEffect(() => {
@@ -217,15 +221,31 @@ export default function CompareTraces() {
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
-          <h1 className="opa-page-title">Compare Traces</h1>
-          <div className="opa-page-sub">Side-by-side profile diff between two traces</div>
+          <h1 className="opa-page-title">Compare</h1>
+          <div className="opa-page-sub">
+            {compareMode === 'cohort'
+              ? 'Compare a transaction’s speed across runtimes, versions or services'
+              : 'Side-by-side profile diff between two traces'}
+          </div>
         </div>
         <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
-          {bothLoaded && <ShareButton />}
+          <SegmentedControl
+            options={[
+              { value: 'trace', label: 'By trace' },
+              { value: 'cohort', label: 'By cohort' },
+            ]}
+            value={compareMode}
+            onChange={setCompareMode}
+          />
+          {compareMode === 'trace' && bothLoaded && <ShareButton />}
           <Link to="/traces" className="opa-btn ghost"><FiArrowLeft /> Back to Traces</Link>
         </div>
       </div>
 
+      {compareMode === 'cohort' ? (
+        <CohortCompare />
+      ) : (
+      <>
       <div className="opa-grid cols-2">
         {renderSelector('Trace A · Baseline', 'trace1', trace1Id, setTrace1Id, loading1, error1, fetchTrace1, trace1, 'recent-traces-1')}
         {renderSelector('Trace B · New', 'trace2', trace2Id, setTrace2Id, loading2, error2, fetchTrace2, trace2, 'recent-traces-2')}
@@ -291,6 +311,8 @@ export default function CompareTraces() {
             </div>
           )}
         </Panel>
+      )}
+      </>
       )}
     </div>
   )
