@@ -2,7 +2,7 @@ import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
-  FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiGrid,
+  FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiGrid, FiTarget,
   FiChevronsLeft, FiChevronsRight,
 } from 'react-icons/fi'
 
@@ -12,6 +12,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/', label: 'Overview', icon: FiGrid, exact: true },
       { to: '/services', label: 'Services', icon: FiServer },
+      { to: '/key-transactions', label: 'Key Transactions', icon: FiTarget },
       { to: '/traces', label: 'Traces', icon: FiActivity },
       { to: '/profiling', label: 'Profiling', icon: FiCpu },
       { to: '/errors', label: 'Errors', icon: FiAlertCircle },
