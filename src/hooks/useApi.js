@@ -8,7 +8,7 @@ const API = import.meta.env.VITE_API_URL || ''
 // re-fetching when the range, the manual refresh tick, or params change.
 // opts.noRange disables from/to injection. opts.skip defers the call.
 export function useApi(path, params = {}, opts = {}) {
-  const { from, to, tick } = useTimeRange()
+  const { from, to, interval, tick } = useTimeRange()
   const [state, setState] = useState({ data: null, loading: true, error: null })
   const paramsKey = JSON.stringify(params)
   const skip = opts.skip
@@ -17,7 +17,10 @@ export function useApi(path, params = {}, opts = {}) {
     if (skip || !path) { setState({ data: null, loading: false, error: null }); return }
     setState((s) => ({ ...s, loading: true, error: null }))
     try {
-      const merged = opts.noRange ? params : { from, to, ...params }
+      // interval only affects the /api/metrics/* time-series endpoints; other
+      // handlers ignore the unknown param, so injecting it globally is safe and
+      // keeps short-range charts dense.
+      const merged = opts.noRange ? params : { from, to, interval, ...params }
       const res = await axios.get(`${API}${path}`, { params: merged, signal })
       setState({ data: res.data, loading: false, error: null })
     } catch (e) {
@@ -25,7 +28,7 @@ export function useApi(path, params = {}, opts = {}) {
       setState({ data: null, loading: false, error: e.response?.data?.error || e.response?.data || e.message || 'Request failed' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, paramsKey, from, to, skip, opts.noRange])
+  }, [path, paramsKey, from, to, interval, skip, opts.noRange])
 
   useEffect(() => {
     const ctrl = new AbortController()

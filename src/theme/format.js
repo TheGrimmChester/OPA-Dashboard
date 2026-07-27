@@ -43,7 +43,9 @@ export function fmtRpm(v) {
 export function fmtAgo(ts) {
   if (!ts) return '—'
   const t = typeof ts === 'number' ? ts : Date.parse(ts)
-  if (isNaN(t)) return '—'
+  // Treat missing/epoch-zero sentinels (e.g. "1970-01-01 00:00:00") as no data
+  // rather than rendering a nonsensical "20000d ago".
+  if (isNaN(t) || t < 946684800000) return '—'
   const s = Math.max(0, (Date.now() - t) / 1000)
   if (s < 60) return `${Math.floor(s)}s ago`
   if (s < 3600) return `${Math.floor(s / 60)}m ago`
