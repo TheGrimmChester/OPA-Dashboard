@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { FiGlobe, FiActivity, FiClock, FiAlertTriangle, FiHardDrive } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
@@ -13,8 +14,22 @@ const SORTS = [
 ]
 
 export default function ExternalHttp() {
+  const navigate = useNavigate()
   const [sort, setSort] = useState('call_count')
   const [service, setService] = useState('all')
+
+  // Drill into the enriched HTTP-endpoint detail page (aggregate KPIs + sample
+  // traces + a "view all matching traces" link into the Trace Explorer),
+  // mirroring the SQL fingerprint drill. Prefer the full URL; else build a
+  // "METHOD /path" key the detail page filters on by url_path. Carry the row's
+  // aggregate rollup via router state so the KPIs are accurate over the range.
+  const drillToEndpoint = (r) => {
+    const key = r?.url
+      ? r.url
+      : (r?.request_uri ? `${r?.method || 'GET'} ${r.request_uri}` : null)
+    if (!key) return
+    navigate(`/http/${encodeURIComponent(key)}`, { state: { agg: r } })
+  }
 
   const q = useApi('/api/http-calls', { limit: 200, sort, order: 'desc' })
   const calls = q.data?.http_calls || []
@@ -132,6 +147,7 @@ export default function ExternalHttp() {
           </div>
         }>
         <DataTable
+          onRowClick={drillToEndpoint}
           columns={columns}
           rows={rows}
           rowKey={(r, i) => `${r?.method}|${r?.url}|${r?.service}|${i}`}

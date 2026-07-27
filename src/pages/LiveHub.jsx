@@ -31,6 +31,26 @@ export default function LiveHub() {
   const { data, loading, error } = usePolling(active.path, intervalMs, active.params, { paused })
   const rows = (data?.[active.key]) || []
 
+  // Drill a live row into the matching filtered Trace Explorer (or a detail view).
+  const toTraces = (filter) => navigate('/traces?' + new URLSearchParams({ filter }).toString())
+  const handleRowClick = (r) => {
+    if (tab === 'traces' || tab === 'dumps') return navigate(`/traces/${r.trace_id}`)
+    if (tab === 'sql') {
+      if (r.fingerprint) return navigate(`/sql/${encodeURIComponent(r.fingerprint)}`)
+      if (r.query_fingerprint) return toTraces(`query_fingerprint:"${r.query_fingerprint}"`)
+      return
+    }
+    if (tab === 'http') {
+      const url = r.url || r.request_uri
+      if (url) return toTraces(`http.url:"${url}"`)
+      return
+    }
+    if (tab === 'redis') {
+      if (r.command) return toTraces(`redis.command:"${r.command}"`)
+      return
+    }
+  }
+
   const columnsByTab = {
     traces: [
       { key: 'trace_id', header: 'Trace', mono: true, render: (r) => <span className="cell-strong opa-mono">{String(r.trace_id).slice(0, 16)}</span> },
@@ -114,7 +134,7 @@ export default function LiveHub() {
           columns={columnsByTab[tab]}
           rows={rows}
           rowKey={(r, i) => r.id || r.trace_id || `${r.fingerprint || r.command || r.url || r.from}-${i}`}
-          onRowClick={(tab === 'traces' || tab === 'dumps') ? (r) => navigate(`/traces/${r.trace_id}`) : undefined}
+          onRowClick={tab === 'map' ? undefined : handleRowClick}
         />
       </Panel>
     </div>

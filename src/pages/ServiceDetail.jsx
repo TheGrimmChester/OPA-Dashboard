@@ -168,6 +168,16 @@ export default function ServiceDetail() {
         <DataTable
           columns={epColumns} rows={endpoints} rowKey={(r, i) => r.name || i}
           initialSort={{ key: 'count', dir: 'desc' }}
+          onRowClick={(r) => {
+            // Outbound endpoint (has a host) -> match by http.url; inbound -> match by
+            // url_path when present, else by span name. Always scoped to this service.
+            const filter = r.url_host
+              ? `http.url:"${r.name}"`
+              : r.url_path
+                ? `url_path:"${r.url_path}"`
+                : `name:"${r.name}"`
+            navigate('/traces?' + new URLSearchParams({ service: svc, filter }).toString())
+          }}
         />
       </Panel>
 
@@ -178,6 +188,7 @@ export default function ServiceDetail() {
         <DataTable
           columns={httpColumns} rows={httpCalls} rowKey={(r, i) => `${r.method || ''}-${r.url || i}`}
           initialSort={{ key: 'call_count', dir: 'desc' }}
+          onRowClick={(r) => navigate('/traces?' + new URLSearchParams({ filter: `http.url:"${r.url}"` }).toString())}
         />
       </Panel>
     </div>

@@ -43,6 +43,7 @@ const ErrorsInbox = lazy(() => import('./pages/ErrorsInbox'))
 const ServiceMapView = lazy(() => import('./pages/ServiceMapView'))
 const BrowserRum = lazy(() => import('./pages/BrowserRum'))
 const ExternalHttp = lazy(() => import('./pages/ExternalHttp'))
+const HttpEndpointDetail = lazy(() => import('./pages/HttpEndpointDetail'))
 const PerformanceView = lazy(() => import('./pages/PerformanceView'))
 const LiveHub = lazy(() => import('./pages/LiveHub'))
 const SqlQueryDetail = lazy(() => import('./pages/SqlQueryDetail'))
@@ -163,6 +164,10 @@ function App() {
             <Route
               path="/http"
               element={<ExternalHttp />}
+            />
+            <Route
+              path="/http/:endpoint"
+              element={<HttpEndpointDetail />}
             />
             <Route
               path="/slos"

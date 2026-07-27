@@ -144,6 +144,13 @@ export default function Databases() {
             emptyText="No Redis operations captured yet"
             actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>{fmtNum(ops.length)} shown · sortable</span>}>
             <DataTable
+              onRowClick={(r) => {
+                if (!r?.command) return
+                const filter = r.key
+                  ? `redis.command:"${r.command}" AND redis.key:"${r.key}"`
+                  : `redis.command:"${r.command}"`
+                navigate('/traces?' + new URLSearchParams({ filter }).toString())
+              }}
               columns={redisColumns} rows={ops}
               rowKey={(r, i) => `${r.command}:${r.key}:${i}`}
               initialSort={{ key: 'execution_count', dir: 'desc' }}

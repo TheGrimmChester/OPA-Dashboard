@@ -40,9 +40,21 @@ export function fmtRpm(v) {
 }
 
 // Relative time for "last seen" style columns.
+// Agent timestamps are naive UTC ("YYYY-MM-DD HH:MM:SS[.mmm]"). Date.parse reads
+// that space-separated form as LOCAL time, skewing "ago" by the viewer's UTC
+// offset (e.g. a just-created row shows "2h ago" in UTC+2). Mark it UTC so it's
+// parsed correctly; leave numbers and already-zoned ISO strings untouched.
+export function toUtcIso(ts) {
+  if (typeof ts !== 'string') return ts
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(ts) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(ts)) {
+    return ts.replace(' ', 'T') + 'Z'
+  }
+  return ts
+}
+
 export function fmtAgo(ts) {
   if (!ts) return '—'
-  const t = typeof ts === 'number' ? ts : Date.parse(ts)
+  const t = typeof ts === 'number' ? ts : Date.parse(toUtcIso(ts))
   // Treat missing/epoch-zero sentinels (e.g. "1970-01-01 00:00:00") as no data
   // rather than rendering a nonsensical "20000d ago".
   if (isNaN(t) || t < 946684800000) return '—'
