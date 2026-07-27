@@ -51,6 +51,9 @@ const KeyTransactions = lazy(() => import('./pages/KeyTransactions'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
+const Slos = lazy(() => import('./pages/Slos'))
+const Alerts = lazy(() => import('./pages/Alerts'))
+const Anomalies = lazy(() => import('./pages/Anomalies'))
 
 function App() {
   const [filters, setFilters] = useState({})
@@ -160,6 +163,18 @@ function App() {
             <Route
               path="/http"
               element={<ExternalHttp />}
+            />
+            <Route
+              path="/slos"
+              element={<Slos />}
+            />
+            <Route
+              path="/alerts"
+              element={<Alerts />}
+            />
+            <Route
+              path="/anomalies"
+              element={<Anomalies />}
             />
             <Route
               path="/errors"
