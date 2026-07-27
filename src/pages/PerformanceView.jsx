@@ -154,7 +154,9 @@ export default function PerformanceView() {
             <span className="opa-muted">/</span>{' '}
             <span style={{ color: 'var(--tier-db)' }}>↓{fmtBytes(totalIn)}</span>
           </span>}>
-          <TimeSeriesChart data={nm} stacked series={[
+          {/* Unstack when comparing so the dashed prev lines (which don't
+              stack) share the current series' zero baseline and stay aligned. */}
+          <TimeSeriesChart data={nm} stacked={!compare} series={[
             { key: 'bytes_sent', name: 'Sent', color: 'var(--tier-app)', type: 'area' },
             { key: 'bytes_received', name: 'Received', color: 'var(--tier-db)', type: 'area' },
             ...(compare ? [prevLine('bytes_sent_prev', 'Sent'), prevLine('bytes_received_prev', 'Received')] : []),

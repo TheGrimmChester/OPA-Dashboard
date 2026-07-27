@@ -65,9 +65,14 @@
   --neutral: #64708A;
 
   /* ---- semantic time/IO breakdown tiers ----
-     tier-app / tier-db / tier-redis / tier-http stay vivid (thick stacked-bar
-     fills). Only tier-cache is darkened: its dark-theme value (#F5C451) is a
-     pale yellow that all but vanishes as a legend swatch or label on white. */
+     The dark-theme tier hues are pale on white and fail as TEXT / thin lines
+     (they're used as colored byte totals, metastat values and chart strokes,
+     not only as thick fills). Darken each to ~AA on white while preserving its
+     hue so app=indigo, db=blue, redis=orange, http=green, cache=gold. */
+  --tier-app: #6355E0;
+  --tier-db: #1C74C4;
+  --tier-redis: #C2540F;
+  --tier-http: #0C8F58;
   --tier-cache: #B5820A;
 
   /* ---- latency percentile lines ----
