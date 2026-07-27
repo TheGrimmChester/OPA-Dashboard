@@ -39,7 +39,6 @@ export const NAV_GROUPS = [
     label: 'Admin',
     items: [
       { to: '/users', label: 'Users & Roles', icon: FiUsers },
-      { to: '/api-keys', label: 'API Keys', icon: FiKey },
     ],
   },
 ]
