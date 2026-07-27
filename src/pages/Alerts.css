@@ -1,0 +1,56 @@
+/* Alerts page — create/edit form grid + firing-history rows.
+   Layout only; every color comes from a design-system token. */
+
+.alerts-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-3);
+  align-items: end;
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.alerts-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.alerts-field > label {
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+}
+.alerts-field .opa-input,
+.alerts-field .opa-select { width: 100%; }
+.alerts-field.wide { grid-column: span 2; }
+.alerts-form-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  justify-content: flex-end;
+}
+.alerts-form-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+  margin-right: auto;
+  cursor: pointer;
+}
+@media (max-width: 900px) { .alerts-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .alerts-form { grid-template-columns: 1fr; }
+  .alerts-field.wide { grid-column: auto; }
+}
+
+.alerts-actions { display: inline-flex; gap: 4px; justify-content: flex-end; }
+.alerts-vt { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.alerts-hist-msg {
+  color: var(--text-secondary);
+  display: block;
+  max-width: 460px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

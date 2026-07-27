@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiAlertTriangle, FiLayers, FiRepeat, FiServer, FiFilter } from 'react-icons/fi'
+import { FiAlertTriangle, FiLayers, FiRepeat, FiServer, FiFilter, FiCheck, FiSlash, FiRotateCcw } from 'react-icons/fi'
+import axios from 'axios'
 import { useApi } from '../hooks/useApi'
-import { Panel, KpiTile, DataTable, InlineBar, Badge, StatusPill } from '../components/ui'
+import { Panel, KpiTile, DataTable, InlineBar, Badge, StatusPill, SegmentedControl } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
+
+const API = import.meta.env.VITE_API_URL || ''
 
 // API timestamps come as "2026-07-25 08:10:29.000" — normalize so Date.parse is reliable.
 const parseTs = (ts) => {
@@ -13,10 +16,24 @@ const parseTs = (ts) => {
 }
 const ago = (ts) => fmtAgo(parseTs(ts))
 
+// Real group status → pill tone. unresolved = actionable (error), resolved = ok, ignored = muted.
+const STATUS_TONE = { unresolved: 'error', resolved: 'ok', ignored: 'neutral' }
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'unresolved', label: 'Unresolved' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'ignored', label: 'Ignored' },
+]
+
 export default function ErrorsInbox() {
   const navigate = useNavigate()
-  const q = useApi('/api/errors', { limit: 500 })
+  // Default to the actionable inbox. 'all' means "no server filter" → status undefined.
+  const [statusFilter, setStatusFilter] = useState('unresolved')
+  const q = useApi('/api/errors', { limit: 500, status: statusFilter === 'all' ? undefined : statusFilter })
   const [service, setService] = useState('all')
+  const [busyId, setBusyId] = useState(null)
+  const [mutErr, setMutErr] = useState('')
 
   const errors = q.data?.errors || []
 
@@ -34,6 +51,21 @@ export default function ErrorsInbox() {
   const totalOccurrences = rows.reduce((sum, e) => sum + (e?.count || 0), 0)
   const affectedServices = new Set(rows.map((e) => e?.service).filter(Boolean)).size
   const maxCount = Math.max(1, ...rows.map((e) => e?.count || 0))
+
+  // Persist a new group status, then refresh the list so filtered-out rows drop away.
+  const changeStatus = async (groupId, status, e) => {
+    e?.stopPropagation()
+    if (!groupId) return
+    setBusyId(groupId); setMutErr('')
+    try {
+      await axios.post(`${API}/api/errors/groups/${encodeURIComponent(groupId)}/status`, { status })
+      q.reload()
+    } catch (err) {
+      setMutErr(err.response?.data?.error || err.response?.data || err.message || 'Failed to update status')
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   const columns = [
     {
@@ -87,8 +119,34 @@ export default function ErrorsInbox() {
     {
       key: 'status',
       header: 'Status',
-      sortValue: () => 0,
-      render: () => <StatusPill tone="error">error</StatusPill>,
+      sortValue: (r) => r?.status || '',
+      render: (r) => <StatusPill tone={STATUS_TONE[r?.status] || 'neutral'}>{r?.status || 'unknown'}</StatusPill>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      sortable: false,
+      render: (r) => {
+        const gid = r?.group_id ?? r?.error_id
+        const busy = busyId === gid
+        const btnStyle = { padding: '2px 8px', fontSize: 'var(--fs-11)' }
+        return (
+          <div className="opa-row" style={{ gap: 6, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
+            {r?.status !== 'resolved' && (
+              <button className="opa-btn ghost" style={btnStyle} disabled={busy} title="Mark resolved"
+                onClick={(e) => changeStatus(gid, 'resolved', e)}><FiCheck size={12} /> Resolve</button>
+            )}
+            {r?.status !== 'ignored' && (
+              <button className="opa-btn ghost" style={btnStyle} disabled={busy} title="Ignore this group"
+                onClick={(e) => changeStatus(gid, 'ignored', e)}><FiSlash size={12} /> Ignore</button>
+            )}
+            {r?.status !== 'unresolved' && (
+              <button className="opa-btn ghost" style={btnStyle} disabled={busy} title="Reopen"
+                onClick={(e) => changeStatus(gid, 'unresolved', e)}><FiRotateCcw size={12} /> Reopen</button>
+            )}
+          </div>
+        )
+      },
     },
   ]
 
@@ -101,7 +159,8 @@ export default function ErrorsInbox() {
             {totalGroups} error group{totalGroups === 1 ? '' : 's'} across {affectedServices} service{affectedServices === 1 ? '' : 's'}
           </div>
         </div>
-        <div className="opa-row">
+        <div className="opa-row" style={{ gap: 'var(--sp-3)' }}>
+          <SegmentedControl options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} />
           <label className="opa-row" style={{ gap: 6, fontSize: 'var(--fs-12)' }}>
             <FiFilter size={12} className="opa-muted" />
             <select
@@ -132,7 +191,9 @@ export default function ErrorsInbox() {
         error={q.error}
         empty={!q.loading && rows.length === 0}
         emptyText="No errors in this range"
-        actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>click a row to analyze</span>}
+        actions={mutErr
+          ? <span style={{ color: 'var(--error)', fontSize: 'var(--fs-12)' }}>{String(mutErr)}</span>
+          : <span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>click a row to analyze</span>}
       >
         <DataTable
           columns={columns}
