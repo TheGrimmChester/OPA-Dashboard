@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   FiGlobe, FiClock, FiAlertTriangle, FiEye, FiZap, FiActivity, FiLayers,
 } from 'react-icons/fi'
@@ -49,9 +50,21 @@ function CoreWebVitalCard({ label, name, vital }) {
 }
 
 export default function BrowserRum() {
+  const navigate = useNavigate()
   const rum = useApi('/api/rum/metrics')
   const detail = useApi('/api/rum/detail')
   const [tab, setTab] = useState('resources')
+
+  // Correlate a browser AJAX call to the backend traces that served it, matched
+  // on request path (the beacon records the full URL; backend spans key on
+  // url_path). Resources (static assets) and page views (session-keyed, not
+  // trace-backed) have no trace target, so only the AJAX tab is drillable.
+  const drillAjax = (r) => {
+    if (!r?.url) return
+    let path = r.url
+    try { path = new URL(r.url, window.location.origin).pathname } catch { /* keep raw */ }
+    navigate('/traces?' + new URLSearchParams({ filter: `url_path:"${path}"` }).toString())
+  }
   const d = rum.data || {}
   const cwv = d.core_web_vitals || {}
   const dd = detail.data || {}
@@ -153,6 +166,7 @@ export default function BrowserRum() {
           ? <EmptyState icon={<FiGlobe />} title="No RUM detail in range"
               hint="Include public/rum.js in your app to start capturing resource timing, AJAX calls and page views." />
           : <DataTable columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
+              onRowClick={tab === 'ajax' ? drillAjax : undefined}
               initialSort={{ key: 'count', dir: 'desc' }} maxHeight={420} />}
       </Panel>
     </div>
