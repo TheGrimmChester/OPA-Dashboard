@@ -14,7 +14,7 @@ import {
   Panel, KpiTile, DataTable, InlineBar, StatusPill, SegmentedControl,
 } from '../components/ui'
 import {
-  fmtMs, fmtBytes, fmtNum, fmtPct, tierColor, latencyStatus, errorRateStatus,
+  fmtMs, fmtBytes, fmtNum, fmtPct, fmtAgo, tierColor, latencyStatus, errorRateStatus,
 } from '../theme/format'
 import './ServiceMapView.css'
 
@@ -342,7 +342,7 @@ export default function ServiceMapView() {
 
       {/* Entity drawer */}
       {selected && (
-        <EntityDrawer selected={selected} thresholds={th} onClose={() => setSelected(null)} onViewTraces={(svc) => navigate(`/traces?service=${encodeURIComponent(svc)}`)} />
+        <EntityDrawer selected={selected} thresholds={th} onClose={() => setSelected(null)} navigate={navigate} />
       )}
     </div>
   )
@@ -422,7 +422,7 @@ function KV({ k, v }) {
   )
 }
 
-function EntityDrawer({ selected, thresholds, onClose, onViewTraces }) {
+function EntityDrawer({ selected, thresholds, onClose, navigate }) {
   const isNode = selected.kind === 'node'
   const d = selected.data || {}
 
@@ -452,14 +452,16 @@ function EntityDrawer({ selected, thresholds, onClose, onViewTraces }) {
         <div className="smap-drawer-body">
           {isNode ? <NodeBody d={d} /> : <EdgeBody d={d} thresholds={thresholds} />}
 
-          {isNode && (
+          {isNode ? (
             <button
               className="opa-btn"
               style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}
-              onClick={() => onViewTraces(d.service || d.id)}
+              onClick={() => navigate(`/traces?service=${encodeURIComponent(d.service || d.id)}`)}
             >
               <FiActivity size={13} /> View traces
             </button>
+          ) : (
+            <EdgeTraces d={d} navigate={navigate} />
           )}
         </div>
       </aside>
@@ -567,5 +569,56 @@ function EdgeBody({ d, thresholds }) {
         </div>
       )}
     </>
+  )
+}
+
+// Traces that actually crossed this edge — the parent(from)/child(to) self-join
+// (GET /api/service-map/edge-traces). Service→service edges resolve to a concrete
+// trace list; external-dep edges (redis/db/http hosts aren't traced services)
+// return nothing, so we fall back to the calling service's traces.
+function EdgeTraces({ d, navigate }) {
+  const q = useApi('/api/service-map/edge-traces', { from_service: d.from, to_service: d.to })
+  const traces = q.data?.traces || []
+  const viewAll = (
+    <button
+      className="opa-btn"
+      style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}
+      onClick={() => navigate(`/traces?service=${encodeURIComponent(d.from)}`)}
+    >
+      <FiActivity size={13} /> View all traces from {d.from}
+    </button>
+  )
+  return (
+    <div className="smap-section">
+      <div className="smap-section-title">Traces on this edge</div>
+      {q.loading ? (
+        <div className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>Loading…</div>
+      ) : traces.length === 0 ? (
+        <>
+          <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginBottom: 8 }}>
+            No service-to-service traces on this edge
+            {d.dependency_type && d.dependency_type !== 'service' ? ` — external ${d.dependency_type} dependency` : ''}.
+          </div>
+          {viewAll}
+        </>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {traces.slice(0, 12).map((t) => (
+            <button
+              key={t.trace_id}
+              className="opa-btn ghost"
+              style={{ justifyContent: 'space-between', width: '100%', fontSize: 'var(--fs-12)' }}
+              onClick={() => navigate(`/traces/${encodeURIComponent(t.trace_id)}`)}
+              title={`Open trace ${t.trace_id}`}
+            >
+              <span className="opa-mono">{String(t.trace_id || '').slice(0, 14)}</span>
+              <span style={{ color: `var(--${latencyStatus(t.duration_ms)})` }}>{fmtMs(t.duration_ms)}</span>
+              <span className="opa-muted">{fmtAgo(t.created_at)}</span>
+            </button>
+          ))}
+          {viewAll}
+        </div>
+      )}
+    </div>
   )
 }

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { FiLayers, FiZap, FiTrendingDown } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, DataTable, DeltaIndicator, InlineBar } from './ui'
@@ -32,6 +33,7 @@ const METRICS = [
 ]
 
 export default function CohortCompare() {
+  const navigate = useNavigate()
   const [dimension, setDimension] = useState('language_version')
   const [service, setService] = useState('')
   const [name, setName] = useState('')
@@ -69,6 +71,14 @@ export default function CohortCompare() {
   const maxP95 = Math.max(1, ...groups.map((g) => g.p95_duration_ms || 0))
   const maxAvg = Math.max(1, ...groups.map((g) => g.avg_duration_ms || 0))
 
+  // Drill a cohort into the filtered Trace Explorer: the split dimension = the group value.
+  const drillToTraces = (value) => {
+    if (value == null || value === '') return
+    const params = { filter: `${dimension}:"${value}"` }
+    if (service) params.service = service
+    navigate('/traces?' + new URLSearchParams(params).toString())
+  }
+
   const columns = useMemo(() => [
     { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="cell-strong">{r.label}</span> },
     ...groups.map((g, gi) => ({
@@ -79,6 +89,18 @@ export default function CohortCompare() {
         <span>
           {g.value || '—'} <span className="opa-muted" style={{ fontWeight: 'var(--fw-regular)' }}>n={fmtNum(g.count)}</span>
           {gi === 0 && groups.length > 1 && <span className="opa-badge" style={{ marginLeft: 6 }}>baseline</span>}
+          {g.value && (
+            <span
+              role="link"
+              tabIndex={0}
+              title={`View traces for ${g.value}`}
+              onClick={(e) => { e.stopPropagation(); drillToTraces(g.value) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); drillToTraces(g.value) } }}
+              style={{ marginLeft: 8, color: 'var(--accent)', cursor: 'pointer', fontWeight: 'var(--fw-regular)', whiteSpace: 'nowrap' }}
+            >
+              traces →
+            </span>
+          )}
         </span>
       ),
       render: (r) => (
@@ -90,7 +112,7 @@ export default function CohortCompare() {
         </span>
       ),
     })),
-  ], [groups, baseline])
+  ], [groups, baseline, dimension, service, navigate])
 
   const dimLabel = DIMENSIONS.find((d) => d.value === dimension)?.label || dimension
 

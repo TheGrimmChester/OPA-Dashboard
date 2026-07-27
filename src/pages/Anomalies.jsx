@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { FiActivity, FiAlertOctagon, FiAlertTriangle, FiZap, FiInfo, FiFilter } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, HealthDot, Badge, DeltaIndicator, SegmentedControl } from '../components/ui'
@@ -31,6 +32,7 @@ const metricInvert = (metric) => metric === 'duration' || metric === 'error_rate
 const SEVERITIES = ['all', 'critical', 'high', 'medium', 'low']
 
 export default function Anomalies() {
+  const navigate = useNavigate()
   // useApi auto-injects the global time range (from/to); the endpoint also accepts
   // service/severity, but we pull the full window and filter client-side so the
   // service dropdown and the severity KPI breakdown stay complete.
@@ -180,6 +182,7 @@ export default function Anomalies() {
           rows={rows}
           rowKey={(r) => r?.id}
           initialSort={{ key: 'score', dir: 'desc' }}
+          onRowClick={(r) => r?.service && navigate('/services/' + encodeURIComponent(r.service))}
         />
       </Panel>
     </div>

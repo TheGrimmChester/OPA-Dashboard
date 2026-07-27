@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   FiActivity, FiAlertCircle, FiClock, FiTrendingUp, FiServer, FiDatabase,
   FiHardDrive, FiInbox, FiLayers,
@@ -10,6 +11,7 @@ import {
 import { fmtMs, fmtNum, fmtPct, fmtBytes, statusColor, latencyStatus, errorRateStatus } from '../theme/format'
 
 export default function Stats() {
+  const navigate = useNavigate()
   const stats = useApi('/api/stats')
   const health = useApi('/api/health')
 
@@ -111,6 +113,7 @@ export default function Stats() {
         <DataTable
           columns={svcColumns} rows={byService} rowKey={(r) => r.service}
           initialSort={{ key: 'traces', dir: 'desc' }}
+          onRowClick={(r) => r.service && navigate('/services/' + encodeURIComponent(r.service))}
         />
       </Panel>
 

@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { FiGitBranch, FiBarChart2, FiChevronLeft, FiChevronRight, FiClock } from 'react-icons/fi'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { FiGitBranch, FiBarChart2, FiChevronLeft, FiChevronRight, FiClock, FiX, FiSearch } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
   Panel, DataTable, StatusPill, LanguageBadge,
@@ -45,14 +45,39 @@ function buildHistogram(durations) {
 
 export default function TraceExplorer() {
   const navigate = useNavigate()
-  const [service, setService] = useState('')
-  const [status, setStatus] = useState('')
+  // Filters live in the URL so every drill-down (a row elsewhere linking to
+  // /traces?filter=…) lands here filtered, and views are shareable/bookmarkable.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const service = searchParams.get('service') || ''
+  const status = searchParams.get('status') || ''
+  const filter = searchParams.get('filter') || ''
   const [offset, setOffset] = useState(0)
+
+  const setParam = (key, val) => {
+    const p = new URLSearchParams(searchParams)
+    if (val) p.set(key, val)
+    else p.delete(key)
+    setSearchParams(p, { replace: true })
+    setOffset(0)
+  }
+  const clearFilters = () => { setSearchParams(new URLSearchParams(), { replace: true }); setOffset(0) }
+  const hasFilters = !!(service || status || filter)
+
+  // Editable draft of the raw DSL filter. Kept local so typing doesn't thrash
+  // the URL on every keystroke; committed to ?filter on Enter/blur. Re-syncs
+  // whenever the URL filter changes (e.g. a drill-down navigates here).
+  const [filterDraft, setFilterDraft] = useState(filter)
+  useEffect(() => { setFilterDraft(filter) }, [filter])
+  const commitFilter = () => {
+    const v = filterDraft.trim()
+    if (v !== filter) setParam('filter', v)
+  }
 
   const meta = useApi('/api/services/metadata', {}, { noRange: true })
   const q = useApi('/api/traces', {
     service: service || undefined,
     status: status || undefined,
+    filter: filter || undefined,
     limit: LIMIT,
     offset,
     sort: 'duration_ms',
@@ -69,8 +94,6 @@ export default function TraceExplorer() {
   )
   const hist = useMemo(() => buildHistogram(durations), [durations])
   const maxCount = Math.max(1, ...hist.bars.map((b) => b.count))
-
-  const onFilterChange = (setter) => (e) => { setter(e.target.value); setOffset(0) }
 
   const columns = [
     {
@@ -120,19 +143,46 @@ export default function TraceExplorer() {
           </div>
         </div>
         <div className="opa-row">
-          <select className="opa-select" value={service} onChange={onFilterChange(setService)} aria-label="Service filter">
+          <select className="opa-select" value={service} onChange={(e) => setParam('service', e.target.value)} aria-label="Service filter">
             <option value="">All services</option>
             {services.map((s) => (
               <option key={s.service} value={s.service}>{s.service}</option>
             ))}
           </select>
-          <select className="opa-select" value={status} onChange={onFilterChange(setStatus)} aria-label="Status filter">
+          <select className="opa-select" value={status} onChange={(e) => setParam('status', e.target.value)} aria-label="Status filter">
             <option value="">All statuses</option>
             <option value="ok">OK</option>
             <option value="error">Error</option>
           </select>
           <ExportButton filters={{ service, status }} label="Export" />
         </div>
+      </div>
+
+      {/* Query bar — raw DSL filter. Every cross-page drill-down lands here by
+          setting ?filter=…, so this input shows (and lets you refine) exactly
+          what's being matched. Enter/blur commits to the URL → shareable.
+          DSL: field:value, AND/OR, quotes for spaces, http./sql./redis. prefixes,
+          duration_ms:>200, etc. */}
+      <div className="opa-row" style={{ gap: 'var(--sp-2)', alignItems: 'center' }}>
+        <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <FiSearch size={13} style={{ position: 'absolute', left: 10, color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <input
+            className="opa-input opa-mono"
+            style={{ width: '100%', paddingLeft: 30, fontSize: 'var(--fs-12)' }}
+            value={filterDraft}
+            onChange={(e) => setFilterDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitFilter() }}
+            onBlur={commitFilter}
+            spellCheck={false}
+            placeholder='Filter — e.g. url_path:"/health-check" AND duration_ms:>200'
+            aria-label="Filter query (DSL)"
+          />
+        </div>
+        {hasFilters && (
+          <button className="opa-btn ghost" onClick={clearFilters} title="Clear all filters">
+            <FiX size={13} /> Clear
+          </button>
+        )}
       </div>
 
       {/* Latency distribution */}
