@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Network } from 'vis-network'
+import axios from 'axios'
 import {
   FiShare2, FiServer, FiDatabase, FiGlobe, FiZap, FiHardDrive, FiActivity,
   FiClock, FiAlertTriangle, FiZoomIn, FiZoomOut, FiMaximize2, FiX, FiGitBranch,
-  FiArrowUpRight, FiArrowDownLeft,
+  FiArrowUpRight, FiArrowDownLeft, FiSliders,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
+
+const API = import.meta.env.VITE_API_URL || ''
 import {
   Panel, KpiTile, DataTable, InlineBar, StatusPill, SegmentedControl,
 } from '../components/ui'
@@ -73,6 +76,7 @@ export default function ServiceMapView() {
 
   const [layout, setLayout] = useState('force') // 'force' | 'hierarchical'
   const [selected, setSelected] = useState(null) // { kind:'node'|'edge', data }
+  const [editThresh, setEditThresh] = useState(false)
 
   const containerRef = useRef(null)
   const networkRef = useRef(null)
@@ -277,8 +281,20 @@ export default function ServiceMapView() {
             value={layout}
             onChange={setLayout}
           />
+          <button className="opa-btn" onClick={() => setEditThresh((v) => !v)} title="Edit health thresholds">
+            <FiSliders size={13} /> Thresholds
+          </button>
         </div>
       </div>
+
+      {editThresh && (
+        <ThresholdsEditor
+          key={JSON.stringify(th)}
+          initial={th}
+          onSaved={() => thresholds.reload()}
+          onClose={() => setEditThresh(false)}
+        />
+      )}
 
       {/* Golden-signal KPIs across the topology */}
       <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
@@ -329,6 +345,63 @@ export default function ServiceMapView() {
         <EntityDrawer selected={selected} thresholds={th} onClose={() => setSelected(null)} onViewTraces={(svc) => navigate(`/traces?service=${encodeURIComponent(svc)}`)} />
       )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Inline editor for the shared health thresholds (POST /api/service-map/thresholds).
+// Edges turn amber past the "degraded" line and red past the "down" line.
+function ThresholdsEditor({ initial, onSaved, onClose }) {
+  const [form, setForm] = useState({
+    degraded_latency_ms: initial.degraded_latency_ms ?? 1000,
+    down_latency_ms: initial.down_latency_ms ?? 5000,
+    degraded_error_rate: initial.degraded_error_rate ?? 10,
+    down_error_rate: initial.down_error_rate ?? 50,
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState(null)
+  const setNum = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const save = async () => {
+    setSaving(true); setErr(null)
+    try {
+      await axios.post(`${API}/api/service-map/thresholds`, {
+        degraded_latency_ms: Number(form.degraded_latency_ms),
+        down_latency_ms: Number(form.down_latency_ms),
+        degraded_error_rate: Number(form.degraded_error_rate),
+        down_error_rate: Number(form.down_error_rate),
+      })
+      onSaved()
+      onClose()
+    } catch (e) {
+      setErr(e.response?.data || e.message || 'Save failed')
+    } finally { setSaving(false) }
+  }
+
+  const field = (label, key) => (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-12)', color: 'var(--text-secondary)' }}>
+      {label}
+      <input className="opa-input" type="number" min="0" value={form[key]} onChange={setNum(key)} style={{ width: 130 }} />
+    </label>
+  )
+
+  return (
+    <Panel
+      title="Health thresholds" icon={<FiSliders size={14} />}
+      actions={<button className="opa-btn ghost" onClick={onClose} title="Close"><FiX size={13} /></button>}
+    >
+      <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        {field('Degraded latency (ms)', 'degraded_latency_ms')}
+        {field('Down latency (ms)', 'down_latency_ms')}
+        {field('Degraded error rate (%)', 'degraded_error_rate')}
+        {field('Down error rate (%)', 'down_error_rate')}
+        <button className="opa-btn primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save thresholds'}</button>
+      </div>
+      {err && <div className="opa-form-err" style={{ marginTop: 'var(--sp-2)' }}>{String(err)}</div>}
+      <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginTop: 'var(--sp-2)' }}>
+        Applied across the topology: an edge is amber past the degraded line and red past the down line.
+      </div>
+    </Panel>
   )
 }
 

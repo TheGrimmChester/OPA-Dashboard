@@ -1,13 +1,16 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FiGitBranch, FiClock, FiDatabase, FiServer, FiActivity, FiX,
-  FiArrowUp, FiArrowDown, FiChevronLeft, FiFileText, FiGlobe,
+  FiArrowUp, FiArrowDown, FiChevronLeft, FiFileText, FiGlobe, FiCpu,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
-  Panel, DataTable, EntityHeader, Badge, StatusPill, LanguageBadge,
+  Panel, DataTable, EntityHeader, Badge, StatusPill, LanguageBadge, SegmentedControl,
 } from '../components/ui'
+import FlameGraph from '../components/FlameGraph'
+import CallGraph from '../components/CallGraph'
+import ExecutionStackTree from '../components/ExecutionStackTree'
 import { fmtMs, fmtBytes, fmtNum, fmtAgo, tierColor, statusColor, latencyStatus, SERIES } from '../theme/format'
 import './TraceDetail.css'
 
@@ -49,13 +52,28 @@ export default function TraceDetail() {
   const { traceId } = useParams()
   const navigate = useNavigate()
   const [selected, setSelected] = useState(null)
+  const [profileView, setProfileView] = useState('flame')
 
-  const trace = useApi(`/api/traces/${traceId}`, {}, { noRange: true })
+  // /full carries the per-span call-stack tree (root.stack) that the flame/call
+  // views need; the shape is otherwise identical to /api/traces/{id}, so the
+  // waterfall below is unaffected.
+  const trace = useApi(`/api/traces/${traceId}/full`, {}, { noRange: true })
   const logsQ = useApi(`/api/traces/${traceId}/logs`, {}, { noRange: true })
 
   const data = trace.data || {}
   const root = data.root || null
   const flatSpans = Array.isArray(data.spans) ? data.spans : []
+  const callStack = Array.isArray(root?.stack) ? root.stack : []
+
+  // The flame/call graphs render fixed-width SVG; measure the panel so they fill it.
+  const profRef = useRef(null)
+  const [profW, setProfW] = useState(960)
+  useEffect(() => {
+    const measure = () => { if (profRef.current) setProfW(Math.max(320, profRef.current.offsetWidth - 4)) }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [callStack.length, profileView])
 
   // Ordered waterfall rows.
   const rows = useMemo(() => {
@@ -249,6 +267,32 @@ export default function TraceDetail() {
           })}
         </div>
       </Panel>
+
+      {/* Profile — flame graph / call graph / stack tree over the call stack */}
+      {callStack.length > 0 && (
+        <Panel
+          title="Profile"
+          icon={<FiCpu />}
+          flush
+          actions={
+            <SegmentedControl
+              options={[
+                { value: 'flame', label: 'Flame' },
+                { value: 'callgraph', label: 'Call graph' },
+                { value: 'stacktree', label: 'Stack tree' },
+              ]}
+              value={profileView}
+              onChange={setProfileView}
+            />
+          }
+        >
+          <div ref={profRef} style={{ overflowX: 'auto', padding: 'var(--sp-3)' }}>
+            {profileView === 'flame' && <FlameGraph callStack={callStack} width={profW} height={440} />}
+            {profileView === 'callgraph' && <CallGraph callStack={callStack} width={profW} height={560} />}
+            {profileView === 'stacktree' && <ExecutionStackTree callStack={callStack} />}
+          </div>
+        </Panel>
+      )}
 
       {/* Breakdown + Network I/O */}
       <div className="opa-grid cols-2">

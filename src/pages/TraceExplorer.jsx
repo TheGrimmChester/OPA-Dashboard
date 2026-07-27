@@ -5,6 +5,7 @@ import { useApi } from '../hooks/useApi'
 import {
   Panel, DataTable, StatusPill, LanguageBadge,
 } from '../components/ui'
+import ExportButton from '../components/ExportButton'
 import { fmtMs, fmtNum, fmtAgo, latencyStatus } from '../theme/format'
 import './TraceExplorer.css'
 
@@ -130,6 +131,7 @@ export default function TraceExplorer() {
             <option value="ok">OK</option>
             <option value="error">Error</option>
           </select>
+          <ExportButton filters={{ service, status }} label="Export" />
         </div>
       </div>
 
