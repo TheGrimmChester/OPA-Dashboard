@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
-import { FiActivity, FiClock, FiHash, FiCode, FiLayers } from 'react-icons/fi'
+import React, { useState, useRef, useEffect } from 'react'
+import { FiActivity, FiClock, FiHash, FiCode, FiLayers, FiBarChart2 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable } from '../components/ui'
+import FlameGraph from '../components/FlameGraph'
 import { fmtMs, fmtBytes, fmtNum, fmtPct } from '../theme/format'
 import './ProfilingView.css'
 
@@ -15,10 +16,29 @@ export default function ProfilingView() {
     limit: 200,
     ...(service !== ALL ? { service } : {}),
   })
+  // Aggregate flame tree — the endpoint requires a specific service, so skip
+  // the call entirely while "All services" is selected.
+  const flame = useApi(
+    '/api/profiles/flame',
+    service !== ALL ? { service } : {},
+    { skip: service === ALL },
+  )
 
   const services = meta.data?.services || []
   const functions = profiles.data?.functions || []
   const totalSelf = profiles.data?.total_self_wall_ms || 0
+  const flameTree = flame.data?.tree || []
+
+  // FlameGraph renders a fixed-width SVG; measure the panel so it fills it
+  // (same pattern as TraceDetail).
+  const flameRef = useRef(null)
+  const [flameW, setFlameW] = useState(960)
+  useEffect(() => {
+    const measure = () => { if (flameRef.current) setFlameW(Math.max(320, flameRef.current.offsetWidth - 4)) }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [flameTree.length, service])
 
   const columns = [
     {
@@ -131,6 +151,29 @@ export default function ProfilingView() {
           status="neutral"
         />
       </div>
+
+      <Panel
+        title="Flame graph" icon={<FiBarChart2 />}
+        loading={service !== ALL && flame.loading}
+        error={service !== ALL ? flame.error : null}
+        empty={service === ALL || (!flame.loading && !flame.error && flameTree.length === 0)}
+        emptyText={
+          service === ALL
+            ? 'Select a service to render its aggregate flame graph'
+            : 'No profiling data for this service in the selected range.'
+        }
+        actions={
+          service !== ALL && flame.data?.total_ms != null ? (
+            <span className="opa-row opa-muted" style={{ fontSize: 'var(--fs-12)', gap: 6 }}>
+              <FiClock size={12} /> total {fmtMs(flame.data.total_ms)}
+            </span>
+          ) : null
+        }
+      >
+        <div ref={flameRef} style={{ overflowX: 'auto' }}>
+          <FlameGraph callStack={flameTree} width={flameW} height={440} />
+        </div>
+      </Panel>
 
       <Panel
         title="Function cost" icon={<FiActivity />} flush

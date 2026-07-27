@@ -35,16 +35,29 @@ function toneForLevel(level) {
   return 'neutral'
 }
 
-// Flatten a span tree (root.children) into rows carrying depth; fall back to a flat list.
+// Flatten a span tree (root.children) into rows carrying depth + the tree
+// parent's service (so cross-service hops are detectable even when the explicit
+// parent_id link was broken and the agent stitched the subtree in). Any spans
+// not reachable from the root (orphans from a partial/broken distributed trace)
+// are appended so every service still renders.
 function flattenTree(root, flat) {
   const out = []
-  const walk = (node, depth) => {
+  const seen = new Set()
+  const walk = (node, depth, parentSvc) => {
     if (!node) return
-    out.push({ ...node, _depth: depth })
-    ;(node.children || []).forEach((c) => walk(c, depth + 1))
+    out.push({ ...node, _depth: depth, _parentService: parentSvc })
+    if (node.span_id) seen.add(node.span_id)
+    ;(node.children || []).forEach((c) => walk(c, depth + 1, node.service))
   }
-  if (root) walk(root, 0)
-  if (out.length === 0 && Array.isArray(flat)) flat.forEach((s) => out.push({ ...s, _depth: 0 }))
+  if (root) walk(root, 0, null)
+  if (Array.isArray(flat)) {
+    flat.forEach((s) => {
+      if (s && s.span_id && seen.has(s.span_id)) return
+      if (!s) return
+      out.push({ ...s, _depth: 0, _parentService: null })
+      if (s.span_id) seen.add(s.span_id)
+    })
+  }
   return out
 }
 
@@ -54,7 +67,7 @@ export default function TraceDetail() {
   const [selected, setSelected] = useState(null)
   const [profileView, setProfileView] = useState('flame')
 
-  // /full carries the per-span call-stack tree (root.stack) that the flame/call
+  // /full carries the per-span call stacks (span.stack) that the flame/call
   // views need; the shape is otherwise identical to /api/traces/{id}, so the
   // waterfall below is unaffected.
   const trace = useApi(`/api/traces/${traceId}/full`, {}, { noRange: true })
@@ -63,7 +76,66 @@ export default function TraceDetail() {
   const data = trace.data || {}
   const root = data.root || null
   const flatSpans = Array.isArray(data.spans) ? data.spans : []
-  const callStack = Array.isArray(root?.stack) ? root.stack : []
+
+  // Merge every span's call stack so the profile views cover the whole
+  // distributed trace, not just the root span. A single stack is returned
+  // untouched (identical to the previous root-only behavior). When several
+  // spans carry stacks, each one is namespaced by its span_id (call_ids from
+  // different services can collide) and re-rooted under a per-span wrapper
+  // node; all wrappers nest below one synthetic trace root because FlameGraph
+  // draws every depth-0 root at the same origin (multiple roots would
+  // overlap). The flame / call-graph / stack-tree components rebuild the tree
+  // from parent_id, so a combined FLAT array is all they need.
+  const callStack = useMemo(() => {
+    const candidates = root ? [root, ...flatSpans] : flatSpans
+    const seen = new Set()
+    const withStacks = []
+    candidates.forEach((s) => {
+      if (!s || !Array.isArray(s.stack) || s.stack.length === 0) return
+      const key = s.span_id || s
+      if (seen.has(key)) return
+      seen.add(key)
+      withStacks.push(s)
+    })
+    if (withStacks.length === 0) return []
+    if (withStacks.length === 1) return withStacks[0].stack
+
+    const out = [{
+      call_id: 'trace',
+      function: 'trace',
+      class: '',
+      file: '',
+      line: 0,
+      duration_ms: withStacks.reduce((sum, s) => sum + (s.duration_ms || 0), 0),
+      cpu_ms: 0,
+      parent_id: null,
+      depth: 0,
+    }]
+    withStacks.forEach((s, i) => {
+      const ns = s.span_id || `s${i}`
+      const wrapperId = `span:${ns}`
+      out.push({
+        call_id: wrapperId,
+        function: (s.name || 'span') + (s.service ? ` [${s.service}]` : ''),
+        class: '',
+        file: '',
+        line: 0,
+        duration_ms: s.duration_ms || 0,
+        cpu_ms: 0,
+        parent_id: 'trace',
+        depth: 1,
+      })
+      s.stack.forEach((n) => {
+        out.push({
+          ...n,
+          call_id: `${ns}:${n.call_id}`,
+          parent_id: (n.parent_id == null || n.parent_id === '') ? wrapperId : `${ns}:${n.parent_id}`,
+          depth: (n.depth || 0) + 2,
+        })
+      })
+    })
+    return out
+  }, [root, flatSpans])
 
   // The flame/call graphs render fixed-width SVG; measure the panel so they fill it.
   const profRef = useRef(null)
@@ -111,7 +183,14 @@ export default function TraceDetail() {
     rows.forEach((s) => { if (s.span_id) m[s.span_id] = s.service })
     return m
   }, [rows])
-  const isServiceEntry = (s) => s.service && s.parent_id && svcBySpanId[s.parent_id] && svcBySpanId[s.parent_id] !== s.service
+  // A cross-service hop: the span's tree parent is a different service. Prefer
+  // the stitched tree-parent service (_parentService, robust to broken/absent
+  // parent_id); fall back to resolving parent_id within this trace.
+  const isServiceEntry = (s) => {
+    if (!s.service) return false
+    if (s._parentService) return s._parentService !== s.service
+    return !!(s.parent_id && svcBySpanId[s.parent_id] && svcBySpanId[s.parent_id] !== s.service)
+  }
 
   // Aggregate per-operation collections across every span (defensive).
   const allSql = useMemo(() => rows.flatMap((s) => s.sql || []), [rows])
@@ -164,6 +243,15 @@ export default function TraceDetail() {
   const dtParts = (byType) => ['db', 'http', 'redis'].map((k) => ({
     key: k, value: byType[k] || 0, color: tierColor(k), label: TIER_LABEL[k] || k, display: fmtBytes(byType[k] || 0),
   }))
+
+  // Cross-link an operation row to the filtered Trace Explorer. Scope to the
+  // trace's service when it's unambiguous (a single-service trace); DSL values
+  // are wrapped in double quotes and URLSearchParams handles the encoding.
+  const opService = services.length === 1 ? services[0] : null
+  const goTraces = (filter) => {
+    const params = opService ? { service: opService, filter } : { filter }
+    navigate('/traces?' + new URLSearchParams(params).toString())
+  }
 
   // ---- op tables ----
   const sqlCols = [
@@ -279,7 +367,7 @@ export default function TraceDetail() {
         </div>
       </Panel>
 
-      {/* Profile — flame graph / call graph / stack tree over the call stack */}
+      {/* Profile — flame graph / call graph / stack tree over every span's call stack */}
       {callStack.length > 0 && (
         <Panel
           title="Profile"
@@ -353,6 +441,11 @@ export default function TraceDetail() {
         empty={!loading && allSql.length === 0} emptyText="No SQL in this trace"
         actions={<Badge>{fmtNum(allSql.length)} queries</Badge>}>
         <DataTable columns={sqlCols} rows={allSql} rowKey={(r, i) => i}
+          onRowClick={(r) => {
+            const fp = r.query_fingerprint || r.fingerprint
+            if (fp) { navigate(`/sql/${encodeURIComponent(fp)}`); return }
+            if (r.query) goTraces(`query_fingerprint:"${r.query}"`)
+          }}
           initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
       </Panel>
 
@@ -361,12 +454,14 @@ export default function TraceDetail() {
           empty={!loading && allRedis.length === 0} emptyText="No Redis ops"
           actions={<Badge>{fmtNum(allRedis.length)} ops</Badge>}>
           <DataTable columns={redisCols} rows={allRedis} rowKey={(r, i) => i}
+            onRowClick={(r) => { if (r.command) goTraces(`redis.command:"${r.command}"`) }}
             initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
         </Panel>
         <Panel title="HTTP calls" icon={<FiGlobe />} flush loading={loading} error={trace.error}
           empty={!loading && allHttp.length === 0} emptyText="No outbound HTTP"
           actions={<Badge>{fmtNum(allHttp.length)} calls</Badge>}>
           <DataTable columns={httpCols} rows={allHttp} rowKey={(r, i) => i}
+            onRowClick={(r) => { const u = r.url || r.uri; if (u) goTraces(`http.url:"${u}"`) }}
             initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
         </Panel>
       </div>
