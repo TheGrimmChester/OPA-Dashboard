@@ -2,7 +2,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FiGitBranch, FiClock, FiDatabase, FiServer, FiActivity, FiX,
-  FiArrowUp, FiArrowDown, FiChevronLeft, FiFileText, FiGlobe, FiCpu,
+  FiArrowUp, FiArrowDown, FiChevronLeft, FiFileText, FiGlobe, FiCpu, FiCode,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
@@ -84,6 +84,17 @@ export default function TraceDetail() {
   const traceStart = rows.length ? Math.min(...rows.map((s) => s.start_ts || 0)) : 0
   const traceEnd = rows.length ? Math.max(...rows.map((s) => s.end_ts || (s.start_ts || 0))) : 0
   const totalMs = Math.max(1, root?.duration_ms || (traceEnd - traceStart) || 1)
+
+  // opa_dump() payloads captured during the trace, attributed to their span.
+  const dumps = useMemo(() => {
+    const out = []
+    rows.forEach((s) => {
+      (Array.isArray(s.dumps) ? s.dumps : []).forEach((d, i) => {
+        out.push({ ...d, _span: s.name, _spanId: s.span_id, _key: `${s.span_id || 's'}-${i}` })
+      })
+    })
+    return out.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+  }, [rows])
 
   // Distributed tracing: a trace can span multiple services (same trace id
   // propagated via W3C traceparent). Assign each service a stable color and mark
@@ -376,8 +387,44 @@ export default function TraceDetail() {
         />
       </Panel>
 
+      {/* Dumps (opa_dump) captured during the trace */}
+      <Panel title="Variable dumps" icon={<FiCode />} flush loading={loading} error={trace.error}
+        empty={!loading && dumps.length === 0} emptyText="No opa_dump() output in this trace"
+        actions={<Badge>{fmtNum(dumps.length)} dumps</Badge>}>
+        <div className="td-dumps">
+          {dumps.map((d) => <DumpCard key={d._key} d={d} spanName={multiService ? d._span : null} />)}
+        </div>
+      </Panel>
+
       {/* Span drawer */}
       {selected && <SpanDrawer span={selected} traceStart={traceStart} onClose={() => setSelected(null)} />}
+    </div>
+  )
+}
+
+// Render one dump: file:line header + the var_dump text (or pretty-printed data).
+function DumpBody({ d }) {
+  let body = d.text
+  if (!body && d.data != null) {
+    if (typeof d.data === 'string') {
+      try { body = JSON.stringify(JSON.parse(d.data), null, 2) } catch { body = d.data }
+    } else {
+      body = JSON.stringify(d.data, null, 2)
+    }
+  }
+  return <pre className="td-dump-pre">{body || '(empty)'}</pre>
+}
+
+function DumpCard({ d, spanName }) {
+  const loc = d.file ? `${d.file}${d.line ? ':' + d.line : ''}` : null
+  return (
+    <div className="td-dump">
+      <div className="td-dump-head">
+        <FiCode size={12} />
+        {loc && <span className="opa-mono td-dump-loc">{loc}</span>}
+        {spanName && <Badge>{spanName}</Badge>}
+      </div>
+      <DumpBody d={d} />
     </div>
   )
 }
@@ -394,6 +441,7 @@ function SpanDrawer({ span, traceStart, onClose }) {
   const sql = span.sql || []
   const redis = span.redis || []
   const http = span.http || []
+  const dumps = span.dumps || []
   const net = span.net || {}
   const tier = spanTier(span)
 
@@ -482,7 +530,16 @@ function SpanDrawer({ span, traceStart, onClose }) {
             </div>
           )}
 
-          {sql.length === 0 && redis.length === 0 && http.length === 0 && (
+          {dumps.length > 0 && (
+            <div>
+              <div className="td-drawer-sub">Dumps ({dumps.length})</div>
+              <div className="td-dumps">
+                {dumps.map((d, i) => <DumpCard key={i} d={d} spanName={null} />)}
+              </div>
+            </div>
+          )}
+
+          {sql.length === 0 && redis.length === 0 && http.length === 0 && dumps.length === 0 && (
             <div className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>No operations recorded on this span.</div>
           )}
         </div>
