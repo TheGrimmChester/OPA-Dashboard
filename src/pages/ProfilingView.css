@@ -1,0 +1,38 @@
+/* ProfilingView — Blackfire-style Self% flame-substitute bar.
+   Makes the InlineBar in the Self% column taller + more prominent than the
+   default inline table bar, so it reads as the visual weight of each function. */
+.opa-profiling-selfbar {
+  position: relative;
+  width: 100%;
+  min-width: 120px;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+.opa-profiling-selfbar .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 40%, transparent), var(--accent));
+  border-radius: 3px;
+}
+.opa-profiling-selfbar .label {
+  position: relative;
+  margin-left: auto;
+  padding: 0 6px;
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  z-index: 1;
+}
+
+.opa-profiling-fn {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

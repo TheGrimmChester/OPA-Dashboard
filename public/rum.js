@@ -6,9 +6,44 @@
 (function() {
     'use strict';
     
+    // Resolve the agent endpoint. Prefer a same-origin default; only honor the
+    // configurable global override when it stays same-origin so a compromised or
+    // hijacked global cannot exfiltrate telemetry (and any query-string tokens)
+    // to a third-party host.
+    function resolveAgentUrl() {
+        const fallback = '/api/rum';
+        const configured = window.OPA_RUM_AGENT_URL;
+        if (!configured) return fallback;
+        try {
+            const resolved = new URL(configured, window.location.href);
+            if (resolved.origin === window.location.origin) {
+                return resolved.pathname + resolved.search;
+            }
+        } catch (e) {
+            // Invalid URL - fall through to the safe default.
+        }
+        return fallback;
+    }
+
+    // Strip query strings from a URL, keeping only origin + path. Falls back to
+    // scrubbing known-sensitive params if the URL cannot be fully parsed. This
+    // prevents tokens/apikeys/session ids in query strings from being beaconed.
+    function sanitizeUrl(rawUrl) {
+        if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
+        try {
+            const u = new URL(rawUrl, window.location.href);
+            // Keep only the path (drop query string and fragment entirely).
+            return u.origin + u.pathname;
+        } catch (e) {
+            // Relative or malformed URL: scrub known-sensitive params in place.
+            const idx = rawUrl.search(/[?#]/);
+            return idx === -1 ? rawUrl : rawUrl.slice(0, idx);
+        }
+    }
+
     // Configuration
     const RUM_CONFIG = {
-        agentUrl: window.OPA_RUM_AGENT_URL || '/api/rum',
+        agentUrl: resolveAgentUrl(),
         sampleRate: window.OPA_RUM_SAMPLE_RATE || 1.0,
         trackPageLoad: true,
         trackAjax: true,
@@ -45,9 +80,9 @@
         return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
     }
     
-    // Get current page URL
+    // Get current page URL (query string stripped to avoid leaking tokens)
     function getPageUrl() {
-        return window.location.href;
+        return sanitizeUrl(window.location.href);
     }
     
     // Get user agent
@@ -106,7 +141,7 @@
         
         const resources = window.performance.getEntriesByType('resource');
         return resources.map(resource => ({
-            name: resource.name,
+            name: sanitizeUrl(resource.name),
             type: resource.initiatorType,
             duration: resource.duration,
             size: resource.transferSize || 0,
@@ -136,7 +171,7 @@
                 const duration = performance.now() - xhr._opaStartTime;
                 ajaxRequests.push({
                     method: xhr._opaMethod,
-                    url: xhr._opaUrl,
+                    url: sanitizeUrl(xhr._opaUrl),
                     status: xhr.status,
                     duration: duration,
                     size: xhr.responseText ? xhr.responseText.length : 0,
@@ -158,7 +193,7 @@
                     const duration = performance.now() - startTime;
                     ajaxRequests.push({
                         method: method,
-                        url: url,
+                        url: sanitizeUrl(url),
                         status: response.status,
                         duration: duration,
                         size: 0, // Fetch doesn't expose response size easily
@@ -194,12 +229,33 @@
         });
     }
     
+    // ---- Core Web Vitals (LCP, CLS, FID, INP, FCP, TTFB) via PerformanceObserver ----
+    var webVitals = { lcp: null, cls: 0, fid: null, inp: null, fcp: null, ttfb: null };
+    function initWebVitals() {
+        try {
+            var nav = window.performance && window.performance.getEntriesByType && window.performance.getEntriesByType('navigation')[0];
+            if (nav) webVitals.ttfb = Math.round(nav.responseStart);
+        } catch (e) {}
+        if (!('PerformanceObserver' in window)) return;
+        var obs = function (type, cb, opts) {
+            try { new PerformanceObserver(cb).observe(Object.assign({ type: type, buffered: true }, opts || {})); } catch (e) {}
+        };
+        obs('paint', function (l) { l.getEntries().forEach(function (e) { if (e.name === 'first-contentful-paint') webVitals.fcp = Math.round(e.startTime); }); });
+        obs('largest-contentful-paint', function (l) { var es = l.getEntries(); var last = es[es.length - 1]; if (last) webVitals.lcp = Math.round(last.renderTime || last.loadTime || last.startTime); });
+        obs('layout-shift', function (l) { l.getEntries().forEach(function (e) { if (!e.hadRecentInput) webVitals.cls += e.value; }); });
+        obs('first-input', function (l) { var e = l.getEntries()[0]; if (e && webVitals.fid == null) webVitals.fid = Math.round(e.processingStart - e.startTime); });
+        obs('event', function (l) { l.getEntries().forEach(function (e) { if (e.duration && (webVitals.inp == null || e.duration > webVitals.inp)) webVitals.inp = Math.round(e.duration); }); }, { durationThreshold: 40 });
+    }
+    function snapshotWebVitals() {
+        return { lcp: webVitals.lcp, cls: Math.round(webVitals.cls * 1000) / 1000, fid: webVitals.fid, inp: webVitals.inp, fcp: webVitals.fcp, ttfb: webVitals.ttfb };
+    }
+
     // Send RUM data to agent
     function sendRUMData() {
         const viewport = getViewportSize();
         const perfTiming = collectPerformanceTiming();
         const resources = collectResourceTiming();
-        
+
         const rumData = {
             type: 'rum',
             session_id: sessionId,
@@ -208,6 +264,7 @@
             user_agent: getUserAgent(),
             viewport: viewport,
             navigation_timing: perfTiming,
+            web_vitals: snapshotWebVitals(),
             resource_timing: resources,
             ajax_requests: ajaxRequests,
             errors: errors,
@@ -231,6 +288,16 @@
         }
     }
     
+    // Start Core Web Vitals observers as early as possible (buffered:true also
+    // captures entries dispatched before this point).
+    initWebVitals();
+
+    // Send a final beacon (with settled LCP/CLS/INP) when the page is hidden.
+    var sentFinal = false;
+    function sendFinal() { if (!sentFinal) { sentFinal = true; sendRUMData(); } }
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') sendFinal(); });
+    window.addEventListener('pagehide', sendFinal);
+
     // Initialize tracking
     if (RUM_CONFIG.trackPageLoad) {
         // Wait for page load

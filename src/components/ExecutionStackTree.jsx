@@ -1,17 +1,17 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useRef } from 'react'
 import { FiCpu, FiClock, FiHardDrive, FiGlobe, FiChevronRight, FiChevronDown, FiCode, FiFile } from 'react-icons/fi'
 import TraceTabFilters from './TraceTabFilters'
+import { VIZ_V2_ENABLED } from '../utils/chartTheme'
 import './ExecutionStackTree.css'
+
+// Row virtualization tuning (only used when VIZ_V2 is enabled).
+const ROW_HEIGHT = 44        // fixed windowed-row height in px
+const OVERSCAN = 6           // extra rows rendered above/below the viewport
+const VIEWPORT_MAX = 640     // max scroll-container height in px
 
 function ExecutionStackTree({ callStack }) {
   const [expandedNodes, setExpandedNodes] = useState(new Set())
   const [filters, setFilters] = useState({ enabled: false, thresholds: {} })
-  const [loadedChildren, setLoadedChildren] = useState(new Map()) // Cache of loaded children by parent_id
-
-  // Clear loaded children cache when filters change
-  useEffect(() => {
-    setLoadedChildren(new Map())
-  }, [filters])
 
   // Normalize nodes - handle both flat and hierarchical structures
   const normalizeNode = useCallback((node) => {
@@ -33,10 +33,10 @@ function ExecutionStackTree({ callStack }) {
     }
   }, [])
 
-  // Build flat node map and root nodes - lazy loading approach
-  const { nodeMap, rootNodes } = useMemo(() => {
+  // Build flat node map, root nodes, and a parentId -> children[] index
+  const { nodeMap, rootNodes, childrenMap } = useMemo(() => {
     if (!callStack || (Array.isArray(callStack) && callStack.length === 0)) {
-      return { nodeMap: new Map(), rootNodes: [] }
+      return { nodeMap: new Map(), rootNodes: [], childrenMap: new Map() }
     }
 
     // Flatten hierarchical structure if needed
@@ -64,36 +64,37 @@ function ExecutionStackTree({ callStack }) {
     const normalizedNodes = allNodesFlat.map(normalizeNode)
     const map = new Map()
     const roots = []
+    const childIndex = new Map()
 
-    // Create map and identify roots
+    // Create map, identify roots, and index children by parent_id (O(n))
     normalizedNodes.forEach(node => {
       map.set(node.call_id, node)
       if (!node.parent_id || node.parent_id === '') {
         roots.push(node)
+      } else {
+        const siblings = childIndex.get(node.parent_id)
+        if (siblings) {
+          siblings.push(node)
+        } else {
+          childIndex.set(node.parent_id, [node])
+        }
       }
     })
 
-    // Sort root nodes by depth or original order
-    roots.sort((a, b) => {
+    // Stable child sort by depth (matches previous getChildren ordering)
+    const byDepth = (a, b) => {
       if (a.depth !== undefined && b.depth !== undefined) {
         return a.depth - b.depth
       }
       return 0
-    })
-
-    return { nodeMap: map, rootNodes: roots }
-  }, [callStack, normalizeNode])
-
-  // Check if a node has children (without loading them)
-  const hasChildren = useCallback((nodeId) => {
-    // Quick check: iterate through nodeMap to see if any node has this as parent
-    for (const node of nodeMap.values()) {
-      if (node.parent_id === nodeId) {
-        return true
-      }
     }
-    return false
-  }, [nodeMap])
+    childIndex.forEach(siblings => siblings.sort(byDepth))
+
+    // Sort root nodes by depth or original order
+    roots.sort(byDepth)
+
+    return { nodeMap: map, rootNodes: roots, childrenMap: childIndex }
+  }, [callStack, normalizeNode])
 
   // Filter function - shared for both root nodes and children
   const shouldIncludeNode = useCallback((node) => {
@@ -127,46 +128,35 @@ function ExecutionStackTree({ callStack }) {
     return true
   }, [filters])
 
-  // Get children for a specific node (lazy loading)
+  // Check if a node has (visible) children - O(1) lookup in the precomputed index.
+  // When a filter is active, only count children that pass the filter, so we don't
+  // show an expand chevron for a subtree that would render empty.
+  const hasChildren = useCallback((nodeId) => {
+    const children = childrenMap.get(nodeId)
+    if (!children || children.length === 0) {
+      return false
+    }
+    if (!filters.enabled) {
+      return true
+    }
+    return children.some(shouldIncludeNode)
+  }, [childrenMap, filters.enabled, shouldIncludeNode])
+
+  // Get children for a specific node - pure O(1) lookup, no state mutation.
   const getChildren = useCallback((parentId) => {
-    // Check cache first
-    if (loadedChildren.has(parentId)) {
-      return loadedChildren.get(parentId)
+    const children = childrenMap.get(parentId)
+    if (!children || children.length === 0) {
+      return []
     }
 
-    // Find all nodes with this parent_id
-    const children = []
-    nodeMap.forEach(node => {
-      if (node.parent_id === parentId) {
-        children.push({
-          ...node,
-          _hasChildren: hasChildren(node.call_id)
-        })
-      }
-    })
-
-    // Sort children by depth
-    children.sort((a, b) => {
-      if (a.depth !== undefined && b.depth !== undefined) {
-        return a.depth - b.depth
-      }
-      return 0
-    })
-
-    // Apply filters to children if filters are enabled
-    const filteredChildren = shouldIncludeNode 
-      ? children.filter(shouldIncludeNode)
-      : children
-
-    // Cache the result
-    setLoadedChildren(prev => {
-      const newMap = new Map(prev)
-      newMap.set(parentId, filteredChildren)
-      return newMap
-    })
-
-    return filteredChildren
-  }, [nodeMap, hasChildren, loadedChildren, shouldIncludeNode])
+    // Apply filters (shouldIncludeNode is a no-op when filters are disabled)
+    return children
+      .filter(shouldIncludeNode)
+      .map(node => ({
+        ...node,
+        _hasChildren: hasChildren(node.call_id)
+      }))
+  }, [childrenMap, hasChildren, shouldIncludeNode])
 
   // Build tree structure with lazy-loaded children
   const treeData = useMemo(() => {
@@ -187,44 +177,63 @@ function ExecutionStackTree({ callStack }) {
   }, [treeData, shouldIncludeNode])
 
   const toggleNode = useCallback((callId) => {
-    const newExpanded = new Set(expandedNodes)
-    if (newExpanded.has(callId)) {
-      newExpanded.delete(callId)
-    } else {
-      // When expanding, load children if not already loaded
-      newExpanded.add(callId)
-      if (!loadedChildren.has(callId)) {
-        getChildren(callId)
+    setExpandedNodes(prev => {
+      const newExpanded = new Set(prev)
+      if (newExpanded.has(callId)) {
+        newExpanded.delete(callId)
+      } else {
+        newExpanded.add(callId)
       }
-    }
-    setExpandedNodes(newExpanded)
-  }, [expandedNodes, loadedChildren, getChildren])
+      return newExpanded
+    })
+  }, [])
 
   const expandAll = useCallback(() => {
-    // Note: expandAll will still need to load all children, which may be slow for large trees
-    // For now, we'll just expand what's visible - full expand all would require loading everything
     const allVisibleNodeIds = new Set()
     const collectVisibleIds = (nodes) => {
       nodes.forEach(node => {
         if (hasChildren(node.call_id)) {
           allVisibleNodeIds.add(node.call_id)
-          // Load children to make them visible
-          if (!loadedChildren.has(node.call_id)) {
-            getChildren(node.call_id)
-          }
-          // Recursively collect from loaded children
-          const children = loadedChildren.get(node.call_id) || []
-          collectVisibleIds(children)
+          // Recurse using the freshly computed children, not stale state
+          collectVisibleIds(getChildren(node.call_id))
         }
       })
     }
     collectVisibleIds(filteredTreeData)
     setExpandedNodes(allVisibleNodeIds)
-  }, [filteredTreeData, hasChildren, loadedChildren, getChildren])
+  }, [filteredTreeData, hasChildren, getChildren])
 
   const collapseAll = () => {
     setExpandedNodes(new Set())
   }
+
+  // --- Row virtualization (opt-in via VIZ_V2) -----------------------------
+  // Flatten the currently-visible rows (respecting expand state AND active
+  // filters) into a linear list so we can window it. This walks the same
+  // O(1) childrenMap via getChildren(), so filtering/expand semantics match
+  // the recursive renderer exactly.
+  const scrollRef = useRef(null)
+  const [scrollTop, setScrollTop] = useState(0)
+
+  const flatRows = useMemo(() => {
+    if (!VIZ_V2_ENABLED) return []
+    const rows = []
+    const walk = (nodes, depth) => {
+      for (const node of nodes) {
+        const expandable = hasChildren(node.call_id)
+        rows.push({ node, depth, expandable })
+        if (expandable && expandedNodes.has(node.call_id)) {
+          walk(getChildren(node.call_id), depth + 1)
+        }
+      }
+    }
+    walk(filteredTreeData, 0)
+    return rows
+  }, [filteredTreeData, expandedNodes, hasChildren, getChildren])
+
+  const handleScroll = useCallback((e) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
 
   const formatBytes = (bytes) => {
     if (bytes === 0) return '0 B'
@@ -267,6 +276,13 @@ function ExecutionStackTree({ callStack }) {
     )
   }
 
+  // Windowed slice (only meaningful when VIZ_V2 is enabled; cheap no-op otherwise)
+  const total = flatRows.length
+  const viewportHeight = Math.min(VIEWPORT_MAX, Math.max(total, 1) * ROW_HEIGHT)
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endIndex = Math.min(total, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
+  const visibleSlice = flatRows.slice(startIndex, endIndex)
+
   return (
     <div className="execution-stack-tree">
       <TraceTabFilters
@@ -284,36 +300,69 @@ function ExecutionStackTree({ callStack }) {
           </button>
         </div>
       </div>
-      <div className="execution-stack-tree-content">
-        {filteredTreeData.map((node, idx) => (
-          <StackTreeNode
-            key={node.call_id || idx}
-            node={node}
-            expandedNodes={expandedNodes}
-            onToggle={toggleNode}
-            depth={0}
-            formatBytes={formatBytes}
-            formatMemory={formatMemory}
-            formatDuration={formatDuration}
-            getChildren={getChildren}
-            hasChildren={hasChildren}
-            loadedChildren={loadedChildren}
-          />
-        ))}
-      </div>
+      {/* Large traces: hand-rolled row windowing (no extra deps). Flatten the
+          visible rows, then render only the slice inside the scroll viewport
+          plus a small overscan. Opt-in via VIZ_V2 so default behavior (full
+          recursive render) is unchanged. */}
+      {VIZ_V2_ENABLED ? (
+        <div
+          className="execution-stack-tree-content execution-stack-tree-content--virtual"
+          ref={scrollRef}
+          onScroll={handleScroll}
+          style={{ height: viewportHeight, overflowY: 'auto', position: 'relative' }}
+        >
+          <div style={{ height: total * ROW_HEIGHT, position: 'relative' }}>
+            {visibleSlice.map(({ node, depth, expandable }, i) => {
+              const index = startIndex + i
+              return (
+                <FlatStackRow
+                  key={node.call_id || index}
+                  node={node}
+                  depth={depth}
+                  expandable={expandable}
+                  isExpanded={expandedNodes.has(node.call_id)}
+                  onToggle={toggleNode}
+                  top={index * ROW_HEIGHT}
+                  height={ROW_HEIGHT}
+                  formatBytes={formatBytes}
+                  formatMemory={formatMemory}
+                  formatDuration={formatDuration}
+                />
+              )
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="execution-stack-tree-content">
+          {filteredTreeData.map((node, idx) => (
+            <StackTreeNode
+              key={node.call_id || idx}
+              node={node}
+              expandedNodes={expandedNodes}
+              onToggle={toggleNode}
+              depth={0}
+              formatBytes={formatBytes}
+              formatMemory={formatMemory}
+              formatDuration={formatDuration}
+              getChildren={getChildren}
+              hasChildren={hasChildren}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, formatMemory, formatDuration, getChildren, hasChildren, loadedChildren }) {
+function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, formatMemory, formatDuration, getChildren, hasChildren }) {
   const nodeHasChildren = hasChildren ? hasChildren(node.call_id) : (node._hasChildren !== undefined ? node._hasChildren : false)
   const isExpanded = expandedNodes.has(node.call_id)
   const displayName = node.class ? `${node.class}::${node.function}` : node.function
   const functionTypeLabel = node.function_type === 1 ? 'internal' : node.function_type === 2 ? 'method' : 'user'
 
-  // Get children when expanded (lazy load)
-  const children = isExpanded && nodeHasChildren && getChildren 
-    ? (loadedChildren.get(node.call_id) || getChildren(node.call_id))
+  // Get children when expanded - pure O(1) lookup, no state mutation during render
+  const children = isExpanded && nodeHasChildren && getChildren
+    ? getChildren(node.call_id)
     : []
 
   return (
@@ -411,11 +460,98 @@ function StackTreeNode({ node, expandedNodes, onToggle, depth, formatBytes, form
               formatDuration={formatDuration}
               getChildren={getChildren}
               hasChildren={hasChildren}
-              loadedChildren={loadedChildren}
             />
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// Compact, fixed-height row used by the windowed renderer. Renders the same
+// information as StackTreeNode but on a single constrained line so every row is
+// exactly ROW_HEIGHT tall (a prerequisite for scrollTop-based windowing).
+function FlatStackRow({ node, depth, expandable, isExpanded, onToggle, top, height, formatBytes, formatMemory, formatDuration }) {
+  const displayName = node.class ? `${node.class}::${node.function}` : node.function
+  const functionTypeLabel = node.function_type === 1 ? 'internal' : node.function_type === 2 ? 'method' : 'user'
+
+  return (
+    <div
+      className="stack-tree-node-content stack-tree-node-content--virtual"
+      style={{
+        position: 'absolute',
+        top,
+        left: 0,
+        right: 0,
+        height,
+        paddingLeft: `${depth * 24 + 8}px`,
+        display: 'flex',
+        alignItems: 'center',
+        overflow: 'hidden',
+      }}
+    >
+      <div className="stack-tree-node-main" style={{ minWidth: 0, width: '100%' }}>
+        {expandable ? (
+          <button
+            className="stack-tree-expand-btn"
+            onClick={() => onToggle(node.call_id)}
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            {isExpanded ? <FiChevronDown /> : <FiChevronRight />}
+          </button>
+        ) : (
+          <div className="stack-tree-spacer" />
+        )}
+
+        <div className="stack-tree-node-info" style={{ minWidth: 0 }}>
+          <div className="stack-tree-node-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <FiCode className="stack-tree-icon" />
+            <strong>{displayName}</strong>
+            {node.file && (
+              <span className="stack-tree-file-info">
+                <FiFile className="stack-tree-icon-small" />
+                {node.file.split('/').pop()}
+                {node.line > 0 && `:${node.line}`}
+              </span>
+            )}
+            <span className={`stack-tree-function-type ${functionTypeLabel}`}>
+              {functionTypeLabel}
+            </span>
+            <span className="stack-tree-metric" style={{ marginLeft: 'auto' }}>
+              <FiClock className="stack-tree-metric-icon" />
+              <span className="stack-tree-metric-value">{formatDuration(node.duration_ms)}</span>
+            </span>
+            {node.cpu_ms > 0 && (
+              <span className="stack-tree-metric">
+                <FiCpu className="stack-tree-metric-icon" />
+                <span className="stack-tree-metric-value">{formatDuration(node.cpu_ms)}</span>
+              </span>
+            )}
+            {node.memory_delta !== 0 && (
+              <span className="stack-tree-metric">
+                <FiHardDrive className="stack-tree-metric-icon" />
+                <span className={`stack-tree-metric-value ${node.memory_delta < 0 ? 'negative' : 'positive'}`}>
+                  {formatMemory(node.memory_delta)}
+                </span>
+              </span>
+            )}
+            {(node.network_bytes_sent > 0 || node.network_bytes_received > 0) && (
+              <span className="stack-tree-metric network-metric">
+                <FiGlobe className="stack-tree-metric-icon" />
+                <span className="stack-tree-metric-value">
+                  {node.network_bytes_sent > 0 && (
+                    <span className="network-sent">↑ {formatBytes(node.network_bytes_sent)}</span>
+                  )}
+                  {node.network_bytes_sent > 0 && node.network_bytes_received > 0 && <span> / </span>}
+                  {node.network_bytes_received > 0 && (
+                    <span className="network-received">↓ {formatBytes(node.network_bytes_received)}</span>
+                  )}
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
