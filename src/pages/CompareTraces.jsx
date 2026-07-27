@@ -1,30 +1,47 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, Link, useLocation, useSearchParams } from 'react-router-dom'
-import { 
-  FiArrowLeft, 
-  FiShuffle, 
-  FiCheckCircle, 
-  FiAlertCircle,
-  FiServer,
-  FiClock,
-  FiLayers,
-  FiRefreshCw,
-  FiDownload
-} from 'react-icons/fi'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { FiArrowLeft, FiShuffle, FiDownload, FiRefreshCw, FiGitBranch, FiClock } from 'react-icons/fi'
 import axios from 'axios'
 import ProfileComparison from '../components/ProfileComparison'
-import LoadingSpinner from '../components/LoadingSpinner'
 import CopyToClipboard from '../components/CopyToClipboard'
 import ShareButton from '../components/ShareButton'
-import './CompareTraces.css'
+import { useApi } from '../hooks/useApi'
+import {
+  Panel, DataTable, EntityHeader, StatusPill, SegmentedControl,
+  DeltaIndicator, EmptyState, ErrorState,
+} from '../components/ui'
+import { fmtMs, fmtBytes, fmtNum } from '../theme/format'
+import { calculateOverallMetrics } from '../utils/comparisonUtils'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
-function CompareTraces() {
-  const navigate = useNavigate()
+// Root span helpers for header chips.
+function rootSpan(trace) {
+  return trace?.spans?.find((s) => !s.parent_id) || trace?.spans?.[0] || null
+}
+function isError(trace) {
+  const st = rootSpan(trace)?.status
+  return st === 'error' || st === '0'
+}
+
+// Metric rows for the side-by-side diff table. `invert` = more-is-worse.
+const METRIC_ROWS = [
+  { key: 'duration', label: 'Duration', fmt: fmtMs, invert: true, color: 'var(--tier-app)' },
+  { key: 'cpu', label: 'CPU time', fmt: fmtMs, invert: true, color: 'var(--tier-app)' },
+  { key: 'memory', label: 'Memory', fmt: fmtBytes, invert: true },
+  { key: 'spans', label: 'Spans', fmt: fmtNum, invert: false },
+  { key: 'sqlQueries', label: 'SQL queries', fmt: fmtNum, invert: true, color: 'var(--tier-db)' },
+  { key: 'httpRequests', label: 'HTTP requests', fmt: fmtNum, invert: true, color: 'var(--tier-http)' },
+  { key: 'redisOperations', label: 'Redis ops', fmt: fmtNum, invert: true, color: 'var(--tier-redis)' },
+  { key: 'cacheOperations', label: 'Cache ops', fmt: fmtNum, invert: true, color: 'var(--tier-cache)' },
+  { key: 'networkSent', label: 'Bytes sent', fmt: fmtBytes, invert: true, color: 'var(--tier-app)' },
+  { key: 'networkReceived', label: 'Bytes received', fmt: fmtBytes, invert: true, color: 'var(--tier-db)' },
+]
+
+export default function CompareTraces() {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
-  
+
   const [trace1Id, setTrace1Id] = useState(searchParams.get('trace1') || '')
   const [trace2Id, setTrace2Id] = useState(searchParams.get('trace2') || '')
   const [trace1, setTrace1] = useState(null)
@@ -34,31 +51,12 @@ function CompareTraces() {
   const [error1, setError1] = useState(null)
   const [error2, setError2] = useState(null)
   const [viewMode, setViewMode] = useState(searchParams.get('mode') || 'diff')
-  const [recentTraces, setRecentTraces] = useState([])
-  const [loadingTraces, setLoadingTraces] = useState(false)
 
-  // Fetch recent traces for suggestions
-  useEffect(() => {
-    const fetchRecentTraces = async () => {
-      setLoadingTraces(true)
-      try {
-        // Try to get recent traces from the traces list endpoint
-        const response = await axios.get(`${API_URL}/api/traces?limit=20`)
-        if (response.data && Array.isArray(response.data)) {
-          setRecentTraces(response.data)
-        } else if (response.data && response.data.traces && Array.isArray(response.data.traces)) {
-          setRecentTraces(response.data.traces)
-        }
-      } catch (err) {
-        console.error('Error fetching recent traces:', err)
-        // Don't show error, just continue without suggestions
-      } finally {
-        setLoadingTraces(false)
-      }
-    }
-
-    fetchRecentTraces()
-  }, [])
+  // Recent traces for input suggestions (same endpoint + params as before).
+  const recent = useApi('/api/traces', { limit: 20 }, { noRange: true })
+  const recentTraces = Array.isArray(recent.data)
+    ? recent.data
+    : (Array.isArray(recent.data?.traces) ? recent.data.traces : [])
 
   // Fetch trace 1
   const fetchTrace1 = async (id = null) => {
@@ -68,7 +66,6 @@ function CompareTraces() {
       setError1(null)
       return
     }
-
     setLoading1(true)
     setError1(null)
     try {
@@ -91,7 +88,6 @@ function CompareTraces() {
       setError2(null)
       return
     }
-
     setLoading2(true)
     setError2(null)
     try {
@@ -106,26 +102,15 @@ function CompareTraces() {
     }
   }
 
-  const handleCompare = () => {
-    if (trace1Id.trim() && trace2Id.trim()) {
-      fetchTrace1()
-      fetchTrace2()
-    }
-  }
-
   // Sync trace IDs and view mode to URL params
   useEffect(() => {
     const params = new URLSearchParams(searchParams)
-    
     if (trace1Id) params.set('trace1', trace1Id)
     else params.delete('trace1')
-    
     if (trace2Id) params.set('trace2', trace2Id)
     else params.delete('trace2')
-    
     if (viewMode && viewMode !== 'diff') params.set('mode', viewMode)
     else params.delete('mode')
-    
     setSearchParams(params, { replace: true })
   }, [trace1Id, trace2Id, viewMode, searchParams, setSearchParams])
 
@@ -133,7 +118,6 @@ function CompareTraces() {
   useEffect(() => {
     const trace1FromUrl = searchParams.get('trace1')
     const trace2FromUrl = searchParams.get('trace2')
-    
     if (trace1FromUrl && trace1FromUrl !== trace1Id) {
       setTrace1Id(trace1FromUrl)
       fetchTrace1(trace1FromUrl)
@@ -149,307 +133,165 @@ function CompareTraces() {
   useEffect(() => {
     if (location.state?.trace1Id) {
       setTrace1Id(location.state.trace1Id)
-      // Auto-load trace 1 if ID is provided
       fetchTrace1(location.state.trace1Id)
     }
     if (location.state?.trace2Id) {
       setTrace2Id(location.state.trace2Id)
-      // Auto-load trace 2 if ID is provided
       fetchTrace2(location.state.trace2Id)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
-  const formatDuration = (ms) => {
-    if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`
-    if (ms < 1000) return `${ms.toFixed(2)}ms`
-    return `${(ms / 1000).toFixed(2)}s`
-  }
+  const m1 = trace1 ? calculateOverallMetrics(trace1) : null
+  const m2 = trace2 ? calculateOverallMetrics(trace2) : null
+
+  const diffColumns = [
+    { key: 'label', header: 'Metric', render: (r) => <span className="cell-strong">{r.label}</span>, sortable: false },
+    { key: 'a', header: 'Baseline (A)', num: true, sortable: false, render: (r) => (
+      <span className="opa-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m1?.[r.key] ?? 0)}</span>
+    ) },
+    { key: 'b', header: 'New (B)', num: true, sortable: false, render: (r) => (
+      <span className="opa-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m2?.[r.key] ?? 0)}</span>
+    ) },
+    { key: 'delta', header: 'Δ', num: true, sortable: false, render: (r) => (
+      <DeltaIndicator current={m2?.[r.key] ?? 0} previous={m1?.[r.key] ?? 0} invert={r.invert} />
+    ) },
+  ]
+
+  const bothLoaded = trace1 && trace2
+
+  const renderSelector = (label, id, value, setValue, loading, error, fetchFn, trace, listId) => (
+    <Panel
+      title={label}
+      icon={<FiShuffle />}
+      actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>GET /api/traces/{'{id}'}/full</span>}
+    >
+      <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+        <input
+          id={id}
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Enter trace ID"
+          list={listId}
+          className="opa-input"
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <datalist id={listId}>
+          {recentTraces.map((t, idx) => (
+            <option key={idx} value={t.trace_id || t.id} />
+          ))}
+        </datalist>
+        <button onClick={() => fetchFn()} disabled={loading || !value.trim()} className="opa-btn primary">
+          {loading ? <><FiRefreshCw style={{ animation: 'spin 1s linear infinite' }} /> Loading</> : <><FiDownload /> Load</>}
+        </button>
+      </div>
+
+      {error && <div style={{ marginTop: 'var(--sp-3)' }}><ErrorState message={error} /></div>}
+
+      {trace && (
+        <div style={{ marginTop: 'var(--sp-3)' }}>
+          <EntityHeader
+            title={value}
+            subtitle={rootSpan(trace)?.service || 'unknown service'}
+            badges={
+              <>
+                <StatusPill tone={isError(trace) ? 'error' : 'ok'}>{isError(trace) ? 'Error' : 'OK'}</StatusPill>
+                <span className="opa-badge">{trace.spans?.length || 0} spans</span>
+                <span className="opa-badge">{fmtMs(rootSpan(trace)?.duration_ms || 0)}</span>
+              </>
+            }
+            actions={
+              <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+                <CopyToClipboard text={value} label="Copy ID" />
+                <Link to={`/traces/${value}`} className="opa-btn ghost">View trace</Link>
+              </div>
+            }
+          />
+        </div>
+      )}
+    </Panel>
+  )
 
   return (
-    <div className="compare-traces">
-      <div className="compare-traces-header">
-        <div className="compare-traces-header-left">
-          <Link to="/traces" className="back-link btn btn-ghost">
-            <FiArrowLeft />
-            <span>Back to Traces</span>
-          </Link>
-          <div className="header-title-section">
-            <FiShuffle className="header-icon" />
-            <h1>Compare Traces</h1>
-          </div>
+    <div className="opa-stack">
+      <div className="opa-page-head">
+        <div>
+          <h1 className="opa-page-title">Compare Traces</h1>
+          <div className="opa-page-sub">Side-by-side profile diff between two traces</div>
         </div>
-        <div className="compare-traces-header-right">
-          {trace1Id && trace2Id && (
-            <>
-              <ShareButton />
-              <ShareButton />
-            </>
-          )}
+        <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+          {bothLoaded && <ShareButton />}
+          <Link to="/traces" className="opa-btn ghost"><FiArrowLeft /> Back to Traces</Link>
         </div>
       </div>
 
-      <div className="compare-traces-content">
-        <div className="trace-selectors">
-          <div className="trace-selector card">
-            <label htmlFor="trace1" className="selector-label">
-              <FiShuffle className="label-icon" />
-              <span>Trace 1 (Baseline)</span>
-            </label>
-            <div className="selector-input-group">
-              <input
-                id="trace1"
-                type="text"
-                value={trace1Id}
-                onChange={(e) => setTrace1Id(e.target.value)}
-                placeholder="Enter trace ID"
-                className="trace-input"
-                list="recent-traces-1"
+      <div className="opa-grid cols-2">
+        {renderSelector('Trace A · Baseline', 'trace1', trace1Id, setTrace1Id, loading1, error1, fetchTrace1, trace1, 'recent-traces-1')}
+        {renderSelector('Trace B · New', 'trace2', trace2Id, setTrace2Id, loading2, error2, fetchTrace2, trace2, 'recent-traces-2')}
+      </div>
+
+      {bothLoaded ? (
+        <>
+          <Panel title="Metrics diff" icon={<FiGitBranch />} flush>
+            <DataTable columns={diffColumns} rows={METRIC_ROWS} rowKey={(r) => r.key} />
+          </Panel>
+
+          <Panel
+            title="Detailed comparison"
+            icon={<FiShuffle />}
+            actions={
+              <SegmentedControl
+                options={[
+                  { value: 'diff', label: 'Difference' },
+                  { value: 'side-by-side', label: 'Side by side' },
+                ]}
+                value={viewMode}
+                onChange={setViewMode}
               />
-              <datalist id="recent-traces-1">
-                {recentTraces.map((trace, idx) => (
-                  <option key={idx} value={trace.trace_id || trace.id} />
-                ))}
-              </datalist>
-              <button
-                onClick={fetchTrace1}
-                disabled={loading1 || !trace1Id.trim()}
-                className="btn btn-primary load-btn"
-              >
-                {loading1 ? (
-                  <>
-                    <FiRefreshCw className="spinning" />
-                    <span>Loading...</span>
-                  </>
-                ) : (
-                  <>
-                    <FiDownload />
-                    <span>Load</span>
-                  </>
-                )}
-              </button>
-            </div>
-            {error1 && (
-              <div className="error-message">
-                <FiAlertCircle />
-                <span>{error1}</span>
-              </div>
-            )}
-            {trace1 && (
-              <div className="trace-info card">
-                <div className="info-item">
-                  <FiServer className="info-icon" />
-                  <div className="info-content">
-                    <strong>Service</strong>
-                    <span>{trace1.spans?.[0]?.service || 'N/A'}</span>
-                  </div>
-                </div>
-                <div className="info-item">
-                  <FiClock className="info-icon" />
-                  <div className="info-content">
-                    <strong>Duration</strong>
-                    <span>{formatDuration(trace1.spans?.[0]?.duration_ms || 0)}</span>
-                  </div>
-                </div>
-                <div className="info-item">
-                  <FiLayers className="info-icon" />
-                  <div className="info-content">
-                    <strong>Spans</strong>
-                    <span>{trace1.spans?.length || 0}</span>
-                  </div>
-                </div>
-                <div className="info-item">
-                  {trace1.spans?.[0]?.status === 'error' || trace1.spans?.[0]?.status === '0' ? (
-                    <FiAlertCircle className="info-icon error" />
-                  ) : (
-                    <FiCheckCircle className="info-icon success" />
-                  )}
-                  <div className="info-content">
-                    <strong>Status</strong>
-                    <span className={`status-badge ${trace1.spans?.[0]?.status === 'error' || trace1.spans?.[0]?.status === '0' ? 'error' : 'ok'}`}>
-                      {trace1.spans?.[0]?.status === 'error' || trace1.spans?.[0]?.status === '0' ? 'Error' : 'OK'}
-                    </span>
-                  </div>
-                </div>
-                <div className="trace-loaded-indicator">
-                  <FiCheckCircle className="check-icon" />
-                  <span>Loaded</span>
-                </div>
-                <div className="trace-actions">
-                  <CopyToClipboard text={trace1Id} label="Copy ID" />
-                  <Link 
-                    to={`/traces/${trace1Id}`}
-                    className="btn btn-ghost view-trace-link"
-                  >
-                    View Trace
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="trace-selector card">
-            <label htmlFor="trace2" className="selector-label">
-              <FiShuffle className="label-icon" />
-              <span>Trace 2 (New)</span>
-            </label>
-            <div className="selector-input-group">
-              <input
-                id="trace2"
-                type="text"
-                value={trace2Id}
-                onChange={(e) => setTrace2Id(e.target.value)}
-                placeholder="Enter trace ID"
-                className="trace-input"
-                list="recent-traces-2"
-              />
-              <datalist id="recent-traces-2">
-                {recentTraces.map((trace, idx) => (
-                  <option key={idx} value={trace.trace_id || trace.id} />
-                ))}
-              </datalist>
-              <button
-                onClick={fetchTrace2}
-                disabled={loading2 || !trace2Id.trim()}
-                className="btn btn-primary load-btn"
-              >
-                {loading2 ? (
-                  <>
-                    <FiRefreshCw className="spinning" />
-                    <span>Loading...</span>
-                  </>
-                ) : (
-                  <>
-                    <FiDownload />
-                    <span>Load</span>
-                  </>
-                )}
-              </button>
-            </div>
-            {error2 && (
-              <div className="error-message">
-                <FiAlertCircle />
-                <span>{error2}</span>
-              </div>
-            )}
-            {trace2 && (
-              <div className="trace-info card">
-                <div className="info-item">
-                  <FiServer className="info-icon" />
-                  <div className="info-content">
-                    <strong>Service</strong>
-                    <span>{trace2.spans?.[0]?.service || 'N/A'}</span>
-                  </div>
-                </div>
-                <div className="info-item">
-                  <FiClock className="info-icon" />
-                  <div className="info-content">
-                    <strong>Duration</strong>
-                    <span>{formatDuration(trace2.spans?.[0]?.duration_ms || 0)}</span>
-                  </div>
-                </div>
-                <div className="info-item">
-                  <FiLayers className="info-icon" />
-                  <div className="info-content">
-                    <strong>Spans</strong>
-                    <span>{trace2.spans?.length || 0}</span>
-                  </div>
-                </div>
-                <div className="info-item">
-                  {trace2.spans?.[0]?.status === 'error' || trace2.spans?.[0]?.status === '0' ? (
-                    <FiAlertCircle className="info-icon error" />
-                  ) : (
-                    <FiCheckCircle className="info-icon success" />
-                  )}
-                  <div className="info-content">
-                    <strong>Status</strong>
-                    <span className={`status-badge ${trace2.spans?.[0]?.status === 'error' || trace2.spans?.[0]?.status === '0' ? 'error' : 'ok'}`}>
-                      {trace2.spans?.[0]?.status === 'error' || trace2.spans?.[0]?.status === '0' ? 'Error' : 'OK'}
-                    </span>
-                  </div>
-                </div>
-                <div className="trace-loaded-indicator">
-                  <FiCheckCircle className="check-icon" />
-                  <span>Loaded</span>
-                </div>
-                <div className="trace-actions">
-                  <CopyToClipboard text={trace2Id} label="Copy ID" />
-                  <Link 
-                    to={`/traces/${trace2Id}`}
-                    className="btn btn-ghost view-trace-link"
-                  >
-                    View Trace
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="view-mode-selector">
-          <label>View Mode:</label>
-          <div className="view-mode-buttons">
-            <button
-              className={viewMode === 'diff' ? 'active' : ''}
-              onClick={() => setViewMode('diff')}
-            >
-              Difference View
-            </button>
-            <button
-              className={viewMode === 'side-by-side' ? 'active' : ''}
-              onClick={() => setViewMode('side-by-side')}
-            >
-              Side by Side
-            </button>
-          </div>
-        </div>
-
-        {trace1 && trace2 && (
-          <div className="comparison-container">
+            }
+          >
             <ProfileComparison trace1={trace1} trace2={trace2} viewMode={viewMode} />
-          </div>
-        )}
-
-        {(!trace1 || !trace2) && (
-          <div className="comparison-placeholder">
-            <p>Select two traces above to start comparing</p>
-            {recentTraces.length > 0 && (
-              <div className="recent-traces">
-                <h3>Recent Traces:</h3>
-                <div className="recent-traces-list">
-                  {recentTraces.slice(0, 10).map((trace, idx) => {
-                    const traceId = trace.trace_id || trace.id
-                    return (
-                      <div key={idx} className="recent-trace-item">
-                        <button
-                          onClick={() => {
-                            if (!trace1) {
-                              setTrace1Id(traceId)
-                              setTrace1Id(traceId)
-                              setTimeout(() => fetchTrace1(), 100)
-                            } else if (!trace2) {
-                              setTrace2Id(traceId)
-                              setTimeout(() => fetchTrace2(), 100)
-                            }
-                          }}
-                          className="trace-link-btn"
-                        >
-                          {traceId.substring(0, 16)}...
-                        </button>
-                        <span className="trace-meta">
-                          {formatDuration(trace.duration_ms || 0)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
+          </Panel>
+        </>
+      ) : (
+        <Panel>
+          <EmptyState
+            icon={<FiShuffle />}
+            title="Select two traces to compare"
+            hint="Load a baseline and a new trace above to see the diff."
+          />
+          {recentTraces.length > 0 && (
+            <div style={{ marginTop: 'var(--sp-4)' }}>
+              <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginBottom: 'var(--sp-2)' }}>Recent traces</div>
+              <div className="opa-row" style={{ flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+                {recentTraces.slice(0, 10).map((t, idx) => {
+                  const traceId = t.trace_id || t.id
+                  return (
+                    <button
+                      key={idx}
+                      className="opa-btn ghost"
+                      onClick={() => {
+                        if (!trace1) {
+                          setTrace1Id(traceId)
+                          setTimeout(() => fetchTrace1(traceId), 0)
+                        } else if (!trace2) {
+                          setTrace2Id(traceId)
+                          setTimeout(() => fetchTrace2(traceId), 0)
+                        }
+                      }}
+                    >
+                      <FiClock size={11} />
+                      <span className="opa-mono">{String(traceId).substring(0, 16)}…</span>
+                      <span className="opa-muted">{fmtMs(t.duration_ms || 0)}</span>
+                    </button>
+                  )
+                })}
               </div>
-            )}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </Panel>
+      )}
     </div>
   )
 }
-
-export default CompareTraces
-

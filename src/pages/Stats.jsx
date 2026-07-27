@@ -1,400 +1,134 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { 
-  FiBarChart2, 
-  FiActivity, 
-  FiServer, 
-  FiDatabase,
-  FiRefreshCw,
-  FiAlertCircle,
-  FiClock,
-  FiTrendingUp,
-  FiHardDrive
+import React from 'react'
+import {
+  FiActivity, FiAlertCircle, FiClock, FiTrendingUp, FiServer, FiDatabase,
+  FiHardDrive, FiInbox, FiLayers,
 } from 'react-icons/fi'
+import { useApi } from '../hooks/useApi'
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts'
-import { statsApi } from '../services/statsApi'
-import TimeRangePicker from '../components/TimeRangePicker'
-import HelpIcon from '../components/HelpIcon'
-import {
-  gridProps,
-  axisProps,
-  axisLabel,
-  tooltipProps,
-  legendProps,
-  semanticColors,
-  VIZ_V2_ENABLED,
-} from '../utils/chartTheme'
-import './Stats.css'
+  Panel, KpiTile, DataTable, InlineBar, StatusPill, HealthDot,
+} from '../components/ui'
+import { fmtMs, fmtNum, fmtPct, fmtBytes, statusColor, latencyStatus, errorRateStatus } from '../theme/format'
 
-function Stats({ autoRefresh = true }) {
-  const [stats, setStats] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [timeRange, setTimeRange] = useState('24h')
+export default function Stats() {
+  const stats = useApi('/api/stats')
+  const health = useApi('/api/health')
 
-  const calculateTimeRange = (range) => {
-    const now = new Date()
-    let fromDate = new Date()
-    
-    switch (range) {
-      case '1h':
-        fromDate.setHours(now.getHours() - 1)
-        break
-      case '6h':
-        fromDate.setHours(now.getHours() - 6)
-        break
-      case '24h':
-        fromDate.setHours(now.getHours() - 24)
-        break
-      case '7d':
-        fromDate.setDate(now.getDate() - 7)
-        break
-      case '30d':
-        fromDate.setDate(now.getDate() - 30)
-        break
-      default:
-        fromDate.setHours(now.getHours() - 24)
-    }
-    
-    return {
-      from: fromDate.toISOString().slice(0, 19).replace('T', ' '),
-      to: now.toISOString().slice(0, 19).replace('T', ' ')
-    }
-  }
+  const agent = stats.data?.agent || {}
+  const db = stats.data?.database || {}
+  const traces = stats.data?.traces || {}
+  const tables = db.tables || []
+  const byService = traces.by_service || []
 
-  const fetchStats = useCallback(async () => {
-    setRefreshing(true)
-    setError(null)
-    
-    try {
-      const timeRangeObj = calculateTimeRange(timeRange)
-      const data = await statsApi.getStats(timeRangeObj.from, timeRangeObj.to)
-      setStats(data)
-    } catch (err) {
-      setError(err.response?.data?.error || 'Error fetching statistics')
-      console.error('Fetch stats error:', err)
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [timeRange])
+  const maxSize = Math.max(1, ...tables.map((t) => t.size_bytes || 0))
 
-  useEffect(() => {
-    setLoading(true)
-    fetchStats()
-  }, [fetchStats])
+  // Health chip: derive a tone from the /api/health payload.
+  const rawStatus = health.data?.status ?? health.data?.health ?? (health.data ? 'healthy' : null)
+  const healthColor = statusColor(rawStatus)
+  const healthTone = healthColor === 'var(--ok)' ? 'ok'
+    : healthColor === 'var(--warn)' ? 'warn'
+      : healthColor === 'var(--error)' ? 'error' : 'neutral'
+  const healthLabel = health.loading ? 'checking…'
+    : health.error ? 'unreachable'
+      : (rawStatus ? String(rawStatus) : 'unknown')
 
-  useEffect(() => {
-    if (!autoRefresh) return
-    
-    const interval = setInterval(() => {
-      fetchStats()
-    }, 5000) // 5 seconds
-    
-    return () => clearInterval(interval)
-  }, [autoRefresh, fetchStats])
-
-  const formatNumber = (num) => {
-    if (num == null || num === undefined) return '0'
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
-    return num.toString()
-  }
-
-  const formatDuration = (ms) => {
-    if (!ms && ms !== 0) return 'N/A'
-    if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`
-    if (ms < 1000) return `${ms.toFixed(2)}ms`
-    return `${(ms / 1000).toFixed(2)}s`
-  }
-
-  if (loading && !stats) {
-    return (
-      <div className="Stats">
-        <div className="loading">Loading statistics...</div>
+  const tableColumns = [
+    { key: 'name', header: 'Table', render: (r) => (
+      <div className="opa-row">
+        <FiDatabase size={13} style={{ color: 'var(--tier-db)' }} />
+        <span className="opa-mono">{r.name}</span>
       </div>
-    )
-  }
+    ), sortValue: (r) => r.name },
+    { key: 'rows', header: 'Rows', num: true, render: (r) => fmtNum(r.rows) },
+    { key: 'size_bytes', header: 'Size', num: true, sortValue: (r) => r.size_bytes || 0, render: (r) => (
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <InlineBar value={r.size_bytes || 0} max={maxSize} label={r.size_readable || fmtBytes(r.size_bytes)} color="var(--tier-db)" width={120} />
+      </div>
+    ) },
+  ]
+
+  const svcColumns = [
+    { key: 'service', header: 'Service', render: (r) => (
+      <div className="opa-row">
+        <HealthDot tone={errorRateStatus(r.error_rate)} title={`${fmtPct(r.error_rate)} errors`} />
+        <span className="cell-strong opa-mono">{r.service}</span>
+      </div>
+    ), sortValue: (r) => r.service },
+    { key: 'traces', header: 'Traces', num: true, render: (r) => fmtNum(r.traces) },
+    { key: 'spans', header: 'Spans', num: true, render: (r) => fmtNum(r.spans) },
+    { key: 'error_rate', header: 'Error %', num: true, render: (r) => (
+      <span style={{ color: `var(--${errorRateStatus(r.error_rate)})` }}>{fmtPct(r.error_rate)}</span>
+    ) },
+  ]
 
   return (
-    <div className="Stats">
-      <div className="stats-header">
-        <div className="header-title-section">
-          <FiBarChart2 className="header-icon" />
-          <h2>Statistics</h2>
-          <HelpIcon text="View comprehensive system statistics including traces metrics, agent internal stats, and database size information" position="right" />
+    <div className="opa-stack">
+      <div className="opa-page-head">
+        <div>
+          <h1 className="opa-page-title">Statistics</h1>
+          <div className="opa-page-sub">Agent, database, and trace health</div>
         </div>
-        <div className="time-range-controls">
-          <TimeRangePicker value={timeRange} onChange={setTimeRange} />
-          {refreshing && (
-            <div className="refresh-indicator">
-              <FiRefreshCw className="spinning" />
-              <span>Refreshing...</span>
-            </div>
-          )}
+        <div className="opa-row">
+          <StatusPill tone={healthTone}>
+            <HealthDot tone={healthTone} pulse={healthTone === 'ok'} />
+            <span style={{ marginLeft: 6 }}>API {healthLabel}</span>
+          </StatusPill>
         </div>
       </div>
 
-      {error && (
-        <div className="error-message">
-          <FiAlertCircle />
-          <span>{error}</span>
+      {/* Agent internals */}
+      <Panel title="Agent" icon={<FiServer />} loading={stats.loading && !stats.data} error={stats.error}>
+        <div className="opa-grid cols-3">
+          <KpiTile label="Incoming messages" icon={<FiInbox size={12} />} value={fmtNum(agent.incoming_total || 0)} status="neutral" />
+          <KpiTile label="Dropped messages" icon={<FiAlertCircle size={12} />} value={fmtNum(agent.dropped_total || 0)}
+            status={(agent.dropped_total || 0) > 0 ? 'warn' : 'ok'} />
+          <KpiTile label="Queue size" icon={<FiActivity size={12} />} value={fmtNum(agent.queue_size || 0)}
+            status={(agent.queue_size || 0) > 1000 ? 'warn' : 'ok'} />
         </div>
-      )}
+      </Panel>
 
-      {stats && (
-        <div className="stats-sections">
-          {/* Traces Statistics Section */}
-          <div className="stats-section">
-            <div className="stats-section-header">
-              <FiActivity className="section-icon" />
-              <h3>Traces Statistics</h3>
-              <HelpIcon text="Statistics about traces and spans collected in the system" position="right" />
-            </div>
-            
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiActivity />
-                  <span>Total Traces</span>
-                </div>
-                <p className="stat-value">
-                  {formatNumber(stats.traces?.total_traces || 0)}
-                </p>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiActivity />
-                  <span>Total Spans</span>
-                </div>
-                <p className="stat-value">
-                  {formatNumber(stats.traces?.total_spans || 0)}
-                </p>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiAlertCircle />
-                  <span>Error Rate</span>
-                </div>
-                <p className="stat-value">
-                  {(stats.traces?.error_rate || 0).toFixed(2)}
-                  <span className="stat-unit">%</span>
-                </p>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiClock />
-                  <span>Avg Duration</span>
-                </div>
-                <p className="stat-value">
-                  {formatDuration(stats.traces?.avg_duration_ms || 0)}
-                </p>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiTrendingUp />
-                  <span>P50 Duration</span>
-                </div>
-                <p className="stat-value">
-                  {formatDuration(stats.traces?.p50_duration_ms || 0)}
-                </p>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiTrendingUp />
-                  <span>P95 Duration</span>
-                </div>
-                <p className="stat-value">
-                  {formatDuration(stats.traces?.p95_duration_ms || 0)}
-                </p>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiTrendingUp />
-                  <span>P99 Duration</span>
-                </div>
-                <p className="stat-value">
-                  {formatDuration(stats.traces?.p99_duration_ms || 0)}
-                </p>
-              </div>
-            </div>
-
-            {/* Traces by Service */}
-            {stats.traces?.by_service && stats.traces.by_service.length > 0 && (
-              <div style={{ marginTop: 'var(--spacing-lg)' }}>
-                <h4 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                  Traces by Service
-                </h4>
-                {VIZ_V2_ENABLED && (
-                  /* Discrete per-service counts -> grouped Bar */
-                  <div style={{ marginBottom: 'var(--spacing-lg)' }}>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <BarChart
-                        data={stats.traces.by_service}
-                        margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
-                      >
-                        <CartesianGrid {...gridProps} />
-                        <XAxis
-                          {...axisProps}
-                          dataKey="service"
-                          angle={-30}
-                          textAnchor="end"
-                          height={70}
-                          interval={0}
-                        />
-                        <YAxis {...axisProps} allowDecimals={false} label={axisLabel('Count')} width={70} />
-                        <Tooltip
-                          {...tooltipProps}
-                          formatter={(value, name) => [Number(value).toLocaleString(), name]}
-                        />
-                        <Legend {...legendProps} />
-                        <Bar dataKey="traces" fill={semanticColors.p50} name="Traces" radius={[3, 3, 0, 0]} maxBarSize={48} />
-                        <Bar dataKey="spans" fill={semanticColors.throughput} name="Spans" radius={[3, 3, 0, 0]} maxBarSize={48} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-                <table className="stats-table">
-                  <thead>
-                    <tr>
-                      <th>Service</th>
-                      <th>Traces</th>
-                      <th>Spans</th>
-                      <th>Error Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.traces.by_service.map((service, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
-                            <FiServer style={{ color: 'var(--color-primary)' }} />
-                            {service.service}
-                          </div>
-                        </td>
-                        <td>{formatNumber(service.traces)}</td>
-                        <td>{formatNumber(service.spans)}</td>
-                        <td>{service.error_rate?.toFixed(2) || '0.00'}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Agent Stats Section */}
-          <div className="stats-section">
-            <div className="stats-section-header">
-              <FiServer className="section-icon" />
-              <h3>Agent Statistics</h3>
-              <HelpIcon text="Internal agent metrics including queue size, message processing, and dropped messages" position="right" />
-            </div>
-            
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiActivity />
-                  <span>Queue Size</span>
-                </div>
-                <p className="stat-value">
-                  {formatNumber(stats.agent?.queue_size || 0)}
-                </p>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiTrendingUp />
-                  <span>Incoming Messages</span>
-                </div>
-                <p className="stat-value">
-                  {formatNumber(stats.agent?.incoming_total || 0)}
-                </p>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiAlertCircle />
-                  <span>Dropped Messages</span>
-                </div>
-                <p className="stat-value">
-                  {formatNumber(stats.agent?.dropped_total || 0)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Database Size Section */}
-          <div className="stats-section">
-            <div className="stats-section-header">
-              <FiDatabase className="section-icon" />
-              <h3>Database Size</h3>
-              <HelpIcon text="ClickHouse database storage usage and table sizes" position="right" />
-            </div>
-            
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-label">
-                  <FiHardDrive />
-                  <span>Total Size</span>
-                </div>
-                <p className="stat-value">
-                  {stats.database?.total_size_readable || '0 B'}
-                </p>
-              </div>
-            </div>
-
-            {/* Tables */}
-            {stats.database?.tables && stats.database.tables.length > 0 && (
-              <div style={{ marginTop: 'var(--spacing-lg)' }}>
-                <h4 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                  Table Sizes
-                </h4>
-                <table className="stats-table">
-                  <thead>
-                    <tr>
-                      <th>Table</th>
-                      <th>Size</th>
-                      <th>Rows</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.database.tables.map((table, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
-                            <FiDatabase style={{ color: 'var(--color-primary)' }} />
-                            {table.name}
-                          </div>
-                        </td>
-                        <td>{table.size_readable || '0 B'}</td>
-                        <td>{formatNumber(table.rows)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+      {/* Trace summary */}
+      <Panel title="Traces" icon={<FiActivity />} loading={stats.loading && !stats.data} error={stats.error}>
+        <div className="opa-grid cols-4">
+          <KpiTile label="Total traces" icon={<FiActivity size={12} />} value={fmtNum(traces.total_traces || 0)} status="neutral" />
+          <KpiTile label="Total spans" icon={<FiLayers size={12} />} value={fmtNum(traces.total_spans || 0)} status="neutral" />
+          <KpiTile label="Error rate" icon={<FiAlertCircle size={12} />} value={fmtPct(traces.error_rate || 0)}
+            status={errorRateStatus(traces.error_rate)} />
+          <KpiTile label="Avg duration" icon={<FiClock size={12} />} value={fmtMs(traces.avg_duration_ms)}
+            status={latencyStatus(traces.avg_duration_ms)} />
+          <KpiTile label="p50 duration" icon={<FiTrendingUp size={12} />} value={fmtMs(traces.p50_duration_ms)}
+            status={latencyStatus(traces.p50_duration_ms)} />
+          <KpiTile label="p95 duration" icon={<FiTrendingUp size={12} />} value={fmtMs(traces.p95_duration_ms)}
+            status={latencyStatus(traces.p95_duration_ms)} />
+          <KpiTile label="p99 duration" icon={<FiTrendingUp size={12} />} value={fmtMs(traces.p99_duration_ms)}
+            status={latencyStatus(traces.p99_duration_ms)} />
         </div>
-      )}
+      </Panel>
+
+      {/* Traces by service */}
+      <Panel title="Traces by service" icon={<FiServer />} flush
+        loading={stats.loading && !stats.data} error={stats.error}
+        empty={!stats.loading && byService.length === 0}>
+        <DataTable
+          columns={svcColumns} rows={byService} rowKey={(r) => r.service}
+          initialSort={{ key: 'traces', dir: 'desc' }}
+        />
+      </Panel>
+
+      {/* Database size */}
+      <Panel title="ClickHouse storage" icon={<FiDatabase />} flush
+        loading={stats.loading && !stats.data} error={stats.error}
+        empty={!stats.loading && tables.length === 0}
+        actions={(
+          <span className="opa-row opa-muted" style={{ fontSize: 'var(--fs-12)' }}>
+            <FiHardDrive size={13} />
+            <span>Total <span className="opa-mono" style={{ color: 'var(--text-primary)' }}>{db.total_size_readable || '0 B'}</span></span>
+          </span>
+        )}>
+        <DataTable
+          columns={tableColumns} rows={tables} rowKey={(r) => r.name}
+          initialSort={{ key: 'size_bytes', dir: 'desc' }}
+        />
+      </Panel>
     </div>
   )
 }
-
-export default Stats

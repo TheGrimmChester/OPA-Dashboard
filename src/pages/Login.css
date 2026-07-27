@@ -1,116 +1,115 @@
-.Login {
+.login-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 120px);
-  padding: var(--spacing-xl);
+  min-height: calc(100vh - 96px);
+  padding: var(--sp-6);
 }
 
-.login-container {
+.login-card {
   width: 100%;
-  max-width: 400px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-xl);
-  box-shadow: var(--shadow-lg);
+  max-width: 380px;
 }
 
-.login-header {
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
   text-align: center;
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--sp-5);
 }
 
-.login-icon {
-  font-size: var(--font-size-4xl);
-  color: var(--color-primary);
-  margin-bottom: var(--spacing-md);
+.login-brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--fs-20);
+}
+
+.login-brand-title {
+  font-size: var(--fs-16);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+
+.login-brand-sub {
+  font-size: var(--fs-12);
+  color: var(--text-muted);
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: var(--sp-3);
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.login-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
+}
+
+.login-form .opa-input {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: var(--fs-13);
 }
 
 .login-error {
-  background: var(--color-error-bg);
-  color: var(--color-error);
-  padding: var(--spacing-sm);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  text-align: center;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.form-group label {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  font-weight: var(--font-weight-medium);
-  font-size: var(--font-size-sm);
-}
-
-.input-icon {
-  color: var(--text-secondary);
-}
-
-.form-group input {
-  padding: var(--spacing-sm);
-  border: 1px solid var(--border-light);
+  gap: 8px;
+  background: var(--error-dim);
+  color: var(--error);
+  border: 1px solid var(--error);
+  padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-base);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  font-size: var(--fs-12);
 }
 
-.btn-block {
+.login-btn {
   width: 100%;
-  margin-top: var(--spacing-sm);
-}
-
-.login-footer {
-  margin-top: var(--spacing-lg);
-  text-align: center;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
+  justify-content: center;
+  padding: 8px 12px;
+  margin-top: var(--sp-1);
 }
 
 .login-divider {
   display: flex;
   align-items: center;
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  margin: var(--spacing-md) 0;
+  gap: var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: var(--sp-4) 0;
 }
 
 .login-divider::before,
 .login-divider::after {
   content: '';
   flex: 1;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.login-divider span { padding: 0 10px; }
-
-.btn-sso {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  text-decoration: none;
-  padding: var(--spacing-sm);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+.login-footer {
+  margin-top: var(--sp-4);
+  text-align: center;
+  font-size: var(--fs-11);
+  color: var(--text-muted);
 }
-
-.btn-sso:hover { background: var(--bg-secondary); }
-
