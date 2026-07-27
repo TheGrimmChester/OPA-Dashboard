@@ -6,6 +6,17 @@ import App from './App'
 import './index.css'
 import './theme/tokens.css'
 import './theme/ui.css'
+import './theme/light.css'
+
+// Apply the persisted theme before first paint. Dark is the default (no
+// attribute); only 'light' sets data-theme. Doing this synchronously here
+// avoids a light/dark flash on load.
+const savedTheme = localStorage.getItem('opa_theme')
+if (savedTheme === 'light') {
+  document.documentElement.setAttribute('data-theme', 'light')
+} else {
+  document.documentElement.removeAttribute('data-theme')
+}
 
 // Attach the bearer token to every same-origin API request so pages work when
 // OPA_AUTH_REQUIRED is enabled, without each component wiring headers by hand.

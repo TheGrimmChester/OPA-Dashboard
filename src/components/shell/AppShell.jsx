@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import SideRail from './SideRail'
 import TopBar from './TopBar'
+import CommandPalette from './CommandPalette'
 
 // App layout: collapsible left rail + sticky top bar + content outlet.
 export default function AppShell({ children }) {
@@ -11,6 +12,7 @@ export default function AppShell({ children }) {
       <SideRail collapsed={collapsed} onToggle={toggle} />
       <div className="opa-main">
         <TopBar />
+        <CommandPalette />
         <div className="opa-content">{children}</div>
       </div>
     </div>

@@ -1,0 +1,107 @@
+/* ============================================================================
+   Saved views — TopBar dropdown. Mirrors the UserMenu popover pattern and
+   consumes only design-system tokens (tokens.css). No hard-coded colours.
+   ============================================================================ */
+.opa-savedviews { position: relative; }
+
+.opa-savedviews-trigger-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.opa-savedviews-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: 280px;
+  max-width: min(280px, calc(100vw - var(--sp-4)));
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  padding: var(--sp-2);
+  z-index: 40;
+}
+
+/* save-current row */
+.opa-savedviews-save {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.opa-savedviews-input { flex: 1 1 auto; min-width: 0; }
+.opa-savedviews-save .opa-btn { flex: 0 0 auto; }
+.opa-savedviews-save .opa-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* error banner */
+.opa-savedviews-err {
+  color: var(--error);
+  background: var(--error-dim);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-12);
+  padding: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+/* list */
+.opa-savedviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.opa-savedviews-state {
+  padding: var(--sp-3) var(--sp-2);
+  font-size: var(--fs-12);
+  text-align: center;
+}
+
+.opa-savedviews-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.opa-savedviews-item:hover,
+.opa-savedviews-item:focus-visible { background: var(--surface-3); outline: none; }
+
+.opa-savedviews-item-main { flex: 1 1 auto; min-width: 0; }
+.opa-savedviews-item-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-13);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opa-savedviews-shared { flex: 0 0 auto; }
+.opa-savedviews-item-meta {
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.opa-savedviews-del {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--sp-1);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+}
+.opa-savedviews-item:hover .opa-savedviews-del,
+.opa-savedviews-item:focus-within .opa-savedviews-del { opacity: 1; }
+.opa-savedviews-del:hover { color: var(--error); background: var(--error-dim); }

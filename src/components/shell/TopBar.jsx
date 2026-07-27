@@ -6,6 +6,8 @@ import { useTimeRange } from '../../contexts/TimeRangeContext'
 import { NAV_GROUPS } from './SideRail'
 import TenantSwitcher from '../TenantSwitcher'
 import UserMenu from './UserMenu'
+import SavedViews from './SavedViews'
+import ThemeToggle from './ThemeToggle'
 
 const LABELS = (() => {
   const m = { '': 'Overview', services: 'Services', traces: 'Traces', profiling: 'Profiling', errors: 'Errors', sql: 'Databases', http: 'External HTTP', 'service-map': 'Service Map', rum: 'Browser', performance: 'Performance', live: 'Live', system: 'System', users: 'Users & Roles', 'api-keys': 'API Keys', compare: 'Compare' }
@@ -41,7 +43,9 @@ export default function TopBar() {
       <div className="opa-topbar-right">
         <SegmentedControl options={ranges.map((r) => ({ value: r.value, label: r.label }))} value={range} onChange={setRange} />
         <button className="opa-btn ghost" onClick={refresh} title="Refresh"><FiRefreshCw size={14} /></button>
+        <SavedViews />
         <TenantSwitcher />
+        <ThemeToggle />
         <UserMenu />
       </div>
     </header>
