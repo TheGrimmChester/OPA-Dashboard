@@ -8,7 +8,7 @@ import { useApi } from '../hooks/useApi'
 import {
   Panel, DataTable, EntityHeader, Badge, StatusPill, LanguageBadge,
 } from '../components/ui'
-import { fmtMs, fmtBytes, fmtNum, fmtAgo, tierColor, statusColor, latencyStatus } from '../theme/format'
+import { fmtMs, fmtBytes, fmtNum, fmtAgo, tierColor, statusColor, latencyStatus, SERIES } from '../theme/format'
 import './TraceDetail.css'
 
 const TIERS = ['app', 'db', 'redis', 'http']
@@ -66,6 +66,23 @@ export default function TraceDetail() {
   const traceStart = rows.length ? Math.min(...rows.map((s) => s.start_ts || 0)) : 0
   const traceEnd = rows.length ? Math.max(...rows.map((s) => s.end_ts || (s.start_ts || 0))) : 0
   const totalMs = Math.max(1, root?.duration_ms || (traceEnd - traceStart) || 1)
+
+  // Distributed tracing: a trace can span multiple services (same trace id
+  // propagated via W3C traceparent). Assign each service a stable color and mark
+  // the spans where the service changes from its parent (a cross-service hop).
+  const services = useMemo(() => [...new Set(rows.map((s) => s.service).filter(Boolean))], [rows])
+  const multiService = services.length > 1
+  const serviceColor = useMemo(() => {
+    const m = {}
+    services.forEach((s, i) => { m[s] = SERIES[i % SERIES.length] })
+    return m
+  }, [services])
+  const svcBySpanId = useMemo(() => {
+    const m = {}
+    rows.forEach((s) => { if (s.span_id) m[s.span_id] = s.service })
+    return m
+  }, [rows])
+  const isServiceEntry = (s) => s.service && s.parent_id && svcBySpanId[s.parent_id] && svcBySpanId[s.parent_id] !== s.service
 
   // Aggregate per-operation collections across every span (defensive).
   const allSql = useMemo(() => rows.flatMap((s) => s.sql || []), [rows])
@@ -174,7 +191,12 @@ export default function TraceDetail() {
         badges={
           <>
             <StatusPill tone={anyError ? 'error' : statusPillTone(root?.status)}>{anyError ? 'ERROR' : String(root?.status || 'ok').toUpperCase()}</StatusPill>
-            {root?.service && <Badge>{root.service}</Badge>}
+            {(multiService ? services : [root?.service].filter(Boolean)).map((svc) => (
+              <span key={svc} className="opa-badge" title={multiService ? 'service in this distributed trace' : 'service'}>
+                <span className="opa-dot" style={{ background: multiService ? serviceColor[svc] : 'var(--tier-app)', width: 7, height: 7 }} />{svc}
+              </span>
+            ))}
+            {multiService && <Badge title="distributed trace spanning multiple services">{services.length} services</Badge>}
             {root?.language && <LanguageBadge language={root.language} version={root.language_version} />}
           </>
         }
@@ -208,12 +230,18 @@ export default function TraceDetail() {
             return (
               <div key={s.span_id} className={`tw-row ${isSel ? 'is-selected' : ''}`} onClick={() => setSelected(s)}>
                 <div className="tw-label" style={{ paddingLeft: (s._depth || 0) * 14 }}>
+                  {multiService && <span className="tw-tierdot" style={{ background: serviceColor[s.service] || 'var(--neutral)' }} title={s.service} />}
                   <span className="tw-tierdot" style={{ background: col }} />
                   <span className="tw-label-name" title={`${s.name} · ${s.service || ''}`}>{s.name}</span>
+                  {isServiceEntry(s) && (
+                    <span className="opa-badge" style={{ marginLeft: 6, padding: '0 6px' }} title={`enters ${s.service}`}>
+                      <span className="opa-dot" style={{ background: serviceColor[s.service], width: 6, height: 6 }} />{s.service}
+                    </span>
+                  )}
                 </div>
                 <div className="tw-track">
-                  <div className="tw-bar" style={{ left: `${Math.min(99, Math.max(0, offset))}%`, width: `${width}%`, background: col }}
-                    title={`${s.name}: ${fmtMs(s.duration_ms)} @ +${fmtMs(s.start_ts - traceStart)}`} />
+                  <div className="tw-bar" style={{ left: `${Math.min(99, Math.max(0, offset))}%`, width: `${width}%`, background: multiService ? (serviceColor[s.service] || col) : col }}
+                    title={`${s.name}${s.service ? ' · ' + s.service : ''}: ${fmtMs(s.duration_ms)} @ +${fmtMs(s.start_ts - traceStart)}`} />
                 </div>
                 <div className="tw-dur" style={{ color: `var(--${latencyStatus(s.duration_ms)})` }}>{fmtMs(s.duration_ms)}</div>
               </div>
