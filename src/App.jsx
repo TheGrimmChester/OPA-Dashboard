@@ -50,10 +50,25 @@ const ErrorDetail = lazy(() => import('./pages/ErrorDetail'))
 const KeyTransactions = lazy(() => import('./pages/KeyTransactions'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
+const ApiKeys = lazy(() => import('./pages/ApiKeys'))
 
 function App() {
   const [filters, setFilters] = useState({})
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const { pathname } = useLocation()
+
+  // The login screen renders standalone — no nav/topbar shell around it. When
+  // auth is enforced, the 401 interceptor (main.jsx) sends unauthenticated users
+  // here; showing the full app chrome behind the form would be misleading.
+  if (pathname === '/login') {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<div className="route-loading" style={{ padding: 24, color: 'var(--text-muted)' }}>Loading…</div>}>
+          <Login />
+        </Suspense>
+      </ErrorBoundary>
+    )
+  }
 
   const handleTraceSelect = (trace) => {
     // Navigation handled by Link component
@@ -123,12 +138,12 @@ function App() {
               element={<BrowserRum />}
             />
             <Route
-              path="/login"
-              element={<Login />}
-            />
-            <Route
               path="/users"
               element={<Users />}
+            />
+            <Route
+              path="/api-keys"
+              element={<ApiKeys />}
             />
             <Route
               path="/service-map"

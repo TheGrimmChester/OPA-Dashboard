@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiLogIn, FiUser, FiLock } from 'react-icons/fi'
+import { FiLogIn, FiUser, FiLock, FiAlertCircle } from 'react-icons/fi'
 import axios from 'axios'
+import { Panel } from '../components/ui'
 import './Login.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -15,6 +16,14 @@ function decodeJwt(token) {
   } catch {
     return null
   }
+}
+
+// Post-login redirect target: honor a ?next= query param (set by the 401
+// interceptor) but only allow same-app relative paths; fall back to '/'.
+function nextTarget() {
+  const next = new URLSearchParams(window.location.search).get('next')
+  if (next && next.startsWith('/') && !next.startsWith('//')) return next
+  return '/'
 }
 
 function Login() {
@@ -36,6 +45,8 @@ function Login() {
       const token = p.get('token')
       const dnonce = p.get('dnonce')
       const expected = sessionStorage.getItem('oidc_dnonce')
+      // Preserve any ?next= before we strip the fragment from the URL.
+      const target = nextTarget()
       // Strip the token from the URL immediately regardless of outcome.
       window.history.replaceState(null, '', window.location.pathname)
       sessionStorage.removeItem('oidc_dnonce')
@@ -45,7 +56,7 @@ function Login() {
           localStorage.setItem('auth_token', token)
           if (claims.username) localStorage.setItem('username', claims.username)
           if (claims.role) localStorage.setItem('role', claims.role)
-          navigate('/')
+          navigate(target)
           return
         }
       }
@@ -82,8 +93,8 @@ function Login() {
       localStorage.setItem('username', response.data.username)
       localStorage.setItem('role', response.data.role)
 
-      // Redirect to home
-      navigate('/')
+      // Redirect to the requested page (?next=) or home
+      navigate(nextTarget())
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid credentials')
     } finally {
@@ -92,72 +103,76 @@ function Login() {
   }
 
   return (
-    <div className="Login">
-      <div className="login-container">
-        <div className="login-header">
-          <FiLogIn className="login-icon" />
-          <h2>OpenProfilingAgent Login</h2>
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-brand">
+          <span className="login-brand-icon"><FiLogIn /></span>
+          <div className="login-brand-title">Open Profiling</div>
+          <div className="login-brand-sub">Sign in to your dashboard</div>
         </div>
-        
-        <form onSubmit={handleSubmit} className="login-form">
-          {error && (
-            <div className="login-error">
-              {error}
+
+        <Panel>
+          <form onSubmit={handleSubmit} className="login-form">
+            {error && (
+              <div className="login-error" role="alert">
+                <FiAlertCircle /> <span>{error}</span>
+              </div>
+            )}
+
+            <div className="login-field">
+              <label className="login-label" htmlFor="login-username">
+                <FiUser size={12} /> Username
+              </label>
+              <input
+                id="login-username"
+                className="opa-input"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="login-field">
+              <label className="login-label" htmlFor="login-password">
+                <FiLock size={12} /> Password
+              </label>
+              <input
+                id="login-password"
+                className="opa-input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="opa-btn primary login-btn"
+              disabled={loading}
+            >
+              {loading ? 'Logging in…' : 'Login'}
+            </button>
+          </form>
+
+          {ssoEnabled && (
+            <div className="login-sso">
+              <div className="login-divider"><span>or</span></div>
+              <button type="button" className="opa-btn login-btn" onClick={startSso}>
+                <FiLogIn size={12} /> Login with SSO
+              </button>
             </div>
           )}
-          
-          <div className="form-group">
-            <label>
-              <FiUser className="input-icon" />
-              Username
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              autoFocus
-            />
+
+          <div className="login-footer">
+            Default credentials: admin / admin
           </div>
-
-          <div className="form-group">
-            <label>
-              <FiLock className="input-icon" />
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="btn btn-primary btn-block"
-            disabled={loading}
-          >
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
-
-        {ssoEnabled && (
-          <div className="login-sso">
-            <div className="login-divider"><span>or</span></div>
-            <button type="button" className="btn btn-block btn-sso" onClick={startSso}>
-              <FiLogIn className="input-icon" /> Login with SSO
-            </button>
-          </div>
-        )}
-
-        <div className="login-footer">
-          <p>Default credentials: admin / admin</p>
-        </div>
+        </Panel>
       </div>
     </div>
   )
 }
 
 export default Login
-
