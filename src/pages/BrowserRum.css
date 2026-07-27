@@ -1,0 +1,55 @@
+/* Core Web Vitals card row — dense, data-ink, matches OPA design system */
+.cwv-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 1100px) {
+  .cwv-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+  .cwv-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.cwv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--text-muted);
+  border-radius: 6px;
+}
+
+.cwv-ok { border-left-color: var(--ok); }
+.cwv-warn { border-left-color: var(--warn); }
+.cwv-error { border-left-color: var(--error); }
+
+.cwv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cwv-label {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.cwv-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cwv-name {
+  font-size: var(--fs-11);
+  line-height: 1.2;
+}

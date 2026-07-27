@@ -97,18 +97,43 @@
   user-select: none;
   font-size: 11px;
   font-weight: 600;
-  fill: #000000;
+  font-family: var(--font-family-base);
   dominant-baseline: middle;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+  paint-order: stroke;
 }
 
-.flame-node-text-bg {
-  fill: rgba(255, 255, 255, 0.92);
-  stroke: rgba(0, 0, 0, 0.15);
-  stroke-width: 1;
-  rx: 3;
-  ry: 3;
+.flame-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-light);
 }
+
+.flame-graph-legend .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.flame-graph-legend .legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid var(--border-medium);
+}
+
+.legend-swatch.type-function { background-color: var(--color-primary-blue); }
+.legend-swatch.type-sql { background-color: var(--color-primary-purple); }
+.legend-swatch.type-http { background-color: var(--color-primary-orange); }
+.legend-swatch.type-redis { background-color: var(--color-primary-red); }
+.legend-swatch.type-cache { background-color: var(--color-primary-green); }
+.legend-swatch.type-neutral { background-color: var(--bg-tertiary); }
 
 .flame-graph-tooltip {
   position: absolute;

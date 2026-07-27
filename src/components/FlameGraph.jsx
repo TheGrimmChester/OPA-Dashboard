@@ -26,6 +26,60 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`
 }
 
+// Operation type -> color convention (function=blue, sql=purple, http=orange,
+// redis=red, cache=green). Frames with no detectable type fall back to neutral.
+const TYPE_COLOR_VARS = {
+  function: 'var(--color-primary-blue)',
+  sql: 'var(--color-primary-purple)',
+  http: 'var(--color-primary-orange)',
+  redis: 'var(--color-primary-red)',
+  cache: 'var(--color-primary-green)',
+}
+const TYPE_HEX = {
+  function: '#3b82f6',
+  sql: '#8b5cf6',
+  http: '#f59e0b',
+  redis: '#ef4444',
+  cache: '#10b981',
+}
+const NEUTRAL_FILL = 'var(--bg-tertiary)'
+const NEUTRAL_HEX = '#334155'
+
+// Detect the operation type from node data (type field or the presence of
+// sql/http/redis/cache detail arrays). Returns null when nothing is known.
+function detectNodeType(node) {
+  if (!node) return null
+  const explicit = node.type || node.Type
+  if (explicit && TYPE_HEX[String(explicit).toLowerCase()]) {
+    return String(explicit).toLowerCase()
+  }
+  const sql = node.sql_queries || node.SQLQueries || node.sqlQueries
+  const http = node.http_requests || node.HttpRequests || node.httpRequests
+  const redis = node.redis_operations || node.RedisOperations || node.redisOperations
+  const cache = node.cache_operations || node.CacheOperations || node.cacheOperations
+  if (Array.isArray(sql) && sql.length > 0) return 'sql'
+  if (Array.isArray(http) && http.length > 0) return 'http'
+  if (Array.isArray(redis) && redis.length > 0) return 'redis'
+  if (Array.isArray(cache) && cache.length > 0) return 'cache'
+  const name = node.function || node.Function || node.name
+  if (!name || name === 'unknown') return null
+  return 'function'
+}
+
+function getTypeFill(type) {
+  return type && TYPE_COLOR_VARS[type] ? TYPE_COLOR_VARS[type] : NEUTRAL_FILL
+}
+
+// Pick readable text color from the (opaque) bar color's perceived brightness.
+function getTypeTextColor(type) {
+  const hex = (type && TYPE_HEX[type]) || NEUTRAL_HEX
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000
+  return brightness > 140 ? '#0f172a' : '#ffffff'
+}
+
 function FlameGraph({ callStack, width = 800, height = 600 }) {
   const [hoveredNode, setHoveredNode] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
@@ -124,6 +178,7 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
             duration: node.duration_ms || node.DurationMs || 0,
             cpu: node.cpu_ms || node.CPUMs || 0,
             depth: node.depth || node.Depth || 0,
+            type: detectNodeType(node),
             children: (node.children || []).map(convertNode),
           }
         }
@@ -170,6 +225,7 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
           network_bytes_sent: node.network_bytes_sent || node.NetworkBytesSent || 0,
           network_bytes_received: node.network_bytes_received || node.NetworkBytesReceived || 0,
           depth: node.depth || node.Depth || 0,
+          type: detectNodeType(node),
           children: children.map(buildNode),
         }
       }
@@ -266,19 +322,11 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
     const isHovered = hoveredNode === node.id
     const isSelected = selectedNode === node.id
 
-    // Color based on selected metric with better contrast
-    const colorIntensity = layout.totalMetric > 0 
-      ? Math.min(255, Math.floor((metricValue / layout.totalMetric) * 255))
-      : 0
-    // Use a more vibrant color scheme with better contrast
-    const r = Math.min(255, colorIntensity + 50)
-    const g = Math.max(100, 255 - colorIntensity)
-    const b = Math.max(100, 200 - Math.floor(colorIntensity / 2))
-    const backgroundColor = `rgb(${r}, ${g}, ${b})`
-    
-    // Calculate text color based on background brightness for better contrast
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000
-    const textColor = brightness > 128 ? '#000000' : '#ffffff'
+    // Color by operation type (function/sql/http/redis/cache) for consistency
+    // with the rest of the dashboard; unknown frames use a neutral fill.
+    const nodeType = node.type || detectNodeType(node)
+    const backgroundColor = getTypeFill(nodeType)
+    const textColor = getTypeTextColor(nodeType)
 
     const elements = []
 
@@ -290,14 +338,19 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
 
     elements.push(
       <g key={node.id}>
+        <title>{nodeType ? `${node.name} (${nodeType})` : node.name}</title>
         <rect
           x={x}
           y={nodeY}
           width={nodeWidth}
           height={nodeHeight}
-          fill={backgroundColor}
-          stroke={isSelected ? '#007bff' : (isHovered ? '#0056b3' : '#ddd')}
           strokeWidth={isSelected ? 2 : 1}
+          style={{
+            fill: backgroundColor,
+            stroke: isSelected
+              ? 'var(--color-primary-blue)'
+              : (isHovered ? 'var(--color-info-light)' : 'var(--border-medium)'),
+          }}
           onMouseEnter={(e) => {
             setHoveredNode(node.id)
             if (svgRef.current && containerRef.current) {
@@ -323,33 +376,17 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
           className="flame-node"
         />
         {nodeWidth >= minBarWidth && (
-          <>
-            {/* Background for text for better visibility */}
-            <rect
-              x={x + 2}
-              y={nodeY + 2}
-              width={Math.min(nodeWidth - 4, displayName.length * 6 + 4)}
-              height={nodeHeight - 4}
-              fill="rgba(255, 255, 255, 0.85)"
-              stroke="rgba(0, 0, 0, 0.1)"
-              strokeWidth="0.5"
-              rx="2"
-              ry="2"
-              className="flame-node-text-bg"
-            />
-            <text
-              x={x + 4}
-              y={nodeY + nodeHeight / 2}
-              dy="0.35em"
-              fontSize="11"
-              fontWeight="600"
-              fill={textColor}
-              className="flame-node-text"
-              title={node.name !== displayName ? node.name : undefined}
-            >
-              {displayName}
-            </text>
-          </>
+          <text
+            x={x + 6}
+            y={nodeY + nodeHeight / 2}
+            dy="0.35em"
+            fontSize="11"
+            fontWeight="600"
+            className="flame-node-text"
+            style={{ fill: textColor }}
+          >
+            {displayName}
+          </text>
         )}
       </g>
     )
@@ -417,6 +454,14 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
           </button>
         </div>
       </div>
+      <div className="flame-graph-legend">
+        <span className="legend-item"><span className="legend-swatch type-function" />Function</span>
+        <span className="legend-item"><span className="legend-swatch type-sql" />SQL</span>
+        <span className="legend-item"><span className="legend-swatch type-http" />HTTP</span>
+        <span className="legend-item"><span className="legend-swatch type-redis" />Redis</span>
+        <span className="legend-item"><span className="legend-swatch type-cache" />Cache</span>
+        <span className="legend-item"><span className="legend-swatch type-neutral" />Other</span>
+      </div>
       <div className="flame-graph-content" ref={containerRef}>
         <svg
           ref={svgRef}
@@ -457,13 +502,22 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
                 const node = findNode(dataToUse, hoveredNode)
                 if (!node) return null
                 const metricValue = getMetricValue(node, selectedMetric)
+                const nodeType = node.type || detectNodeType(node)
+                const childrenDuration = (node.children || []).reduce(
+                  (sum, child) => sum + (child.duration || 0), 0
+                )
+                const selfDuration = Math.max(0, (node.duration || 0) - childrenDuration)
                 return (
                   <>
                     <div><strong>Function:</strong> {node.name}</div>
+                    {nodeType && <div><strong>Type:</strong> {nodeType}</div>}
                     {node.class && <div><strong>Class:</strong> {node.class}</div>}
                     {node.file && <div><strong>File:</strong> {node.file}</div>}
-                    <div><strong>{getMetricLabel(selectedMetric)}:</strong> {formatMetricValue(metricValue, selectedMetric)}</div>
-                    <div><strong>Duration:</strong> {formatDuration(node.duration)}</div>
+                    {selectedMetric !== 'duration' && (
+                      <div><strong>{getMetricLabel(selectedMetric)}:</strong> {formatMetricValue(metricValue, selectedMetric)}</div>
+                    )}
+                    <div><strong>Total:</strong> {formatDuration(node.duration)}</div>
+                    <div><strong>Self:</strong> {formatDuration(selfDuration)}</div>
                     {node.cpu > 0 && <div><strong>CPU:</strong> {formatDuration(node.cpu)}</div>}
                     {node.memory_delta !== 0 && (
                       <div><strong>Memory:</strong> {formatMemory(node.memory_delta)}</div>

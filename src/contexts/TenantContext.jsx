@@ -60,13 +60,16 @@ export const TenantProvider = ({ children }) => {
           Authorization: `Bearer ${token}`,
         },
       })
-      setProjects(response.data.projects || [])
+      const fetchedProjects = response.data.projects || []
+      setProjects(fetchedProjects)
+      return fetchedProjects
     } catch (error) {
       console.error('Failed to load projects:', error)
+      return []
     }
   }
 
-  const selectOrganization = (orgId) => {
+  const selectOrganization = async (orgId) => {
     setOrganizationId(orgId)
     localStorage.setItem('organization_id', orgId)
     // If "all" is selected, also set project to "all"
@@ -75,16 +78,15 @@ export const TenantProvider = ({ children }) => {
       localStorage.setItem('project_id', 'all')
     } else {
       // Reset project to first project in new org
-      loadProjects(orgId).then(() => {
-        if (projects.length > 0) {
-          setProjectId(projects[0].project_id)
-          localStorage.setItem('project_id', projects[0].project_id)
-        } else {
-          // If no projects, set to "all"
-          setProjectId('all')
-          localStorage.setItem('project_id', 'all')
-        }
-      })
+      const newProjects = await loadProjects(orgId)
+      if (newProjects.length > 0) {
+        setProjectId(newProjects[0].project_id)
+        localStorage.setItem('project_id', newProjects[0].project_id)
+      } else {
+        // If no projects, set to "all"
+        setProjectId('all')
+        localStorage.setItem('project_id', 'all')
+      }
     }
   }
 

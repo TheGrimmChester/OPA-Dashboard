@@ -65,6 +65,87 @@ function getFunctionTypeColor(functionType) {
   }
 }
 
+// Operation type -> color. Concrete hex values are required by vis-network,
+// so we mirror the CSS design tokens from src/index.css here:
+//   function -> --color-primary-blue   (#3b82f6)
+//   sql      -> --color-primary-purple (#8b5cf6)
+//   http     -> --color-primary-orange (#f59e0b)
+//   redis    -> --color-primary-red    (#ef4444)
+//   cache    -> --color-primary-green  (#10b981)
+const OPERATION_TYPE_COLORS = {
+  function: '#3b82f6', // var(--color-primary-blue)
+  sql: '#8b5cf6',      // var(--color-primary-purple)
+  http: '#f59e0b',     // var(--color-primary-orange)
+  redis: '#ef4444',    // var(--color-primary-red)
+  cache: '#10b981',    // var(--color-primary-green)
+}
+
+const OPERATION_TYPE_LABELS = {
+  function: 'Function',
+  sql: 'SQL',
+  http: 'HTTP',
+  redis: 'Redis',
+  cache: 'Cache',
+}
+
+const OPERATION_TYPE_ORDER = ['function', 'sql', 'http', 'redis', 'cache']
+
+// Classify a node/group into an operation type using explicit type hints when
+// present, otherwise falling back to keyword detection on the signature.
+function getOperationType(source) {
+  if (!source) return 'function'
+
+  // Explicit type hint on the call data (e.g. node.type / node.op)
+  const explicit = (source.type || source.op || source.operation || '').toString().toLowerCase()
+  if (explicit) {
+    if (explicit.includes('sql') || explicit.includes('db') || explicit.includes('query')) return 'sql'
+    if (explicit.includes('http') || explicit.includes('curl')) return 'http'
+    if (explicit.includes('redis')) return 'redis'
+    if (explicit.includes('cache')) return 'cache'
+    if (OPERATION_TYPE_COLORS[explicit]) return explicit
+  }
+
+  // Boolean/marker flags on the call data
+  if (source.sql) return 'sql'
+  if (source.http) return 'http'
+  if (source.redis) return 'redis'
+  if (source.cache) return 'cache'
+
+  // Keyword detection on the class/file/function signature
+  const haystack = [source.class, source.file, source.function, source.fileName, source.className]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  if (/\bredis\b|predis|phpredis/.test(haystack)) return 'redis'
+  if (/cache|memcach/.test(haystack)) return 'cache'
+  if (/\bsql\b|pdo|mysqli|doctrine|query|statement|database|\bdbal\b|eloquent/.test(haystack)) return 'sql'
+  if (/http|curl|guzzle|\bclient\b|request|fetch|socket|stream_socket/.test(haystack)) return 'http'
+
+  return 'function'
+}
+
+// Resolve the operation type for a grouped node (checks the group's methods too)
+function getGroupOperationType(group, classKey) {
+  const base = getOperationType({
+    className: group.className,
+    fileName: group.fileName,
+    class: group.className,
+    file: group.fileName,
+    function: classKey,
+  })
+  if (base !== 'function') return base
+
+  // Fall back to inspecting the group's method nodes
+  if (group.methods && group.methods.size > 0) {
+    for (const [methodName, methodData] of group.methods.entries()) {
+      const t = getOperationType({ ...methodData.node, function: methodName })
+      if (t !== 'function') return t
+    }
+  }
+  return 'function'
+}
+
 // Get function type label
 function getFunctionTypeLabel(functionType) {
   switch (functionType) {
@@ -952,8 +1033,20 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
         tooltipParts.push(`Dominant Method: ${dominantMethod.methodName} (${dominantMethod.callCount}x, ${formatDuration(dominantMethod.duration * 1000)})`)
       }
 
-      const color = isSyntheticRoot ? '#808080' : getFunctionTypeColor(group.functionType)
-      const nodeSize = isSyntheticRoot ? 60 : Math.max(35, Math.min(100, 40 + (percentage * 1.0)))
+      // Total number of calls represented by this grouped node
+      const callCount = Array.from(group.methods.values()).reduce((sum, m) => sum + m.callCount, 0)
+
+      // Color by operation type (function=blue, sql=purple, http=orange, redis=red, cache=green)
+      const operationType = isSyntheticRoot ? 'function' : getGroupOperationType(group, classKey)
+      const color = isSyntheticRoot ? '#64748b' : OPERATION_TYPE_COLORS[operationType]
+
+      // Size nodes by self/exclusive time share (bigger = more self time), sqrt-scaled
+      // so area (not radius) tracks the metric. Sane min/max keeps the graph readable.
+      const NODE_MIN = 22
+      const NODE_MAX = 90
+      const nodeSize = isSyntheticRoot
+        ? 55
+        : Math.round(NODE_MIN + (NODE_MAX - NODE_MIN) * Math.sqrt(Math.min(percentage, 100) / 100))
 
       const graphNode = {
         id: classKey,
@@ -961,10 +1054,14 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
         title: tooltipParts.join('\n'),
         color: {
           background: color,
-          border: '#505050',
+          border: isSyntheticRoot ? '#475569' : color,
           highlight: {
             background: color,
-            border: '#4a9eff',
+            border: '#f1f5f9',
+          },
+          hover: {
+            background: color,
+            border: '#f1f5f9',
           },
         },
         font: {
@@ -975,11 +1072,15 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
         shape: 'box',
         size: nodeSize,
         borderWidth: 1,
+        borderWidthSelected: 3,
         data: {
           function: group.className || group.fileName || classKey,
           class: group.className || undefined,
           file: group.fileName || undefined,
           duration: group.totalDuration,
+          self_time: groupMetricValue,
+          call_count: callCount,
+          operation_type: operationType,
           memory_delta: group.totalMemoryDelta,
           cpu_time: group.totalCpuTime,
           io_wait_time: group.totalIoWaitTime,
@@ -1118,10 +1219,10 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
           from: parentClassKey,
           to: childClassKey,
           arrows: 'to',
-          color: '#b0b0b0',
+          color: '#64748b',
           width: edgeWidth,
           label: callCountLabel,
-          smooth: { type: 'straight', roundness: 0 },
+          smooth: { enabled: true, type: 'cubicBezier', roundness: 0.4 },
         })
       })
     })
@@ -1273,14 +1374,14 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
       layout: viewMode === 'hierarchical' ? {
         hierarchical: {
           direction: 'UD',
-          sortMethod: 'hubsize', // Sort by node size (percentage) - biggest first
-          levelSeparation: 500,
-          nodeSpacing: 300,
-          treeSpacing: 500,
+          sortMethod: 'directed', // Follow call direction top-down for a readable tree
+          levelSeparation: 180,
+          nodeSpacing: 180,
+          treeSpacing: 220,
           blockShifting: true,
           edgeMinimization: true,
           parentCentralization: true,
-          shakeTowards: 'leaves',
+          shakeTowards: 'roots',
         },
       } : {
         improvedLayout: true,
@@ -1321,12 +1422,14 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
       edges: {
         width: 2,
         color: {
-          color: '#b0b0b0',
-          highlight: '#4a9eff',
-          hover: '#4a9eff',
+          color: '#64748b',
+          highlight: '#3b82f6',
+          hover: '#3b82f6',
         },
         smooth: {
-          type: 'straight',
+          enabled: true,
+          type: 'cubicBezier',
+          roundness: 0.4,
         },
         arrows: {
           to: {
@@ -1356,6 +1459,13 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
     const network = new Network(containerRef.current, data, options)
     networkRef.current = network
 
+    // Freeze physics once stabilization completes so the layout stays put
+    // (still fully zoom/pan-able) instead of endlessly jittering.
+    network.on('stabilizationIterationsDone', () => {
+      network.setOptions({ physics: { enabled: false } })
+      network.fit({ animation: { duration: 300 } })
+    })
+
     network.on('click', (params) => {
       if (params.nodes.length > 0) {
         const nodeId = params.nodes[0]
@@ -1376,9 +1486,8 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
 
     setTimeout(() => {
       network.fit({ animation: { duration: 300 } })
-      network.setOptions(options)
     }, 100)
-    
+
     if (viewMode === 'hierarchical') {
       setTimeout(() => {
         network.fit({ animation: { duration: 300 } })
@@ -1617,7 +1726,22 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
           </div>
         </div>
         <div ref={containerRef} className="call-graph-canvas" />
-        
+
+        <div className="call-graph-legend-overlay" aria-label="Node type legend">
+          <div className="legend-title">Node Type</div>
+          <div className="legend-items">
+            {OPERATION_TYPE_ORDER.map((type) => (
+              <div key={type} className="legend-item">
+                <span
+                  className="legend-color"
+                  style={{ background: OPERATION_TYPE_COLORS[type] }}
+                />
+                <span className="legend-label">{OPERATION_TYPE_LABELS[type]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {selectedNode && (
           <div className="node-details-modern">
             <div className="details-header">
@@ -1638,14 +1762,32 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
                   <span className="detail-value">{selectedNode.file}{selectedNode.line ? `:${selectedNode.line}` : ''}</span>
                 </div>
               )}
-              {selectedNode.function_type !== undefined && (
+              {selectedNode.operation_type && (
                 <div className="detail-item">
                   <span className="detail-label">Type:</span>
-                  <span className="detail-value">{getFunctionTypeLabel(selectedNode.function_type)}</span>
+                  <span className="detail-value detail-type">
+                    <span
+                      className="detail-type-dot"
+                      style={{ background: OPERATION_TYPE_COLORS[selectedNode.operation_type] }}
+                    />
+                    {OPERATION_TYPE_LABELS[selectedNode.operation_type] || selectedNode.operation_type}
+                  </span>
+                </div>
+              )}
+              {selectedNode.call_count !== undefined && (
+                <div className="detail-item">
+                  <span className="detail-label">Call Count:</span>
+                  <span className="detail-value">{selectedNode.call_count}x</span>
+                </div>
+              )}
+              {selectedNode.self_time !== undefined && (
+                <div className="detail-item">
+                  <span className="detail-label">Self {getMetricLabel(selectedMetric)}:</span>
+                  <span className="detail-value">{formatMetricValue(selectedNode.self_time, selectedMetric)}</span>
                 </div>
               )}
               <div className="detail-item">
-                <span className="detail-label">Duration:</span>
+                <span className="detail-label">Total Time:</span>
                 <span className="detail-value">{formatDuration(selectedNode.duration * 1000)}</span>
               </div>
               <div className="detail-item">

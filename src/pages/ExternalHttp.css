@@ -1,0 +1,38 @@
+/* External HTTP page — service scope select + url cell */
+.exthttp-select {
+  appearance: none;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font: inherit;
+  font-size: var(--fs-12);
+  padding: 5px 26px 5px 10px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+                    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 52%, calc(100% - 9px) 52%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.exthttp-select:focus { outline: none; border-color: var(--accent); }
+
+.exthttp-url {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 420px;
+}
+.exthttp-url .exthttp-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.exthttp-url .exthttp-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-11);
+}
