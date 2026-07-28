@@ -159,14 +159,14 @@ function NeighbourList({ title, icon, dir, entries, graph, ranked, mk, structure
   )
 }
 
-function SymbolDetail({ graph, ranked, mk, structureMode, sym, onSelect, onClose }) {
+function SymbolDetail({ graph, ranked, mk, structureMode, shareBase, sym, onSelect, onClose }) {
   const callers = useMemo(() => neighbours(graph, ranked, sym, 'in', NEIGHBOUR_LIMIT), [graph, ranked, sym])
   const callees = useMemo(() => neighbours(graph, ranked, sym, 'out', NEIGHBOUR_LIMIT), [graph, ranked, sym])
   const path = useMemo(() => representativePath(graph, sym, PATH_CAP), [graph, sym])
 
   const self = graph.selfM[mk][sym]
   const incl = graph.inclM[mk][sym]
-  const pct = ranked.totalSelf > 0 ? (Math.abs(self) / ranked.totalSelf) * 100 : null
+  const pct = shareBase > 0 ? (Math.abs(self) / shareBase) * 100 : null
   const rep = graph.repIdx[sym]
   const node = rep >= 0 ? graph.calls.src[rep] : null
   const src = node ? srcLabel(node) : ''
@@ -259,11 +259,17 @@ function SymbolDetail({ graph, ranked, mk, structureMode, sym, onSelect, onClose
 }
 
 function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSelectSymbol, maxHeight }) {
-  const { graph, ranked } = model
+  const { graph, ranked, totals } = model
   // The columns exist for every metric, but the ORDER always follows the metric
   // the model was ranked with.
   const mk = METRICS.indexOf(metric) >= 0 ? metric : ranked.metric
-  const structureMode = ranked.structureMode
+  // Only blank the value columns when the metric truly carries no data. Using
+  // ranked.structureMode here claimed "memory was not recorded" for any trace
+  // whose allocations and frees happen to cancel in the signed sum.
+  const structureMode = totals ? !totals.hasData[mk] : ranked.structureMode
+  // Σ|self|: the share denominator. |Σ self| put signed metrics into the
+  // thousands of percent.
+  const shareBase = totals ? totals.selfAbs[mk] : ranked.totalSelf
   const q = (query || '').trim()
 
   const keyIndex = useMemo(() => {
@@ -272,10 +278,13 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
     return m
   }, [graph])
 
-  // Controlled when the caller passes selectedKey, self-managed otherwise, so
-  // the component is useful standalone and inside a page that syncs selection.
+  // Controlled when the caller passes selectedKey at all, self-managed only when
+  // the prop is absent. Testing `!= null` instead made a controlled null fall
+  // through to the internal key, so a parent could set a selection but never
+  // clear one (e.g. on trace change) and the detail pane stayed stuck open.
+  const controlled = selectedKey !== undefined
   const [ownKey, setOwnKey] = useState(null)
-  const activeKey = selectedKey != null ? selectedKey : ownKey
+  const activeKey = controlled ? selectedKey : ownKey
   const selSym = activeKey != null && keyIndex.has(activeKey) ? keyIndex.get(activeKey) : -1
 
   const select = useCallback((key, sym) => {
@@ -352,8 +361,8 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
         num: true,
         width: 74,
         sortValue: (r) => Math.abs(self[r.s]),
-        render: (r) => (ranked.totalSelf > 0
-          ? fmtPct((Math.abs(self[r.s]) / ranked.totalSelf) * 100)
+        render: (r) => (shareBase > 0
+          ? fmtPct((Math.abs(self[r.s]) / shareBase) * 100)
           : <span className="opa-prof-dim" title="Metric not recorded">—</span>),
       },
       {
@@ -394,7 +403,7 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
   }, [graph, ranked, mk, maxSelf, maxCalls, structureMode, selSym, select])
 
   const withData = useMemo(
-    () => METRICS.filter((k) => Math.abs(graph.totalSelfM[k]) > 0),
+    () => METRICS.filter((k) => (totals ? totals.hasData[k] : Math.abs(graph.totalSelfM[k]) > 0)),
     [graph],
   )
 
@@ -418,6 +427,18 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
               ))}
             </div>
           )}
+        </div>
+      )}
+      {/* Data exists, but its signed total cancels (allocations against frees),
+          so the ranking fell back to call count. The values are real and stay
+          visible — only the ORDER is not by cost. */}
+      {!structureMode && model.totals.rankedByCalls && (
+        <div className="opa-prof-notice">
+          <FiInfo aria-hidden="true" />
+          <div>
+            <strong>{METRIC_LABELS[mk]}</strong> nets out to zero across this trace, so rows are ordered by
+            <strong> call count</strong>. The per-function values below are still exact.
+          </div>
         </div>
       )}
       {model.totals.truncated && (
@@ -458,6 +479,7 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
           ranked={ranked}
           mk={mk}
           structureMode={structureMode}
+          shareBase={shareBase}
           sym={selSym}
           onSelect={select}
           onClose={clear}

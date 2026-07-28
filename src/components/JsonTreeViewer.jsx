@@ -2,9 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { FiChevronRight, FiChevronDown } from 'react-icons/fi'
 import './JsonTreeViewer.css'
 
-// Generate unique path for each node
-let nodeIdCounter = 0
-
 function JsonTreeViewer({ data, level = 0, path = 'root', expandedNodes, onToggleNode, autoExpandLevels = 2 }) {
   const nodeId = path
   const isExpanded = expandedNodes ? expandedNodes.has(nodeId) : (level < autoExpandLevels)

@@ -65,8 +65,9 @@ describe('useProfileModel / buildProfileModel', () => {
   it('exposes exactly the documented totals keys', () => {
     const model = buildProfileModel(flatStack())
     expect(Object.keys(model.totals).sort()).toEqual([
-      'calls', 'cpu', 'edges', 'io', 'maxDepth', 'memory', 'network',
-      'scanned', 'structureMode', 'symbols', 'truncated', 'wall',
+      'calls', 'cpu', 'edges', 'hasData', 'io', 'maxDepth', 'memory', 'network',
+      'rankedByCalls', 'scanned', 'selfAbs', 'structureMode', 'symbols',
+      'truncated', 'wall',
     ])
   })
 

@@ -19,6 +19,18 @@ import {
 // is still loading.
 const NO_CALLS = []
 
+// `memory` and `network` are ADDITIVE per-call deltas, not inclusive costs:
+// callGraphModel leaves self.memory signed on purpose (frees are real
+// information), so summing self across the tree cancels parents against their
+// own children and lands on ~0. Their trace total is the plain sum over calls.
+// duration/cpu/io are inclusive, so a child's cost is already inside its
+// parent's and Σ self is the right shape for them.
+const ADDITIVE_METRICS = new Set(['memory', 'network'])
+
+const ZERO_PER_METRIC = Object.freeze({
+  duration: 0, cpu: 0, io: 0, memory: 0, network: 0,
+})
+
 // Shape of `totals` for components that can render before a model exists.
 export const EMPTY_TOTALS = Object.freeze({
   wall: 0,
@@ -26,12 +38,17 @@ export const EMPTY_TOTALS = Object.freeze({
   io: 0,
   memory: 0,
   network: 0,
+  selfAbs: ZERO_PER_METRIC,
+  hasData: Object.freeze({
+    duration: false, cpu: false, io: false, memory: false, network: false,
+  }),
   calls: 0,
   symbols: 0,
   edges: 0,
   scanned: 0,
   maxDepth: 0,
   structureMode: false,
+  rankedByCalls: false,
   truncated: false,
 })
 
@@ -49,18 +66,38 @@ function normPct(minPct) {
 
 function deriveTotals(calls, graph, ranked) {
   const self = graph.totalSelfM
+  const additive = calls.totalVal
   const ready = calls.n > 0
+
+  // Σ|self| per metric. Two jobs, both of which a signed sum gets wrong:
+  //  - the only correct denominator for "share of total" (using |Σ self| makes
+  //    a metric with real frees report shares in the thousands of percent);
+  //  - the honest "does this metric carry any data" test. A trace can allocate
+  //    16MB and still have Σ self memory === 0.
+  const selfAbs = {}
+  const hasData = {}
+  for (const metric of METRICS) {
+    const col = graph.selfM[metric]
+    let sum = 0
+    if (col) for (let i = 0; i < graph.S; i++) sum += Math.abs(col[i])
+    selfAbs[metric] = sum
+    hasData[metric] = sum > 0
+  }
+
   return {
-    // Σ self equals Σ root inclusive cost for a well-formed tree (every child's
-    // value is subtracted from its parent exactly once), so this is both the
-    // trace total and the exact denominator HotSpots uses for "self %". It
-    // covers included symbols only, which is everything unless the 50k symbol
-    // cap fired.
+    // Σ self time. NOT the trace's wall clock: callGraphModel clamps self at
+    // Math.max(0, own - children), so this is >= root inclusive cost and
+    // mergeCallStacks' span wrappers make it strictly greater on any nested
+    // trace. Present it as "self time", never as trace duration — TraceDetail
+    // shows the real root duration in its header.
     wall: self.duration,
     cpu: self.cpu,
     io: self.io,
-    memory: self.memory,
-    network: self.network,
+    // True sums over every call, since these do not nest.
+    memory: additive ? additive.memory : 0,
+    network: additive ? additive.network : 0,
+    selfAbs,
+    hasData,
     calls: calls.n,
     symbols: graph.S,
     edges: graph.E,
@@ -68,9 +105,14 @@ function deriveTotals(calls, graph, ranked) {
     // "first N of M" denominator.
     scanned: calls.diag.total,
     maxDepth: calls.maxDepth,
-    // structureMode only means something once there IS data; an empty trace
-    // would otherwise claim the metric "was not recorded".
-    structureMode: ready && ranked.structureMode,
+    // "The metric was genuinely not recorded" — the only claim a UI may make to
+    // the user. Deliberately NOT ranked.structureMode, which is only ever a
+    // statement about |Σ self| being 0: a trace that allocates and frees 16MB
+    // sets that flag while carrying perfectly good per-call memory data.
+    structureMode: ready && !hasData[ranked.metric],
+    // The weaker, separate fact: rankSymbols could not weight by this metric and
+    // fell back to call count. Values may still be worth showing.
+    rankedByCalls: ready && ranked.structureMode,
     truncated: !!calls.diag.truncated,
   }
 }

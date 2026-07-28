@@ -271,19 +271,24 @@ function ExecutionStackTree({ callStack }) {
     })
   }, [])
 
+  // Iterative with an explicit stack and a visited guard. Recursion here threw
+  // RangeError on a deep call chain (one frame per level), and a cyclic
+  // parent_id would have looped forever — both are documented realities of this
+  // collector, and this is the one button that walks the entire tree.
   const expandAll = useCallback(() => {
-    const allVisibleNodeIds = new Set()
-    const collectVisibleIds = (nodes) => {
-      nodes.forEach(node => {
-        if (hasChildren(node.call_id)) {
-          allVisibleNodeIds.add(node.call_id)
-          // Recurse using the freshly computed children, not stale state
-          collectVisibleIds(getChildren(node.call_id))
-        }
-      })
+    const expandable = new Set()
+    const stack = [...filteredTreeData]
+    while (stack.length > 0) {
+      const node = stack.pop()
+      if (!node) continue
+      const id = node.call_id
+      if (expandable.has(id)) continue // already walked: cuts cycles
+      if (!hasChildren(id)) continue
+      expandable.add(id)
+      const kids = getChildren(id)
+      for (let i = 0; i < kids.length; i++) stack.push(kids[i])
     }
-    collectVisibleIds(filteredTreeData)
-    setExpandedNodes(allVisibleNodeIds)
+    setExpandedNodes(expandable)
   }, [filteredTreeData, hasChildren, getChildren])
 
   const collapseAll = useCallback(() => {
