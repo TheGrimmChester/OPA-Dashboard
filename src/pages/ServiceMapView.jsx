@@ -218,8 +218,11 @@ export default function ServiceMapView() {
 
     const t = setTimeout(() => { try { net.fit({ animation: { duration: 350 } }) } catch (_) { /* noop */ } }, 250)
     return () => { clearTimeout(t); if (networkRef.current) { networkRef.current.destroy(); networkRef.current = null } }
+    // `graph` is memoized on the resolved payload, so this redraws whenever the
+    // topology itself changes — keying on node/edge counts alone would keep a
+    // stale graph when a different tenant happens to have the same shape.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, graph.visNodes.length, graph.visEdges.length])
+  }, [layout, graph])
 
   const zoom = (factor) => {
     const net = networkRef.current
