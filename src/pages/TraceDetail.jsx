@@ -1,8 +1,8 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   FiGitBranch, FiClock, FiDatabase, FiServer, FiActivity, FiX,
-  FiArrowUp, FiArrowDown, FiChevronLeft, FiFileText, FiGlobe, FiCpu, FiCode,
+  FiArrowUp, FiArrowDown, FiChevronLeft, FiChevronRight, FiFileText, FiGlobe, FiCpu, FiCode,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
@@ -81,7 +81,17 @@ function flattenTree(root, flat) {
 export default function TraceDetail() {
   const { traceId } = useParams()
   const navigate = useNavigate()
-  const [selected, setSelected] = useState(null)
+  // The selected span lives in the URL (?span=<span_id>) so a specific span is
+  // shareable and survives a reload — "look at this span" is the most common
+  // thing to send someone.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedSpanId = searchParams.get('span') || null
+  const setSelected = useCallback((span) => {
+    const p = new URLSearchParams(searchParams)
+    if (span && span.span_id) p.set('span', span.span_id)
+    else p.delete('span')
+    setSearchParams(p, { replace: true })
+  }, [searchParams, setSearchParams])
   // A ranked list answers "what is slow?" faster than any picture, so the
   // profile opens on hot spots and the drawings are one click away.
   const [profileView, setProfileView] = useState('hotspots')
@@ -142,6 +152,10 @@ export default function TraceDetail() {
     const r = flattenTree(root, flatSpans)
     return r.slice().sort((a, b) => (a.start_ts || 0) - (b.start_ts || 0))
   }, [root, flatSpans])
+
+  // Resolve the id from the URL against the ordered waterfall rows.
+  const selectedIndex = selectedSpanId ? rows.findIndex((s) => s.span_id === selectedSpanId) : -1
+  const selected = selectedIndex >= 0 ? rows[selectedIndex] : null
 
   const traceStart = rows.length ? Math.min(...rows.map((s) => s.start_ts || 0)) : 0
   const traceEnd = rows.length ? Math.max(...rows.map((s) => s.end_ts || (s.start_ts || 0))) : 0
@@ -530,7 +544,16 @@ export default function TraceDetail() {
       </Panel>
 
       {/* Span drawer */}
-      {selected && <SpanDrawer span={selected} traceStart={traceStart} onClose={() => setSelected(null)} />}
+      {selected && (
+        <SpanDrawer
+          span={selected}
+          traceStart={traceStart}
+          rows={rows}
+          index={selectedIndex}
+          onSelect={setSelected}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   )
 }
@@ -570,13 +593,60 @@ function statusPillTone(status) {
   return 'neutral'
 }
 
-function SpanDrawer({ span, traceStart, onClose }) {
+// Build a filtered Trace Explorer link from a DSL clause.
+function tracesHref(filter, service) {
+  const params = service ? { service, filter } : { filter }
+  return '/traces?' + new URLSearchParams(params).toString()
+}
+
+// A drawer value that navigates somewhere useful. Everything the drawer shows
+// about a span is a lead worth following ("show me every trace that ran this
+// query"), so values render as links rather than dead text.
+function DrillLink({ to, title, children, mono = true, style }) {
+  const navigate = useNavigate()
+  return (
+    <button
+      type="button"
+      className={`td-drill ${mono ? 'opa-mono' : ''}`}
+      title={title}
+      style={style}
+      onClick={(e) => { e.stopPropagation(); navigate(to) }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose }) {
   const sql = span.sql || []
   const redis = span.redis || []
   const http = span.http || []
   const dumps = span.dumps || []
   const net = span.net || {}
   const tier = spanTier(span)
+
+  // In-trace movement: previous/next in waterfall order, plus the span's own
+  // place in the tree. Keyboard: ←/→ (or j/k) step, Esc closes.
+  const prev = index > 0 ? rows[index - 1] : null
+  const next = index >= 0 && index < rows.length - 1 ? rows[index + 1] : null
+  const parent = span.parent_id ? rows.find((s) => s.span_id === span.parent_id) : null
+  const children = rows.filter((s) => s.parent_id && s.parent_id === span.span_id)
+  const siblings = span.parent_id
+    ? rows.filter((s) => s.parent_id === span.parent_id && s.span_id !== span.span_id)
+    : []
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return
+      if (e.key === 'Escape') { onClose(); return }
+      if ((e.key === 'ArrowRight' || e.key === 'j') && next) { e.preventDefault(); onSelect(next) }
+      if ((e.key === 'ArrowLeft' || e.key === 'k') && prev) { e.preventDefault(); onSelect(prev) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [prev, next, onSelect, onClose])
+
+  const urlPath = span.url_path || span.uri || null
 
   return (
     <>
@@ -586,18 +656,78 @@ function SpanDrawer({ span, traceStart, onClose }) {
           <div style={{ minWidth: 0 }}>
             <div className="opa-row" style={{ gap: 8 }}>
               <span className="tw-tierdot" style={{ background: tierColor(tier) }} />
-              <span className="opa-mono cell-strong" style={{ fontSize: 'var(--fs-15)' }}>{span.name}</span>
+              {/* The operation name → every trace that ran this operation. */}
+              <DrillLink
+                to={tracesHref(`name:"${span.name}"`, span.service)}
+                title={`All traces running "${span.name}"`}
+                style={{ fontSize: 'var(--fs-15)', fontWeight: 'var(--fw-semibold)' }}
+              >
+                {span.name}
+              </DrillLink>
             </div>
             <div className="opa-row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-              <StatusPill tone={statusPillTone(span.status)}>{String(span.status || 'ok').toUpperCase()}</StatusPill>
-              {span.service && <Badge>{span.service}</Badge>}
+              <DrillLink
+                to={tracesHref(`status:"${span.status || 'ok'}"`, span.service)}
+                title={`All ${span.status || 'ok'} traces for this service`}
+                mono={false}
+              >
+                <StatusPill tone={statusPillTone(span.status)}>{String(span.status || 'ok').toUpperCase()}</StatusPill>
+              </DrillLink>
+              {span.service && (
+                <DrillLink to={`/services/${encodeURIComponent(span.service)}`} title={`Service overview: ${span.service}`} mono={false}>
+                  <Badge>{span.service}</Badge>
+                </DrillLink>
+              )}
+              {urlPath && (
+                <DrillLink to={tracesHref(`url_path:"${urlPath}"`)} title={`All traces hitting ${urlPath}`} style={{ fontSize: 'var(--fs-11)' }}>
+                  {urlPath}
+                </DrillLink>
+              )}
               <span className="opa-mono opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{span.span_id}</span>
             </div>
           </div>
-          <button className="td-drawer-close" onClick={onClose} title="Close" aria-label="Close span detail"><FiX size={15} /></button>
+          <div className="opa-row" style={{ gap: 4, alignItems: 'flex-start' }}>
+            <button
+              className="td-drawer-close" onClick={() => prev && onSelect(prev)} disabled={!prev}
+              title={prev ? `Previous span: ${prev.name} (←)` : 'First span'} aria-label="Previous span"
+            ><FiChevronLeft size={15} /></button>
+            <button
+              className="td-drawer-close" onClick={() => next && onSelect(next)} disabled={!next}
+              title={next ? `Next span: ${next.name} (→)` : 'Last span'} aria-label="Next span"
+            ><FiChevronRight size={15} /></button>
+            <button className="td-drawer-close" onClick={onClose} title="Close (Esc)" aria-label="Close span detail"><FiX size={15} /></button>
+          </div>
         </div>
 
         <div className="td-drawer-body">
+          {/* Where this span sits in the trace — one click to any neighbour. */}
+          {(parent || children.length > 0 || siblings.length > 0) && (
+            <div>
+              <div className="td-drawer-sub">
+                In this trace <span className="opa-muted" style={{ fontWeight: 'normal' }}>· span {index + 1} of {rows.length}</span>
+              </div>
+              <div className="td-relations">
+                {parent && (
+                  <button type="button" className="td-relchip" onClick={() => onSelect(parent)} title={`Parent: ${parent.name}`}>
+                    <FiArrowUp size={11} /> <span className="opa-mono">{parent.name}</span>
+                  </button>
+                )}
+                {children.map((c) => (
+                  <button type="button" key={c.span_id} className="td-relchip" onClick={() => onSelect(c)} title={`Child: ${c.name}`}>
+                    <FiArrowDown size={11} /> <span className="opa-mono">{c.name}</span>
+                    <span className="opa-muted">{fmtMs(c.duration_ms)}</span>
+                  </button>
+                ))}
+                {siblings.slice(0, 8).map((sib) => (
+                  <button type="button" key={sib.span_id} className="td-relchip is-sibling" onClick={() => onSelect(sib)} title={`Sibling: ${sib.name}`}>
+                    <span className="opa-mono">{sib.name}</span>
+                    <span className="opa-muted">{fmtMs(sib.duration_ms)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="opa-grid cols-3" style={{ gap: 12 }}>
             <div className="td-metastat"><span className="k">Duration</span><span className="v" style={{ color: `var(--${latencyStatus(span.duration_ms)})` }}>{fmtMs(span.duration_ms)}</span></div>
             <div className="td-metastat"><span className="k">CPU</span><span className="v">{fmtMs(span.cpu_ms)}</span></div>
@@ -619,7 +749,17 @@ function SpanDrawer({ span, traceStart, onClose }) {
               <div className="td-drawer-sub">SQL ({sql.length})</div>
               {sql.map((q, i) => (
                 <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border-subtle)' }}>
-                  <div className="opa-mono" style={{ fontSize: 'var(--fs-12)', color: 'var(--text-primary)', wordBreak: 'break-word' }}>{q.query}</div>
+                  {/* The statement → its fingerprint page (aggregate stats +
+                      every trace that ran it). */}
+                  <DrillLink
+                    to={(q.query_fingerprint || q.fingerprint)
+                      ? `/sql/${encodeURIComponent(q.query_fingerprint || q.fingerprint)}`
+                      : tracesHref(`query_fingerprint:"${q.query}"`)}
+                    title="Open this query's detail (all traces running it)"
+                    style={{ fontSize: 'var(--fs-12)', color: 'var(--text-primary)', wordBreak: 'break-word', textAlign: 'left' }}
+                  >
+                    {q.query}
+                  </DrillLink>
                   <div className="opa-row opa-muted" style={{ gap: 14, marginTop: 4, fontSize: 'var(--fs-11)' }}>
                     <span>{q.query_type || q.type}</span>
                     <span style={{ color: `var(--${latencyStatus(q.duration_ms)})` }}>{fmtMs(q.duration_ms)}</span>
@@ -636,7 +776,12 @@ function SpanDrawer({ span, traceStart, onClose }) {
               <div className="td-drawer-sub">Redis ({redis.length})</div>
               {redis.map((r, i) => (
                 <div key={i} className="opa-row" style={{ justifyContent: 'space-between', gap: 10, marginBottom: 6, fontSize: 'var(--fs-12)' }}>
-                  <span className="opa-mono"><span style={{ color: 'var(--tier-redis)' }}>{r.command}</span> <span className="opa-muted">{r.key}</span></span>
+                  <DrillLink
+                    to={tracesHref(r.key ? `redis.command:"${r.command}" AND redis.key:"${r.key}"` : `redis.command:"${r.command}"`)}
+                    title={`All traces issuing ${r.command}${r.key ? ' on ' + r.key : ''}`}
+                  >
+                    <span style={{ color: 'var(--tier-redis)' }}>{r.command}</span> <span className="opa-muted">{r.key}</span>
+                  </DrillLink>
                   <span className="opa-row" style={{ gap: 10 }}>
                     {r.hit != null && <StatusPill tone={r.hit ? 'ok' : 'warn'}>{r.hit ? 'HIT' : 'MISS'}</StatusPill>}
                     <span className="opa-mono" style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span>
@@ -652,7 +797,15 @@ function SpanDrawer({ span, traceStart, onClose }) {
               {http.map((h, i) => (
                 <div key={i} style={{ marginBottom: 8, fontSize: 'var(--fs-12)' }}>
                   <div className="opa-mono" style={{ wordBreak: 'break-all' }}>
-                    <Badge>{h.method}</Badge> <span style={{ color: statusColor(h.status_code) }}>{h.status_code}</span> {h.url || h.uri}
+                    <Badge>{h.method}</Badge> <span style={{ color: statusColor(h.status_code) }}>{h.status_code}</span>{' '}
+                    {/* The call → its endpoint page (aggregate + sample traces). */}
+                    <DrillLink
+                      to={`/http/${encodeURIComponent(h.url || `${h.method || 'GET'} ${h.uri || ''}`.trim())}`}
+                      title="Open this endpoint's detail"
+                      style={{ wordBreak: 'break-all', textAlign: 'left' }}
+                    >
+                      {h.url || h.uri}
+                    </DrillLink>
                   </div>
                   <div className="opa-row opa-muted" style={{ gap: 14, marginTop: 3, fontSize: 'var(--fs-11)' }}>
                     <span style={{ color: `var(--${latencyStatus(h.duration_ms)})` }}>{fmtMs(h.duration_ms)}</span>
