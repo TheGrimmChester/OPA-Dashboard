@@ -54,12 +54,23 @@ export default function BrowserRum() {
   const rum = useApi('/api/rum/metrics')
   const detail = useApi('/api/rum/detail')
   const [tab, setTab] = useState('resources')
+  // Selected browser session, expanded into a timeline panel below the table.
+  const [session, setSession] = useState(null)
+  const sessions = useApi('/api/rum/sessions', {}, { skip: tab !== 'sessions' })
+  const sessionDetail = useApi(
+    `/api/rum/sessions/${encodeURIComponent(session || '')}`,
+    {}, { skip: !session },
+  )
 
-  // Correlate a browser AJAX call to the backend traces that served it, matched
-  // on request path (the beacon records the full URL; backend spans key on
-  // url_path). Resources (static assets) and page views (session-keyed, not
-  // trace-backed) have no trace target, so only the AJAX tab is drillable.
+  // Correlate a browser AJAX call to the backend that served it. The v0.2
+  // beacon propagates a W3C traceparent and records the trace id, so those
+  // rows open the exact trace; older rows fall back to matching on request
+  // path (the beacon records the full URL; backend spans key on url_path).
   const drillAjax = (r) => {
+    if (r?.trace_id) {
+      navigate(`/traces/${encodeURIComponent(r.trace_id)}`)
+      return
+    }
     if (!r?.url) return
     let path = r.url
     try { path = new URL(r.url, window.location.origin).pathname } catch { /* keep raw */ }
@@ -94,6 +105,13 @@ export default function BrowserRum() {
       const rate = Number(r.count) ? (Number(r.error_count) / Number(r.count)) * 100 : 0
       return <span style={{ color: `var(--${errorRateStatus(rate)})` }}>{fmtNum(r.error_count)} <span className="opa-muted">({fmtPct(rate, 0)})</span></span>
     } },
+    {
+      key: 'trace_id', header: 'Trace', width: 120,
+      render: (r) => (r.trace_id
+        ? <span className="opa-mono cell-strong">{String(r.trace_id).slice(0, 12)}</span>
+        : <span className="opa-muted">—</span>),
+      sortValue: (r) => r.trace_id || '',
+    },
   ]
   const pvCols = [
     { key: 'page_url', header: 'Page', render: (r) => <span className="opa-mono" style={ell}>{r.page_url || '—'}</span> },
@@ -101,8 +119,64 @@ export default function BrowserRum() {
     { key: 'session_id', header: 'Session', mono: true, render: (r) => <span className="opa-muted opa-mono">{String(r.session_id || '').slice(0, 12) || '—'}</span> },
     { key: 'occurred_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.occurred_at)}</span> },
   ]
-  const activeCols = tab === 'resources' ? resourceCols : tab === 'ajax' ? ajaxCols : pvCols
-  const activeRows = tab === 'resources' ? resources : tab === 'ajax' ? ajax : pageViews
+  // One row per browser session (the beacon keeps a session id for the tab and
+  // rotates page_view_id on each SPA route change).
+  const sessionRows = sessions.data?.sessions || []
+  const sessionCols = [
+    { key: 'session_id', header: 'Session', render: (r) => <span className="opa-mono cell-strong">{String(r.session_id || '').slice(0, 14)}</span> },
+    { key: 'page_count', header: 'Pages', num: true, sortValue: (r) => Number(r.page_count), render: (r) => fmtNum(r.page_count) },
+    { key: 'ajax_count', header: 'AJAX', num: true, sortValue: (r) => Number(r.ajax_count), render: (r) => fmtNum(r.ajax_count) },
+    {
+      key: 'error_count', header: 'Errors', num: true, sortValue: (r) => Number(r.error_count),
+      render: (r) => (Number(r.error_count) > 0
+        ? <span style={{ color: 'var(--error)' }}>{fmtNum(r.error_count)}</span>
+        : <span className="opa-muted">0</span>),
+    },
+    { key: 'avg_load_ms', header: 'Avg load', num: true, sortValue: (r) => Number(r.avg_load_ms), render: (r) => <span style={{ color: `var(--${latencyStatus(Number(r.avg_load_ms))})` }}>{fmtMs(Number(r.avg_load_ms))}</span> },
+    { key: 'user_agent', header: 'User agent', render: (r) => <span className="opa-muted" style={ell}>{r.user_agent || '—'}</span> },
+    { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_seen)}</span>, sortValue: (r) => Date.parse(r.last_seen) || 0 },
+  ]
+
+  // Merge the session's page views, AJAX calls and JS errors into one
+  // chronological stream — what the user actually did, in order.
+  const timelineRows = (() => {
+    const d = sessionDetail.data
+    if (!d) return []
+    const out = []
+    ;(d.page_views || []).forEach((p) => out.push({ kind: 'page', at: p.occurred_at, label: p.page_url, meta: fmtMs(Number(p.load_ms)) }))
+    ;(d.ajax || []).forEach((a) => out.push({
+      kind: 'ajax', at: a.occurred_at, label: `${a.method || 'GET'} ${a.url}`,
+      meta: `${fmtMs(Number(a.duration))} · ${a.status}`, trace_id: a.trace_id, status: Number(a.status),
+    }))
+    ;(d.errors || []).forEach((e) => out.push({ kind: 'error', at: e.occurred_at, label: e.message, meta: e.page_url }))
+    return out.sort((x, y) => (Date.parse(x.at) || 0) - (Date.parse(y.at) || 0))
+  })()
+
+  const timelineCols = [
+    {
+      key: 'kind', header: 'Type', width: 84,
+      render: (r) => <StatusPill tone={r.kind === 'error' ? 'error' : r.kind === 'ajax' ? 'neutral' : 'ok'}>{r.kind}</StatusPill>,
+    },
+    {
+      key: 'label', header: 'Event',
+      render: (r) => <span className={r.kind === 'error' ? '' : 'opa-mono'} style={{ ...ell, maxWidth: 520, color: r.kind === 'error' ? 'var(--error)' : undefined }}>{r.label || '—'}</span>,
+    },
+    { key: 'meta', header: 'Detail', render: (r) => <span className="opa-muted">{r.meta || '—'}</span> },
+    {
+      key: 'trace', header: 'Trace', width: 120,
+      render: (r) => (r.trace_id
+        ? <span className="opa-mono cell-strong">{String(r.trace_id).slice(0, 12)}</span>
+        : <span className="opa-muted">—</span>),
+    },
+    { key: 'at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.at)}</span>, sortValue: (r) => Date.parse(r.at) || 0 },
+  ]
+
+  const activeCols = tab === 'resources' ? resourceCols
+    : tab === 'ajax' ? ajaxCols
+      : tab === 'sessions' ? sessionCols : pvCols
+  const activeRows = tab === 'resources' ? resources
+    : tab === 'ajax' ? ajax
+      : tab === 'sessions' ? sessionRows : pageViews
 
   const timeline = (d.timeline || []).map((t) => ({
     time: (t.time || '').slice(5, 16),
@@ -156,19 +230,38 @@ export default function BrowserRum() {
       <Panel title="Resource & session detail" icon={<FiLayers />} flush
         loading={detail.loading} error={detail.error}
         actions={
-          <SegmentedControl value={tab} onChange={setTab} options={[
+          <SegmentedControl value={tab} onChange={(v) => { setTab(v); setSession(null) }} options={[
             { value: 'resources', label: `Resources ${resources.length}` },
             { value: 'ajax', label: `AJAX ${ajax.length}` },
-            { value: 'sessions', label: `Page views ${pageViews.length}` },
+            { value: 'pages', label: `Page views ${pageViews.length}` },
+            { value: 'sessions', label: `Sessions ${sessionRows.length}` },
           ]} />
         }>
-        {activeRows.length === 0 && !detail.loading
+        {activeRows.length === 0 && !detail.loading && !sessions.loading
           ? <EmptyState icon={<FiGlobe />} title="No RUM detail in range"
               hint="Add the opa-rum.js snippet (<script src=&quot;/opa-rum.js&quot; …>) to your app to start capturing resource timing, AJAX calls and page views." />
           : <DataTable columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
-              onRowClick={tab === 'ajax' ? drillAjax : undefined}
-              initialSort={{ key: 'count', dir: 'desc' }} maxHeight={420} />}
+              onRowClick={tab === 'ajax' ? drillAjax
+                : tab === 'sessions' ? (r) => setSession(r.session_id === session ? null : r.session_id)
+                  : undefined}
+              initialSort={tab === 'sessions' ? { key: 'last_seen', dir: 'desc' } : { key: 'count', dir: 'desc' }}
+              maxHeight={420} />}
       </Panel>
+
+      {/* Session timeline — page views, AJAX and errors in the order they happened. */}
+      {session && (
+        <Panel title={`Session timeline · ${String(session).slice(0, 14)}`} icon={<FiActivity />} flush
+          loading={sessionDetail.loading} error={sessionDetail.error}
+          empty={!sessionDetail.loading && timelineRows.length === 0}
+          emptyText="No events recorded for this session"
+          actions={
+            <button className="opa-btn ghost" onClick={() => setSession(null)}>Close</button>
+          }>
+          <DataTable columns={timelineCols} rows={timelineRows} rowKey={(r, i) => i}
+            onRowClick={(r) => r.trace_id && navigate(`/traces/${encodeURIComponent(r.trace_id)}`)}
+            maxHeight={420} />
+        </Panel>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
 import {
   FiInfo,
   FiGitBranch,
@@ -222,7 +222,24 @@ const TABS = [
 function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [threshold, setThreshold] = useState(5)
-  
+
+  // The flame/call graphs render fixed-width SVG; measure the panel so they
+  // fill it instead of being pinned to hardcoded 600/1200px widths (which
+  // squeezed large stacks in side-by-side mode and overflowed narrow screens).
+  const vizRef = useRef(null)
+  const [vizW, setVizW] = useState(viewMode === 'side-by-side' ? 600 : 1200)
+  useEffect(() => {
+    const measure = () => {
+      if (!vizRef.current) return
+      const full = Math.max(320, vizRef.current.offsetWidth - 4)
+      // Side-by-side splits the row between two panels.
+      setVizW(viewMode === 'side-by-side' ? Math.max(320, Math.floor(full / 2) - 12) : full)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [viewMode, activeTab])
+
   // Extract call stacks from traces
   const callStack1 = useMemo(() => {
     if (!trace1 || !trace1.spans) return []
@@ -575,13 +592,13 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
         )}
         
         {activeTab === 'flame' && (
-          <div className="flame-tab">
+          <div className="flame-tab" ref={vizRef}>
             {viewMode === 'side-by-side' ? (
               <div className="side-by-side-view">
                 <div className="comparison-panel">
                   <h3>Trace 1 (Baseline)</h3>
                   {callStack1.length > 0 ? (
-                    <FlameGraph callStack={callStack1} width={600} height={600} />
+                    <FlameGraph callStack={callStack1} width={vizW} height={600} />
                   ) : (
                     <div className="comparison-empty">
                       <p>No call stack data available</p>
@@ -591,7 +608,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
                 <div className="comparison-panel">
                   <h3>Trace 2 (New)</h3>
                   {callStack2.length > 0 ? (
-                    <FlameGraph callStack={callStack2} width={600} height={600} />
+                    <FlameGraph callStack={callStack2} width={vizW} height={600} />
                   ) : (
                     <div className="comparison-empty">
                       <p>No call stack data available</p>
@@ -603,7 +620,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
               <div className="diff-view">
                 <h3>Trace 2 (New) - Flame Graph</h3>
                 {callStack2.length > 0 ? (
-                  <FlameGraph callStack={callStack2} width={1200} height={600} />
+                  <FlameGraph callStack={callStack2} width={vizW} height={600} />
                 ) : (
                   <div className="comparison-empty">
                     <p>No call stack data available</p>
@@ -615,16 +632,16 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
         )}
         
         {activeTab === 'callgraph' && (
-          <div className="callgraph-tab">
+          <div className="callgraph-tab" ref={vizRef}>
             {viewMode === 'side-by-side' ? (
               <div className="side-by-side-view">
                 <div className="comparison-panel">
                   <h3>Trace 1 (Baseline)</h3>
-                  <CallGraph callStack={callStack1} width={600} height={600} />
+                  <CallGraph callStack={callStack1} width={vizW} height={600} />
                 </div>
                 <div className="comparison-panel">
                   <h3>Trace 2 (New)</h3>
-                  <CallGraph callStack={callStack2} width={600} height={600} />
+                  <CallGraph callStack={callStack2} width={vizW} height={600} />
                 </div>
               </div>
             ) : (
@@ -645,7 +662,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
                   </div>
                 </div>
                 {diffCallStack.length > 0 ? (
-                  <CallGraph callStack={diffCallStack} width={1200} height={800} />
+                  <CallGraph callStack={diffCallStack} width={vizW} height={800} />
                 ) : (
                   <div className="no-diff-data">
                     <p>No differences found or call stacks are empty</p>

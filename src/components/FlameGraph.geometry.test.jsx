@@ -3,13 +3,15 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import FlameGraph from './FlameGraph'
 
-// Pull every <rect> the flame graph drew, in document order, as geometry.
+// Pull every flame bar the graph drew, in document order, as geometry.
+// Scoped to class="flame-node" so <rect>s inside react-icons are ignored.
 function extractRects(markup) {
   const rects = []
   const re = /<rect([^>]*?)\/?>/g
   let m
   while ((m = re.exec(markup)) !== null) {
     const attrs = m[1]
+    if (!attrs.includes('flame-node')) continue
     const num = (name) => {
       const hit = new RegExp(`${name}="([-0-9.]+)"`).exec(attrs)
       return hit ? parseFloat(hit[1]) : null
@@ -103,5 +105,36 @@ describe('FlameGraph layout geometry', () => {
   it('grows the canvas to fit content instead of clipping it', () => {
     const widest = Math.max(...rects.map((r) => r.right))
     expect(svgWidth(markup)).toBeGreaterThanOrEqual(widest)
+  })
+})
+
+// Isolates the min-bar-width advance: a single root whose children are all
+// far too short to fill their own minimum bar width. Their x positions must
+// still advance by the *rendered* width, not the raw scaled metric.
+describe('FlameGraph short-sibling layout', () => {
+  const stack = [
+    { call_id: 'root', parent_id: '', function: 'handler', duration_ms: 100, depth: 0 },
+    ...Array.from({ length: 6 }, (_, i) => ({
+      call_id: `c${i}`,
+      parent_id: 'root',
+      function: `tinyCall${i}`,
+      duration_ms: 0.005,
+      depth: 1,
+    })),
+  ]
+  const rects = extractRects(
+    renderToStaticMarkup(<FlameGraph callStack={stack} width={800} height={600} />)
+  )
+
+  it('spaces short sibling bars out instead of stacking them', () => {
+    const rows = [...new Set(rects.map((r) => r.y))].sort((a, b) => a - b)
+    const children = rects.filter((r) => r.y === rows[1]).sort((a, b) => a.x - b.x)
+    expect(children.length).toBe(6)
+    for (let i = 1; i < children.length; i++) {
+      expect(
+        children[i].x,
+        `short sibling ${i} at x=${children[i].x} overlaps previous bar ending at ${children[i - 1].right}`
+      ).toBeGreaterThanOrEqual(children[i - 1].right)
+    }
   })
 })
