@@ -60,6 +60,7 @@
 .execution-stack-tree-content {
   max-height: 800px;
   overflow-y: auto;
+  overflow-x: auto;
   padding: var(--spacing-md);
 }
 
@@ -84,6 +85,15 @@
 
 .stack-tree-node-content {
   position: relative;
+}
+
+/* Deep nesting pushes content via paddingLeft; size the (non-virtual) row
+   to its natural content width instead of shrinking it to fit, so the
+   container scrolls horizontally rather than crushing names/metrics to
+   unreadable widths. Excluded for the virtualized row, which relies on
+   absolute left/right positioning handled via its scroll-sizer instead. */
+.stack-tree-node-content:not(.stack-tree-node-content--virtual) {
+  min-width: max-content;
 }
 
 .stack-tree-node-main {

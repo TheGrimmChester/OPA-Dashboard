@@ -180,14 +180,12 @@ export const legendProps = {
 }
 
 /**
- * Opt-in flag for the reworked "v2" dashboard visualizations. When this env
- * flag is unset/false the components keep their original presentation, so the
- * shipped stack is unchanged unless a deployer explicitly turns it on.
- *
- * Enable by setting `VITE_VIZ_V2=true` (or `1`) in the build environment.
+ * Flag for the reworked "v2" dashboard visualizations (e.g. windowed
+ * row rendering for large execution stack trees). On by default; a
+ * deployer can opt back out with `VITE_VIZ_V2=false` (or `0`).
  */
 export const VIZ_V2_ENABLED =
-  import.meta.env.VITE_VIZ_V2 === 'true' || import.meta.env.VITE_VIZ_V2 === '1'
+  import.meta.env.VITE_VIZ_V2 !== 'false' && import.meta.env.VITE_VIZ_V2 !== '0'
 
 /**
  * Reusable linear gradient <defs> id/color pair helper for Area fills.

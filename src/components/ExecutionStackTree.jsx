@@ -8,6 +8,8 @@ import './ExecutionStackTree.css'
 const ROW_HEIGHT = 44        // fixed windowed-row height in px
 const OVERSCAN = 6           // extra rows rendered above/below the viewport
 const VIEWPORT_MAX = 640     // max scroll-container height in px
+const ROW_DEPTH_INDENT = 24  // matches the paddingLeft depth multiplier below
+const ROW_BASE_WIDTH = 480   // min room for name/file/metrics at depth 0
 
 function ExecutionStackTree({ callStack }) {
   const [expandedNodes, setExpandedNodes] = useState(new Set())
@@ -212,7 +214,7 @@ function ExecutionStackTree({ callStack }) {
     setExpandedNodes(new Set())
   }
 
-  // --- Row virtualization (opt-in via VIZ_V2) -----------------------------
+  // --- Row virtualization (VIZ_V2, on by default) -------------------------
   // Flatten the currently-visible rows (respecting expand state AND active
   // filters) into a linear list so we can window it. This walks the same
   // O(1) childrenMap via getChildren(), so filtering/expand semantics match
@@ -288,6 +290,12 @@ function ExecutionStackTree({ callStack }) {
   const endIndex = Math.min(total, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
   const visibleSlice = flatRows.slice(startIndex, endIndex)
 
+  // Deepest rows need more horizontal room than the viewport; grow the
+  // sizer div to fit so the scroll container scrolls horizontally instead
+  // of crushing paddingLeft-indented rows down to nothing.
+  const maxRowDepth = total > 0 ? Math.max(...flatRows.map(r => r.depth)) : 0
+  const rowContentWidth = maxRowDepth * ROW_DEPTH_INDENT + 8 + ROW_BASE_WIDTH
+
   return (
     <div className="execution-stack-tree">
       <TraceTabFilters
@@ -316,16 +324,16 @@ function ExecutionStackTree({ callStack }) {
       </div>
       {/* Large traces: hand-rolled row windowing (no extra deps). Flatten the
           visible rows, then render only the slice inside the scroll viewport
-          plus a small overscan. Opt-in via VIZ_V2 so default behavior (full
-          recursive render) is unchanged. */}
+          plus a small overscan. On by default via VIZ_V2_ENABLED; deployers
+          can opt back into the full recursive render with VITE_VIZ_V2=false. */}
       {VIZ_V2_ENABLED ? (
         <div
           className="execution-stack-tree-content execution-stack-tree-content--virtual"
           ref={scrollRef}
           onScroll={handleScroll}
-          style={{ height: viewportHeight, overflowY: 'auto', position: 'relative' }}
+          style={{ height: viewportHeight, overflowY: 'auto', overflowX: 'auto', position: 'relative' }}
         >
-          <div style={{ height: total * ROW_HEIGHT, position: 'relative' }}>
+          <div style={{ height: total * ROW_HEIGHT, minWidth: rowContentWidth, position: 'relative' }}>
             {visibleSlice.map(({ node, depth, expandable }, i) => {
               const index = startIndex + i
               return (
