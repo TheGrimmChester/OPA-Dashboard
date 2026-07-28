@@ -30,7 +30,7 @@ export default function TimeSeriesChart({ data = [], xKey = 'time', series = [],
         <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={yFmt} />
         <Tooltip content={<OpaTooltip valueFmt={valueFmt} />} cursor={{ stroke: 'var(--border-strong)' }} />
         {legend && <Legend wrapperStyle={{ fontSize: 11, color: 'var(--text-secondary)' }} iconType="plainline" />}
-        {series.map((s, i) => {
+        {series.map((s, _i) => {
           const stackId = stacked ? 'a' : undefined
           if (s.type === 'bar') return <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} stackId={stackId} radius={[2, 2, 0, 0]} />
           if (s.type === 'line') return <Line key={s.key} dataKey={s.key} name={s.name} stroke={s.color} strokeWidth={1.8} strokeDasharray={s.dashed ? '4 3' : undefined} dot={false} />

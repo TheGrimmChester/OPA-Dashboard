@@ -69,7 +69,7 @@ export function normalizeUrl(url) {
     return `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}`
   } catch {
     // If URL parsing fails, try to extract path
-    const match = url.match(/https?:\/\/[^\/]+(\/[^?]*)/)
+    const match = url.match(/https?:\/\/[^/]+(\/[^?]*)/)
     return match ? match[1] : url
   }
 }

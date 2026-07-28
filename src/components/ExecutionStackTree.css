@@ -1,339 +1,474 @@
+/* ============================================================================
+   Execution stack tree — dense call list in the Blackfire/New Relic idiom.
+   Tokens only (theme/tokens.css), so the light theme comes for free via
+   theme/light.css. No hardcoded colours, no raw shadows.
+   ============================================================================ */
+
 .execution-stack-tree {
+  /* Metric column widths. The column header and every row read the same vars,
+     so the two can never drift apart. */
+  --col-self: 104px;
+  --col-total: 74px;
+  --col-pct: 52px;
+  /* Rows live inside a scroller, the column header sits outside it: the header
+     adds the scrollbar width on the right so the columns stay aligned.
+     Must match the ::-webkit-scrollbar width below. */
+  --scroll-gutter: 8px;
+  /* Row lead-in = row padding (8, ROW_PAD) + chevron column (14, = ROW_INDENT)
+     + gap (8) + type dot (7) + gap (8). Positions the "Function" header label
+     over the function names. */
+  --row-lead: 45px;
+
   width: 100%;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
   overflow: hidden;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
 }
 
-.execution-stack-tree-header {
+/* The threshold filters are a shared component with its own card styling; we
+   only own its placement inside this panel. */
+.execution-stack-tree > .trace-tab-filters {
+  margin: var(--sp-3);
+}
+
+/* ---------------- header ---------------- */
+.stack-tree-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-lg);
-  background-color: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-light);
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.execution-stack-tree-header h2 {
-  margin: 0;
-  font-size: var(--font-size-xl);
-  color: var(--text-primary);
-  font-weight: var(--font-weight-semibold);
-}
-
-.execution-stack-tree-controls {
+.stack-tree-title {
   display: flex;
-  gap: var(--spacing-sm);
-}
-
-.execution-stack-tree-controls .control-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  transition: all var(--transition-base);
-  font-weight: var(--font-weight-medium);
-}
-
-.execution-stack-tree-controls .control-btn:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--color-primary);
-  transform: translateY(-1px);
-}
-
-.execution-stack-tree-controls .control-select {
-  padding: var(--spacing-xs) var(--spacing-md);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-.execution-stack-tree-content {
-  max-height: 800px;
-  overflow-y: auto;
-  overflow-x: auto;
-  padding: var(--spacing-md);
-}
-
-.execution-stack-tree-empty {
-  padding: var(--spacing-3xl);
-  text-align: center;
-  color: var(--text-secondary);
-  font-style: italic;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-}
-
-.execution-stack-tree-empty p {
+  align-items: center;
+  gap: var(--sp-2);
   margin: 0;
-  font-size: var(--font-size-base);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
 }
 
-.stack-tree-node {
-  margin-bottom: var(--spacing-xs);
+.stack-tree-title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
 }
 
+.stack-tree-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+}
+
+.stack-tree-sep {
+  color: var(--text-disabled);
+}
+
+.stack-tree-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* ---------------- notices ---------------- */
+.stack-tree-note {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px var(--sp-3);
+  font-size: var(--fs-12);
+  color: var(--info);
+  background: var(--info-dim);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.stack-tree-note svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.stack-tree-note.is-warn {
+  color: var(--warn);
+  background: var(--warn-dim);
+}
+
+/* ---------------- column header ---------------- */
+.stack-tree-colhead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px var(--sp-3) 5px var(--row-lead);
+  padding-right: calc(var(--sp-3) + var(--scroll-gutter));
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-default);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.stack-tree-colhead-fn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The self column is a filled track in a row; in the header it is just a label. */
+.stack-tree-colhead .stack-tree-cell {
+  font-family: var(--font-ui);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
+  background: none;
+  height: auto;
+}
+
+/* ---------------- scroll viewport ---------------- */
+.execution-stack-tree-content {
+  background: var(--surface-1);
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Recursive (VIZ_V2 off) path only: deep nesting pushes content via the child
+   rails, so size rows to their natural width and let the container scroll
+   sideways instead of crushing names and metrics. The virtualized path must
+   never do this — it caps its indent instead (ROW_INDENT_MAX_DEPTH). */
+.execution-stack-tree-content:not(.execution-stack-tree-content--virtual) {
+  max-height: 800px;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: var(--sp-2) 0;
+}
+
+.execution-stack-tree-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.execution-stack-tree-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.execution-stack-tree-content::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.execution-stack-tree-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-disabled);
+}
+
+/* ---------------- row ---------------- */
 .stack-tree-node-content {
-  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  box-sizing: border-box;
+  padding-right: var(--sp-3);
+  white-space: nowrap;
+  color: var(--text-secondary);
 }
 
-/* Deep nesting pushes content via paddingLeft; size the (non-virtual) row
-   to its natural content width instead of shrinking it to fit, so the
-   container scrolls horizontally rather than crushing names/metrics to
-   unreadable widths. Excluded for the virtualized row, which relies on
-   absolute left/right positioning handled via its scroll-sizer instead. */
 .stack-tree-node-content:not(.stack-tree-node-content--virtual) {
   min-width: max-content;
+  min-height: 26px;
 }
 
-.stack-tree-node-main {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-md);
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  transition: all var(--transition-base);
-  margin-bottom: var(--spacing-xs);
+/* Ancestor guide rails, painted as a background gradient sized to the row's
+   indent: one line every ROW_INDENT (14px) starting at the first chevron's
+   centre (ROW_PAD 8 + half the 14px chevron column). Nesting therefore costs no
+   extra DOM per level. */
+.stack-tree-node-content--virtual {
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--border-subtle),
+    var(--border-subtle) 1px,
+    transparent 1px,
+    transparent 14px
+  );
+  background-repeat: no-repeat;
+  background-size: var(--stack-indent, 0px) 100%;
+  background-position: 15px 0;
 }
 
-.stack-tree-node-main:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--border-medium);
-  box-shadow: var(--shadow-sm);
+.stack-tree-node-content.is-zebra {
+  background-color: var(--bg-sunken);
+}
+
+/* Declared after the zebra rule (equal specificity) so hover always wins. */
+.stack-tree-node-content:hover {
+  background-color: var(--surface-3);
+}
+
+.stack-tree-node-content.is-expandable {
+  cursor: pointer;
+}
+
+.stack-tree-node-content:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .stack-tree-expand-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
   padding: 0;
-  background: transparent;
+  background: none;
   border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-base);
   border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  margin-top: 2px;
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
 .stack-tree-expand-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--color-primary);
+  color: var(--text-primary);
 }
 
 .stack-tree-expand-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
 }
 
 .stack-tree-spacer {
-  width: 24px;
-  flex-shrink: 0;
+  width: 14px;
+  flex: 0 0 auto;
 }
 
-.stack-tree-node-info {
-  flex: 1;
-  min-width: 0;
+.stack-tree-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
 }
 
+/* ---------------- row content ---------------- */
 .stack-tree-node-name {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-xs);
-  flex-wrap: wrap;
+  gap: var(--sp-2);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.stack-tree-node-name strong {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
+/* Only the function name may shrink. The type tag, depth badge, chips and
+   metric cells keep their size so they stay on screen at any nesting depth. */
+.stack-tree-node-name > * {
+  flex: 0 0 auto;
+}
+
+.stack-tree-fn {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
   color: var(--text-primary);
-  font-weight: var(--font-weight-semibold);
-  word-break: break-word;
 }
 
-.stack-tree-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--color-primary);
-  flex-shrink: 0;
-}
-
-.stack-tree-icon-small {
-  width: 12px;
-  height: 12px;
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.stack-tree-file-info {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  background-color: var(--bg-primary);
-  padding: 2px var(--spacing-xs);
-  border-radius: var(--radius-sm);
-  margin-left: var(--spacing-xs);
+.stack-tree-file {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-muted);
 }
 
 .stack-tree-function-type {
-  font-size: var(--font-size-xs);
-  padding: 2px var(--spacing-xs);
-  border-radius: var(--radius-sm);
-  font-weight: var(--font-weight-medium);
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: var(--fs-11);
+  font-weight: var(--fw-medium);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-left: var(--spacing-xs);
-}
-
-.stack-tree-function-type.user {
-  background-color: var(--color-success-bg);
-  color: var(--color-success);
+  letter-spacing: 0.04em;
 }
 
 .stack-tree-function-type.internal {
-  background-color: var(--color-info-bg);
-  color: var(--color-info);
+  color: var(--info);
+  background: var(--info-dim);
 }
 
 .stack-tree-function-type.method {
-  background-color: var(--color-warning-bg);
-  color: var(--color-warning);
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
 }
 
-.stack-tree-node-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-md);
-  margin-top: var(--spacing-xs);
-  padding-top: var(--spacing-xs);
-  border-top: 1px solid var(--border-light);
-}
-
-.stack-tree-metric {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-xs);
-}
-
-.stack-tree-metric-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.stack-tree-metric-label {
-  color: var(--text-tertiary);
-  font-weight: var(--font-weight-medium);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-size: 0.7rem;
-}
-
-.stack-tree-metric-value {
-  font-family: var(--font-family-mono);
-  color: var(--text-primary);
-  font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-xs);
-}
-
-.stack-tree-metric-value.positive {
-  color: var(--color-success);
-}
-
-.stack-tree-metric-value.negative {
-  color: var(--color-error);
-}
-
-.stack-tree-metric.network-metric .stack-tree-metric-value {
-  display: flex;
-  gap: var(--spacing-xs);
-  align-items: center;
-}
-
-.network-sent {
-  color: var(--color-primary);
-}
-
-.network-received {
-  color: var(--color-success);
-}
-
-.stack-tree-children {
-  margin-left: var(--spacing-md);
-  border-left: 2px solid var(--border-light);
-  padding-left: var(--spacing-md);
-  margin-top: var(--spacing-xs);
-}
-
-/* Depth-based styling for better visual hierarchy */
-.stack-tree-node[style*="padding-left: 8px"] .stack-tree-node-main {
-  background-color: var(--bg-tertiary);
-}
-
-.stack-tree-node[style*="padding-left: 32px"] .stack-tree-node-main {
-  background-color: rgba(51, 65, 85, 0.5);
-}
-
-.stack-tree-node[style*="padding-left: 56px"] .stack-tree-node-main {
-  background-color: rgba(51, 65, 85, 0.3);
-}
-
-/* Scrollbar styling for the content area */
-.execution-stack-tree-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.execution-stack-tree-content::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-}
-
-.execution-stack-tree-content::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
+.stack-tree-depth-badge {
+  padding: 0 4px;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-muted);
 }
 
-.execution-stack-tree-content::-webkit-scrollbar-thumb:hover {
-  background: var(--border-dark);
+.stack-tree-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
 
-/* Responsive adjustments */
+.stack-tree-chip svg {
+  width: 11px;
+  height: 11px;
+  color: var(--text-disabled);
+}
+
+/* Negative delta = memory released, the only unambiguously good direction. */
+.stack-tree-chip.is-freed {
+  color: var(--ok);
+}
+
+.stack-tree-chip.is-net,
+.stack-tree-chip.is-net svg {
+  color: var(--tier-http);
+}
+
+/* ---------------- metric cells ---------------- */
+.stack-tree-cells {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.stack-tree-cell {
+  flex: 0 0 auto;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Self is the profiling signal, so it reads as a filled track with the value on
+   top: bar length is self time against the hottest call in the trace. */
+.stack-tree-cell--self {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: var(--col-self);
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: var(--fw-semibold);
+}
+
+.stack-tree-selffill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  opacity: 0.45;
+}
+
+.stack-tree-cellval {
+  position: relative;
+}
+
+.stack-tree-cell--total {
+  width: var(--col-total);
+  color: var(--text-secondary);
+}
+
+.stack-tree-cell--pct {
+  width: var(--col-pct);
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+}
+
+/* ---------------- recursive fallback rails ---------------- */
+.stack-tree-children {
+  margin-left: var(--sp-3);
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* ---------------- footer ---------------- */
+.stack-tree-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 5px var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+}
+
+.stack-tree-legend {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------- responsive ---------------- */
+/* Narrow panels drop the secondary columns rather than crushing the function
+   name; every hidden value stays in the row's title tooltip. */
+@media (max-width: 1000px) {
+  .stack-tree-file {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
-  .stack-tree-node-metrics {
-    flex-direction: column;
-    gap: var(--spacing-xs);
+  .execution-stack-tree {
+    --col-self: 86px;
+    --col-total: 64px;
   }
-  
-  .stack-tree-node-name {
-    flex-direction: column;
-    align-items: flex-start;
+
+  .stack-tree-cell--pct {
+    display: none;
   }
-  
-  .execution-stack-tree-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
+
+  /* Invariant: the windowed row is a fixed 30px (ROW_HEIGHT) single line, so it
+     must never adopt responsive column stacking — that turns one row into a
+     ~150px vertical pile clipped to 30px and hides the function name entirely. */
+  .stack-tree-node-content--virtual .stack-tree-node-name {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .stack-tree-actions {
+    margin-left: 0;
+  }
+
+  .stack-tree-legend {
+    display: none;
   }
 }
 
+@media (max-width: 600px) {
+  .stack-tree-chip {
+    display: none;
+  }
+}

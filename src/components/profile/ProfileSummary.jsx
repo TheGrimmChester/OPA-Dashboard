@@ -1,0 +1,109 @@
+import React from 'react'
+import { FiActivity, FiClock, FiCpu, FiDatabase, FiHardDrive, FiLayers } from 'react-icons/fi'
+import { KpiTile } from '../ui'
+import { fmtBytes, fmtMs, fmtNum, fmtPct, latencyStatus } from '../../theme/format'
+import { METRICS } from '../../utils/callGraphModel'
+import { EMPTY_TOTALS } from './useProfileModel'
+import './profile.css'
+
+// Which tile the current ranking metric belongs to (network folds into I/O when
+// the trace reports none, so the strip never shows an empty column).
+const METRIC_TILE = { duration: 'wall', cpu: 'cpu', io: 'io', memory: 'memory', network: 'network' }
+
+function share(part, whole) {
+  return whole > 0 ? `${fmtPct((Math.abs(part) / whole) * 100, 0)} of wall` : null
+}
+
+/**
+ * Trace-level KPI strip. Every tile distinguishes "zero" from "not measured":
+ * OPA durations are frequently placeholder zeros, and a confident 0ms is worse
+ * than an honest dash.
+ */
+export default function ProfileSummary({ totals, metric = 'duration' }) {
+  const t = totals || EMPTY_TOTALS
+  const activeTile = METRIC_TILE[METRICS.indexOf(metric) >= 0 ? metric : 'duration']
+  const showNetwork = t.network !== 0 || activeTile === 'network'
+
+  const tiles = [
+    {
+      id: 'wall',
+      label: 'Wall time',
+      icon: <FiClock />,
+      value: t.wall,
+      text: fmtMs(t.wall),
+      status: t.wall > 0 ? latencyStatus(t.wall) : 'neutral',
+      note: 'self time of every call',
+    },
+    {
+      id: 'cpu',
+      label: 'CPU time',
+      icon: <FiCpu />,
+      value: t.cpu,
+      text: fmtMs(t.cpu),
+      note: share(t.cpu, t.wall),
+    },
+    {
+      id: 'io',
+      label: 'I/O wait',
+      icon: <FiHardDrive />,
+      value: t.io,
+      text: fmtMs(t.io),
+      note: share(t.io, t.wall),
+    },
+    {
+      id: 'memory',
+      label: 'Memory',
+      icon: <FiDatabase />,
+      value: t.memory,
+      text: fmtBytes(t.memory),
+      note: 'net delta',
+    },
+    showNetwork && {
+      id: 'network',
+      label: 'Network',
+      icon: <FiActivity />,
+      value: t.network,
+      text: fmtBytes(t.network),
+      note: 'sent + received',
+    },
+    {
+      id: 'calls',
+      label: 'Calls',
+      icon: <FiLayers />,
+      value: t.calls,
+      text: fmtNum(t.calls),
+      // A call count of 0 is a fact about the trace, not a missing measurement.
+      factual: true,
+      note: `${fmtNum(t.symbols)} functions · depth ${t.maxDepth}`,
+    },
+  ].filter(Boolean)
+
+  return (
+    <div className="opa-grid opa-prof-kpis">
+      {tiles.map((tile) => {
+        const measured = tile.factual || tile.value !== 0
+        const active = tile.id === activeTile
+        return (
+          <KpiTile
+            key={tile.id}
+            label={tile.label}
+            icon={tile.icon}
+            value={measured ? tile.text : '—'}
+            status={measured ? (tile.status || 'neutral') : 'neutral'}
+            footer={
+              <span className="opa-prof-foot-row">
+                {active && <span className="opa-prof-active">ranking</span>}
+                {!measured
+                  ? <span className="opa-prof-dim">not recorded{active && t.structureMode ? ' · ranked by calls' : ''}</span>
+                  : tile.note && <span className="opa-muted">{tile.note}</span>}
+                {tile.id === 'calls' && t.truncated && (
+                  <span className="opa-prof-warn">capped · {fmtNum(t.scanned)} scanned</span>
+                )}
+              </span>
+            }
+          />
+        )
+      })}
+    </div>
+  )
+}

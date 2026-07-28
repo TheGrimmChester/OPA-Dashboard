@@ -39,6 +39,7 @@
   transition: background 90ms ease;
 }
 .tw-row:hover { background: var(--surface-3); }
+.tw-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tw-row.is-selected { background: var(--accent-subtle); box-shadow: inset 2px 0 0 var(--accent); }
 .tw-label {
   display: flex;
@@ -74,13 +75,6 @@
   border-radius: 3px;
   opacity: 0.9;
 }
-.tw-bar-self {
-  position: absolute;
-  top: 1px;
-  height: 12px;
-  border-radius: 3px;
-  opacity: 1;
-}
 .tw-dur {
   font-family: var(--font-mono);
   font-size: var(--fs-11, 11px);
@@ -88,6 +82,29 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Profile panel (hot spots / flame / call graph / stack tree) ----
+   The panel is flush so the shared profile primitives can span edge-to-edge;
+   these wrappers supply the banding and padding they would otherwise lack. */
+.td-prof { display: flex; flex-direction: column; min-width: 0; }
+.td-prof-bar {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+}
+.td-prof-floor {
+  gap: var(--sp-2);
+  font-size: var(--fs-12);
+  white-space: nowrap;
+}
+.td-prof-sum {
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+}
+.td-prof-view { min-width: 0; }
+.td-prof-graph { padding: var(--sp-3); overflow-x: auto; }
+.td-prof-graph-inner { min-width: 0; }
 
 /* ---- Stacked horizontal bar (breakdown + data transfer) ---- */
 .tb-bar {

@@ -1,0 +1,143 @@
+/* ============================================================================
+   Profile view styles (hot spots + summary + toolbar).
+   Only what theme/ui.css does not already provide, and tokens only — light.css
+   re-declares the same tokens, so every rule here is dual-theme for free.
+   ============================================================================ */
+
+/* ---------------- summary strip ---------------- */
+/* auto-fit so 5 or 6 tiles are both dense, without a cols-N media-query ladder */
+.opa-prof-kpis { grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }
+.opa-prof-foot-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-11); min-width: 0; }
+.opa-prof-active {
+  color: var(--accent); background: var(--accent-subtle); border-radius: 999px;
+  padding: 0 6px; font-size: var(--fs-11); font-weight: var(--fw-medium);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.opa-prof-dim { color: var(--text-disabled); }
+.opa-prof-warn { color: var(--warn); }
+
+/* ---------------- toolbar ---------------- */
+.opa-prof-toolbar { flex-wrap: wrap; gap: var(--sp-3); }
+.opa-prof-field {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-11); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted);
+}
+.opa-prof-search { position: relative; display: inline-flex; align-items: center; flex: 1 1 200px; min-width: 160px; max-width: 320px; }
+.opa-prof-search > svg { position: absolute; left: 8px; width: 13px; height: 13px; color: var(--text-muted); pointer-events: none; }
+.opa-prof-search .opa-input { width: 100%; padding-left: 27px; padding-right: 26px; }
+.opa-prof-search .opa-input::-webkit-search-cancel-button { display: none; }
+.opa-prof-search-clear {
+  position: absolute; right: 4px; display: inline-flex; padding: 2px;
+  border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm);
+}
+.opa-prof-search-clear:hover { color: var(--text-primary); background: var(--surface-3); }
+.opa-prof-sum { font-size: var(--fs-12); white-space: nowrap; }
+.opa-prof-right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); }
+
+/* ---------------- notices ---------------- */
+.opa-prof-notice {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3); font-size: var(--fs-12); line-height: 1.45;
+  color: var(--text-secondary); background: var(--surface-2); border-bottom: 1px solid var(--border-subtle);
+}
+.opa-prof-notice svg { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--text-muted); }
+.opa-prof-notice strong { color: var(--text-primary); font-weight: var(--fw-semibold); }
+.opa-prof-notice.warn { color: var(--warn); background: var(--warn-dim); }
+.opa-prof-notice.warn svg, .opa-prof-notice.warn strong { color: var(--warn); }
+.opa-prof-notice-actions { margin-left: auto; display: flex; gap: var(--sp-1); flex-wrap: wrap; }
+.opa-prof-mini {
+  border: 1px solid var(--border-default); background: var(--surface-1); color: var(--text-secondary);
+  font-family: var(--font-ui); font-size: var(--fs-11); padding: 1px 7px; border-radius: var(--radius-sm);
+  cursor: pointer; white-space: nowrap;
+}
+.opa-prof-mini:hover { color: var(--text-primary); background: var(--surface-3); border-color: var(--border-strong); }
+
+/* ---------------- hot spots table ---------------- */
+.opa-prof-hotspots { min-width: 0; }
+.opa-prof-rank { color: var(--text-muted); }
+.opa-prof-fncell { display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; }
+.opa-prof-fn {
+  display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%;
+  margin-left: -6px; padding: 1px 5px; border: none; border-left: 2px solid transparent;
+  border-radius: var(--radius-sm); background: none; cursor: pointer; text-align: left;
+  font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-primary);
+}
+.opa-prof-fn:hover { background: var(--surface-3); }
+.opa-prof-fn:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.opa-prof-fn.is-selected { background: var(--accent-subtle); border-left-color: var(--accent); }
+.opa-prof-fn-name { white-space: nowrap; }
+.opa-prof-type {
+  flex: 0 0 auto; font-family: var(--font-ui); font-size: var(--fs-11); font-weight: var(--fw-medium);
+  line-height: 1.6; padding: 0 5px; border: 1px solid currentColor; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.opa-prof-flag {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px;
+  font-family: var(--font-ui); font-size: var(--fs-11); color: var(--text-muted);
+}
+.opa-prof-foot {
+  padding: var(--sp-2) var(--sp-3); font-size: var(--fs-11); color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---------------- selected-symbol detail ---------------- */
+.opa-prof-detail { border-top: 1px solid var(--border-default); background: var(--bg-sunken); }
+.opa-prof-detail-head { display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); }
+.opa-prof-detail-id { flex: 1 1 auto; min-width: 0; }
+.opa-prof-detail-title {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: var(--fs-13); font-weight: var(--fw-medium);
+  color: var(--text-primary); overflow-wrap: anywhere;
+}
+.opa-prof-detail-src { margin-top: 3px; font-size: var(--fs-11); color: var(--text-muted); overflow-wrap: anywhere; }
+.opa-prof-close {
+  flex: 0 0 auto; display: inline-flex; padding: 3px; border: none; background: none;
+  color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm);
+}
+.opa-prof-close:hover { color: var(--text-primary); background: var(--surface-3); }
+.opa-prof-stats { display: flex; flex-wrap: wrap; gap: var(--sp-4); padding: 0 var(--sp-4) var(--sp-3); }
+.opa-prof-stat { display: flex; flex-direction: column; gap: 1px; }
+.opa-prof-stat-l { font-size: var(--fs-11); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); white-space: nowrap; }
+.opa-prof-stat-v { font-family: var(--font-mono); font-size: var(--fs-14); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.opa-prof-path {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
+  padding: 0 var(--sp-4) var(--sp-3); min-width: 0;
+}
+.opa-prof-crumb {
+  font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-secondary);
+  padding: 1px 4px; border: none; border-radius: var(--radius-sm); background: none; cursor: pointer;
+}
+.opa-prof-crumb:hover { color: var(--text-primary); background: var(--surface-2); }
+.opa-prof-crumb.is-focus { color: var(--accent); }
+.opa-prof-crumb-sep { color: var(--text-disabled); flex: 0 0 auto; }
+
+/* caller/callee pivot: 1px gap on the border color draws the divider */
+.opa-prof-cols {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--border-subtle); border-top: 1px solid var(--border-subtle);
+}
+@media (max-width: 980px) { .opa-prof-cols { grid-template-columns: 1fr; } }
+.opa-prof-col { background: var(--bg-sunken); min-width: 0; padding-bottom: var(--sp-2); }
+.opa-prof-col-head {
+  display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-11); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted);
+}
+.opa-prof-col-head svg { width: 13px; height: 13px; }
+/* fixed numeric columns + a 1fr name that can shrink to nothing: never overflows */
+.opa-prof-nhead, .opa-prof-nrow {
+  display: grid; grid-template-columns: minmax(0, 1fr) 92px 62px 62px 46px;
+  gap: var(--sp-2); align-items: center; padding: 3px var(--sp-3); font-size: var(--fs-11);
+}
+.opa-prof-nhead {
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.opa-prof-nrow {
+  width: 100%; border: none; background: none; cursor: pointer; text-align: left;
+  font-family: var(--font-ui); color: var(--text-secondary);
+}
+.opa-prof-nrow:hover { background: var(--surface-1); color: var(--text-primary); }
+.opa-prof-nrow:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.opa-prof-nname { font-family: var(--font-mono); white-space: nowrap; overflow: hidden; }
+.opa-prof-nnum { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.opa-prof-nempty { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-11); color: var(--text-muted); }

@@ -102,8 +102,9 @@ function RequireAuth({ children }) {
 }
 
 function App() {
-  const [filters, setFilters] = useState({})
-  const [autoRefresh, setAutoRefresh] = useState(true)
+  // Stats polls on its own; this stays a constant until something in the shell
+  // needs to toggle it.
+  const autoRefresh = true
   const { pathname } = useLocation()
 
   // The login screen renders standalone — no nav/topbar shell around it. When
@@ -117,14 +118,6 @@ function App() {
         </Suspense>
       </ErrorBoundary>
     )
-  }
-
-  const handleTraceSelect = (trace) => {
-    // Navigation handled by Link component
-  }
-
-  const handleServiceSelect = (service) => {
-    // Navigation handled by Link component
   }
 
   return (

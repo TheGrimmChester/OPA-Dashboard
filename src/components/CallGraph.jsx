@@ -744,10 +744,13 @@ function CallGraph({ callStack, width = 1200, height = 800 }) {
       
       // Only filter by function type at individual node level, not by percentage
       // Percentage filtering will be applied to groups after grouping
-      const shouldInclude = (depth === 0 || true) && // Always include for now, filter groups later
-        ((isInternal && showInternalFunctions) ||
-         (isMethod && showMethods) ||
-         (isUser && showUserFunctions))
+      // Percentage filtering happens after grouping, so at node level the only
+      // criterion is the function-type toggles. (This used to read
+      // `(depth === 0 || true) && …`, which is just `…`.)
+      const shouldInclude =
+        (isInternal && showInternalFunctions) ||
+        (isMethod && showMethods) ||
+        (isUser && showUserFunctions)
       
       if (!nodeDataMap.has(id)) {
         nodeDataMap.set(id, { node, parentId, depth, shouldInclude })

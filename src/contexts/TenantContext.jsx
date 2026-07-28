@@ -3,19 +3,42 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
+// "all" is the unscoped selection and the default one: nothing is filtered until
+// the user picks a concrete org/project. It is NOT a stand-in for the
+// "default-org"/"default-project" tenant, which is a real org/project you can
+// select like any other.
+const ALL = 'all'
+
+// One-time migration: "default-org"/"default-project" used to BE the
+// "nothing selected" sentinel. It is now an ordinary org/project, so a pair
+// persisted before this change would silently scope the dashboard to it. Reset
+// that exact pair to "All" — once, keyed on a flag, so deliberately selecting
+// Default Organization afterwards still sticks.
+const MIGRATED_KEY = 'tenant_picker_default_to_all_v1'
+if (!localStorage.getItem(MIGRATED_KEY)) {
+  const storedOrg = localStorage.getItem('organization_id')
+  const storedProj = localStorage.getItem('project_id')
+  if ((!storedOrg || storedOrg === 'default-org') && (!storedProj || storedProj === 'default-project')) {
+    localStorage.setItem('organization_id', ALL)
+    localStorage.setItem('project_id', ALL)
+  }
+  localStorage.setItem(MIGRATED_KEY, '1')
+}
+
 // Live tenant selection, read by the axios interceptor below. Kept outside React
 // state so the interceptor always sees the current values: an interceptor
 // registered from an effect would still carry the previous tenant when a child's
 // effect fires its refetch (child effects run before the provider's).
 const tenantHeaders = {
-  organizationId: localStorage.getItem('organization_id') || 'default-org',
-  projectId: localStorage.getItem('project_id') || 'default-project',
+  organizationId: localStorage.getItem('organization_id') || ALL,
+  projectId: localStorage.getItem('project_id') || ALL,
 }
 
 // Registered once, at import time, so requests fired by the very first render
 // already carry the tenant headers.
 axios.interceptors.request.use((config) => {
-  // "all" is sent explicitly — the backend reads it as "do not filter".
+  // "all" is sent explicitly — the backend reads it as "do not filter this
+  // dimension", per dimension, so org=X + project=all filters on the org alone.
   if (tenantHeaders.organizationId) config.headers['X-Organization-ID'] = tenantHeaders.organizationId
   if (tenantHeaders.projectId) config.headers['X-Project-ID'] = tenantHeaders.projectId
   return config
@@ -33,26 +56,25 @@ export const useTenant = () => {
 
 export const TenantProvider = ({ children }) => {
   const [organizationId, setOrganizationId] = useState(() => {
-    return localStorage.getItem('organization_id') || 'default-org'
+    return localStorage.getItem('organization_id') || ALL
   })
   const [projectId, setProjectId] = useState(() => {
-    return localStorage.getItem('project_id') || 'default-project'
+    return localStorage.getItem('project_id') || ALL
   })
   const [organizations, setOrganizations] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(false)
 
-  // Load organizations and projects on mount
+  // Load organizations on mount. Projects come from the effect below, which
+  // already runs on mount — calling it here too would double-fetch.
   useEffect(() => {
     loadOrganizations()
-    loadProjects()
   }, [])
 
-  // Update projects when organization changes
+  // Update the project menu when the organization changes. With the org on "All"
+  // this lists projects across every org, so a project is still selectable.
   useEffect(() => {
-    if (organizationId) {
-      loadProjects(organizationId)
-    }
+    loadProjects(organizationId)
   }, [organizationId])
 
   const loadOrganizations = async () => {
@@ -72,8 +94,9 @@ export const TenantProvider = ({ children }) => {
   const loadProjects = async (orgId = null) => {
     try {
       const token = localStorage.getItem('auth_token')
+      // Org ids are base64 (URL alphabet + "=" padding), so encode them.
       const org = orgId || organizationId
-      const response = await axios.get(`${API_URL}/api/projects?organization_id=${org}`, {
+      const response = await axios.get(`${API_URL}/api/projects?organization_id=${encodeURIComponent(org)}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -87,25 +110,15 @@ export const TenantProvider = ({ children }) => {
     }
   }
 
-  const selectOrganization = async (orgId) => {
+  const selectOrganization = (orgId) => {
     setOrganizationId(orgId)
     localStorage.setItem('organization_id', orgId)
-    // If "all" is selected, also set project to "all"
-    if (orgId === 'all') {
-      setProjectId('all')
-      localStorage.setItem('project_id', 'all')
-    } else {
-      // Reset project to first project in new org
-      const newProjects = await loadProjects(orgId)
-      if (newProjects.length > 0) {
-        setProjectId(newProjects[0].project_id)
-        localStorage.setItem('project_id', newProjects[0].project_id)
-      } else {
-        // If no projects, set to "all"
-        setProjectId('all')
-        localStorage.setItem('project_id', 'all')
-      }
-    }
+    // Switching org always resets the project to "All": the previous project
+    // belongs to the old org, and "all of the new org" is the only selection
+    // that is meaningful without knowing its project list yet. The effect above
+    // reloads the project menu for the new org.
+    setProjectId(ALL)
+    localStorage.setItem('project_id', ALL)
   }
 
   const selectProject = (projId) => {
