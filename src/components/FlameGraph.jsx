@@ -45,6 +45,9 @@ const TYPE_HEX = {
 const NEUTRAL_FILL = 'var(--bg-tertiary)'
 const NEUTRAL_HEX = '#334155'
 
+// Minimum bar width so a function name stays legible even for very short calls.
+const MIN_BAR_WIDTH = 60
+
 // Detect the operation type from node data (type field or the presence of
 // sql/http/redis/cache detail arrays). Returns null when nothing is known.
 function detectNodeType(node) {
@@ -279,24 +282,47 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
     if (!dataToUse || dataToUse.length === 0) return null
 
     let maxDepth = 0
-    let totalMetric = 0
-
-    const calculateStats = (nodes, depth = 0) => {
+    const calculateDepth = (nodes, depth = 0) => {
       nodes.forEach(node => {
         maxDepth = Math.max(maxDepth, depth)
-        const metricValue = getMetricValue(node, selectedMetric)
-        totalMetric = Math.max(totalMetric, metricValue)
         if (node.children && node.children.length > 0) {
-          calculateStats(node.children, depth + 1)
+          calculateDepth(node.children, depth + 1)
         }
       })
     }
+    calculateDepth(dataToUse)
 
-    calculateStats(dataToUse)
+    // The root row always spans the full available width, so scale is
+    // driven by the SUM of top-level siblings, not the max value anywhere
+    // in the tree (which broke down whenever there was more than one root).
+    const totalMetric = dataToUse.reduce(
+      (sum, node) => sum + getMetricValue(node, selectedMetric), 0
+    )
 
     const barHeight = 30
     const scaledHeight = Math.max(height, (maxDepth + 1) * barHeight + 40)
     const scaleX = totalMetric > 0 ? (width - 40) / totalMetric : 1
+
+    // Bottom-up pixel widths so parent bars always fully contain their
+    // children and siblings never overlap once the MIN_BAR_WIDTH floor
+    // kicks in for short calls. A node's width is the larger of its own
+    // scaled metric and the total width its children need.
+    const widthCache = new Map()
+    const computeWidth = (node) => {
+      const own = Math.max(MIN_BAR_WIDTH, getMetricValue(node, selectedMetric) * scaleX)
+      let w = own
+      if (node.children && node.children.length > 0) {
+        const childrenWidth = node.children.reduce((sum, child) => sum + computeWidth(child), 0)
+        w = Math.max(own, childrenWidth)
+      }
+      widthCache.set(node.id, w)
+      return w
+    }
+    const totalContentWidth = dataToUse.reduce((sum, node) => sum + computeWidth(node), 0)
+
+    // Let the canvas grow to fit the real content instead of clipping it;
+    // the container scrolls horizontally when this exceeds the panel width.
+    const svgWidth = Math.max(width, totalContentWidth + 40)
 
     return {
       maxDepth,
@@ -304,6 +330,8 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
       barHeight,
       height: scaledHeight,
       scaleX,
+      widthCache,
+      svgWidth,
     }
   }, [filteredFlameData, flameData, width, height, selectedMetric])
 
@@ -313,9 +341,9 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
     // Get metric value for this node
     const metricValue = getMetricValue(node, selectedMetric)
     
-    // Minimum width for bars to ensure text visibility (60px minimum, or actual width if larger)
-    const minBarWidth = 60
-    const nodeWidth = Math.max(minBarWidth, metricValue * layout.scaleX)
+    // Precomputed bottom-up so parents always contain their children and
+    // siblings never overlap (see MIN_BAR_WIDTH handling in `layout`).
+    const nodeWidth = layout.widthCache.get(node.id) ?? Math.max(MIN_BAR_WIDTH, metricValue * layout.scaleX)
     const nodeHeight = layout.barHeight
     const nodeY = y + (depth * (nodeHeight + 2))
 
@@ -375,7 +403,7 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
           onClick={() => setSelectedNode(selectedNode === node.id ? null : node.id)}
           className="flame-node"
         />
-        {nodeWidth >= minBarWidth && (
+        {nodeWidth >= MIN_BAR_WIDTH && (
           <text
             x={x + 6}
             y={nodeY + nodeHeight / 2}
@@ -399,8 +427,7 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
         if (childElements) {
           elements.push(...childElements)
         }
-        const childMetricValue = getMetricValue(child, selectedMetric)
-        childX += childMetricValue * layout.scaleX
+        childX += layout.widthCache.get(child.id) ?? 0
       })
     }
 
@@ -465,19 +492,25 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
       <div className="flame-graph-content" ref={containerRef}>
         <svg
           ref={svgRef}
-          width={width}
+          width={layout.svgWidth}
           height={layout.height}
-          viewBox={`0 0 ${width} ${layout.height}`}
+          viewBox={`0 0 ${layout.svgWidth} ${layout.height}`}
           style={{
             transform: `scale(${zoomLevel}) translate(${panX}px, 0px)`,
             transformOrigin: 'top left',
           }}
           className="flame-graph-svg"
         >
-          {dataToUse.map((node, idx) => {
-            const elements = renderNode(node, 20, 20, 0)
-            return elements
-          })}
+          {(() => {
+            // Lay roots out side by side; previously every root was drawn at
+            // the same x=20 and multiple root spans rendered on top of each other.
+            let rootX = 20
+            return dataToUse.map((node) => {
+              const elements = renderNode(node, rootX, 20, 0)
+              rootX += layout.widthCache.get(node.id) ?? 0
+              return elements
+            })
+          })()}
         </svg>
         {hoveredNode && (
           <div 
