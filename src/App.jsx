@@ -57,6 +57,7 @@ const ApiKeys = lazy(() => import('./pages/ApiKeys'))
 const Slos = lazy(() => import('./pages/Slos'))
 const Alerts = lazy(() => import('./pages/Alerts'))
 const Anomalies = lazy(() => import('./pages/Anomalies'))
+const Synthetics = lazy(() => import('./pages/Synthetics'))
 
 // Result of the one-time auth probe, cached for the lifetime of the page so
 // client-side navigations never re-probe. `true` = render the app (auth off or
@@ -225,6 +226,10 @@ function App() {
             <Route
               path="/anomalies"
               element={<Anomalies />}
+            />
+            <Route
+              path="/synthetics"
+              element={<Synthetics />}
             />
             <Route
               path="/errors"

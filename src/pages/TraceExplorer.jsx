@@ -12,6 +12,28 @@ import './TraceExplorer.css'
 const LIMIT = 100
 const BINS = 20
 
+// URI filters arrive as dedicated query params (?uri=, ?host=, ?scheme=,
+// ?query_string=) — /api/traces has always accepted them, but this page never
+// read them, so a deep link like /traces?uri=/checkout silently listed
+// everything with an empty query box. Fold them into the DSL the box speaks:
+// each term compiles to the exact same ClickHouse expression the param does
+// (JSONExtractString on the http_request tag, LIKE-substring except scheme,
+// which is exact), so the filter is now both applied and stated — and Export,
+// which only forwards ?filter, inherits it.
+const URI_PARAMS = [
+  { param: 'uri', field: 'tags.http_request.uri', substring: true },
+  { param: 'host', field: 'tags.http_request.host', substring: true },
+  { param: 'scheme', field: 'tags.http_request.scheme', substring: false },
+  { param: 'query_string', field: 'tags.http_request.query_string', substring: true },
+]
+
+// Values are double-quoted for the DSL lexer; escaping keeps a stray quote from
+// running the string off the end of the query.
+const dslQuote = (v) => `"${String(v).replace(/(["\\])/g, '\\$1')}"`
+const uriTerm = ({ field, substring }, value) => (substring
+  ? `${field}:LIKE ${dslQuote(`%${value}%`)}`
+  : `${field}:${dslQuote(value)}`)
+
 // Percentile over a numeric array (nearest-rank, linear-ish).
 function percentile(sorted, p) {
   if (!sorted.length) return null
@@ -48,13 +70,37 @@ export default function TraceExplorer() {
   // Filters live in the URL so every drill-down (a row elsewhere linking to
   // /traces?filter=…) lands here filtered, and views are shareable/bookmarkable.
   const [searchParams, setSearchParams] = useSearchParams()
-  const service = searchParams.get('service') || ''
-  const status = searchParams.get('status') || ''
-  const filter = searchParams.get('filter') || ''
+
+  // Resolved synchronously rather than in an effect so the very first fetch
+  // already carries the URI filters — an effect would let one unfiltered
+  // result set flash first.
+  const normalized = useMemo(() => {
+    const p = new URLSearchParams(searchParams)
+    const terms = []
+    for (const spec of URI_PARAMS) {
+      const v = p.get(spec.param)
+      if (!v) continue
+      terms.push(uriTerm(spec, v))
+      p.delete(spec.param)
+    }
+    if (terms.length) p.set('filter', [p.get('filter'), ...terms].filter(Boolean).join(' AND '))
+    return { params: p, folded: terms.length > 0 }
+  }, [searchParams])
+
+  // Rewrite the address bar to the folded form so the URL and the query box
+  // agree, and so a copied link reproduces exactly what's on screen.
+  useEffect(() => {
+    if (normalized.folded) setSearchParams(normalized.params, { replace: true })
+  }, [normalized, setSearchParams])
+
+  const params = normalized.params
+  const service = params.get('service') || ''
+  const status = params.get('status') || ''
+  const filter = params.get('filter') || ''
   const [offset, setOffset] = useState(0)
 
   const setParam = (key, val) => {
-    const p = new URLSearchParams(searchParams)
+    const p = new URLSearchParams(params)
     if (val) p.set(key, val)
     else p.delete(key)
     setSearchParams(p, { replace: true })
@@ -85,6 +131,14 @@ export default function TraceExplorer() {
   })
 
   const services = meta.data?.services || []
+  // A deep link can scope to a service the metadata list doesn't carry — a RUM
+  // origin like https://community-users.chargemap-test.com, or a service whose
+  // spans aged out of the range. Without its own option the <select> falls back
+  // to the empty one and claims "All services" while the scope is still applied.
+  const serviceOptions = useMemo(() => {
+    const names = services.map((s) => s.service)
+    return service && !names.includes(service) ? [service, ...names] : names
+  }, [services, service])
   const traces = q.data?.traces || []
   const total = q.data?.total ?? 0
 
@@ -143,10 +197,14 @@ export default function TraceExplorer() {
           </div>
         </div>
         <div className="opa-row">
-          <select className="opa-select" value={service} onChange={(e) => setParam('service', e.target.value)} aria-label="Service filter">
+          <select
+            className="opa-select opa-mono" style={{ maxWidth: 260 }}
+            value={service} onChange={(e) => setParam('service', e.target.value)}
+            title={service || 'All services'} aria-label="Service filter"
+          >
             <option value="">All services</option>
-            {services.map((s) => (
-              <option key={s.service} value={s.service}>{s.service}</option>
+            {serviceOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
           <select className="opa-select" value={status} onChange={(e) => setParam('status', e.target.value)} aria-label="Status filter">
