@@ -62,7 +62,6 @@ function ExecutionStackTree({ callStack }) {
       function_type: node.function_type || node.FunctionType || 0,
       self_ms: 0, // filled below from the child index
       _raw: node,
-      _hasChildren: undefined, // Will be computed lazily
     }
   }, [])
 
@@ -223,32 +222,22 @@ function ExecutionStackTree({ callStack }) {
     return children.some(shouldIncludeNode)
   }, [childrenMap, filters.enabled, shouldIncludeNode])
 
-  // Get children for a specific node - pure O(1) lookup, no state mutation.
+  // Get children for a specific node - pure O(1) lookup, no state mutation and
+  // no node copies, so the self/total figures computed once above stay attached.
   const getChildren = useCallback((parentId) => {
     const children = childrenMap.get(parentId)
     if (!children || children.length === 0) {
       return []
     }
-
     // Apply filters (shouldIncludeNode is a no-op when filters are disabled)
-    return children
-      .filter(shouldIncludeNode)
-      .map(node => ({
-        ...node,
-        _hasChildren: hasChildren(node.call_id)
-      }))
-  }, [childrenMap, hasChildren, shouldIncludeNode])
+    return children.filter(shouldIncludeNode)
+  }, [childrenMap, shouldIncludeNode])
 
   // Visible top level (children are resolved lazily on expand)
-  const filteredTreeData = useMemo(() => {
-    const out = []
-    for (const node of rootNodes) {
-      if (shouldIncludeNode(node)) {
-        out.push({ ...node, _hasChildren: hasChildren(node.call_id) })
-      }
-    }
-    return out
-  }, [rootNodes, hasChildren, shouldIncludeNode])
+  const filteredTreeData = useMemo(
+    () => rootNodes.filter(shouldIncludeNode),
+    [rootNodes, shouldIncludeNode]
+  )
 
   // Open the first few levels whenever the underlying stack changes, so the view
   // lands on the entry path instead of a single collapsed root. Iterative BFS
@@ -328,18 +317,6 @@ function ExecutionStackTree({ callStack }) {
     setScrollTop(e.currentTarget.scrollTop)
   }, [])
 
-  const sortSelect = (
-    <select
-      className="opa-select stack-tree-sort"
-      value={sortOrder}
-      onChange={(e) => setSortOrder(e.target.value)}
-      aria-label="Sibling order"
-    >
-      <option value="newest">Newest first</option>
-      <option value="oldest">Oldest first</option>
-    </select>
-  )
-
   if (filteredTreeData.length === 0) {
     return (
       <div className="execution-stack-tree">
@@ -379,7 +356,7 @@ function ExecutionStackTree({ callStack }) {
       <div className="stack-tree-head">
         <h3 className="stack-tree-title"><FiLayers />Execution stack</h3>
         <div className="stack-tree-meta opa-mono opa-tnum">
-          <span title={`${stats.calls} calls captured`}>{fmtNum(stats.calls)} calls</span>
+          <span title={`${exact(stats.calls)} calls captured`}>{fmtNum(stats.calls)} calls</span>
           <span className="stack-tree-sep">/</span>
           <span title="Deepest recorded stack depth">depth {fmtNum(stats.depth)}</span>
           {!scale.structureMode && (
@@ -390,7 +367,15 @@ function ExecutionStackTree({ callStack }) {
           )}
         </div>
         <div className="stack-tree-actions">
-          {sortSelect}
+          <select
+            className="opa-select"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+            aria-label="Sibling order"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
           <button onClick={expandAll} className="opa-btn" type="button">
             <FiChevronsDown />Expand all
           </button>
@@ -481,9 +466,9 @@ function ExecutionStackTree({ callStack }) {
 // Recursive renderer, used when VIZ_V2 is disabled. Indentation comes from the
 // nested rails instead of row padding, so StackRow renders flush here.
 function StackTreeNode({ node, expandedNodes, onToggle, depth, getChildren, hasChildren, scale }) {
-  const nodeHasChildren = hasChildren ? hasChildren(node.call_id) : node._hasChildren === true
+  const nodeHasChildren = hasChildren(node.call_id)
   const isExpanded = expandedNodes.has(node.call_id)
-  const children = isExpanded && nodeHasChildren && getChildren ? getChildren(node.call_id) : []
+  const children = isExpanded && nodeHasChildren ? getChildren(node.call_id) : []
 
   return (
     <>

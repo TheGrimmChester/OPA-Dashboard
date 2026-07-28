@@ -139,6 +139,9 @@
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
+  /* Always reserve the scrollbar gutter, so a short list (no scrollbar) keeps
+     the same column alignment as a long one. */
+  scrollbar-gutter: stable;
 }
 
 /* Recursive (VIZ_V2 off) path only: deep nesting pushes content via the child
