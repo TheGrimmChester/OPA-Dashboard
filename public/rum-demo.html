@@ -14,16 +14,14 @@
       hooks register before the page starts doing work.
 
     NOTE ON CSP: the production dashboard (nginx.conf) sends a strict
-    Content-Security-Policy (default-src 'self', no 'unsafe-inline'). That blocks
-    the *inline* orchestration script and inline styles on THIS page. The beacon
-    itself is a same-origin external script and loads fine, and same-origin
-    sendBeacon/fetch to /api are allowed by connect-src 'self'. To exercise the
-    inline demo logic (buttons, fetch bursts, forced CLS), serve this page from a
-    context that permits inline execution:
+    Content-Security-Policy (default-src 'self', no 'unsafe-inline'). This page
+    is CSP-clean: its styles (rum-demo.css) and orchestration logic (rum-demo.js)
+    are external same-origin files, the beacon is a same-origin external script,
+    same-origin sendBeacon/fetch to /api are allowed by connect-src 'self', and
+    the data:/https demo images are allowed by img-src 'self' data: https:.
+    It therefore works both behind nginx and via:
         npm run dev      (Vite dev server on :3000, proxies /api -> agent)
         npm run preview  (vite preview of the built bundle)
-        open the file directly (file://) for a CSP-free smoke test
-    or temporarily add 'unsafe-inline' to script-src/style-src in nginx.conf.
   -->
   <script
     src="/opa-rum.js"
@@ -33,58 +31,9 @@
     data-sample-rate="1"
     data-debug="true"></script>
 
-  <!-- Same-origin CSS resource (populates resource timing as a "link"/"css" entry). -->
-  <link rel="stylesheet" href="data:text/css,.opa-rum-demo-marker%7Bfont-style:italic%7D" />
-
-  <style>
-    :root { color-scheme: light dark; }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      line-height: 1.5;
-      color: #1a1a1a;
-      background: #f6f7f9;
-    }
-    header {
-      background: #0f172a;
-      color: #f8fafc;
-      padding: 20px 24px;
-    }
-    header h1 { margin: 0 0 4px; font-size: 20px; }
-    header p { margin: 0; font-size: 13px; color: #cbd5e1; }
-    main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
-    section {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 16px 18px;
-      margin: 16px 0;
-    }
-    h2 { font-size: 15px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: #475569; }
-    .hero { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-    .hero img { border-radius: 6px; }
-    .lcp-block { font-size: 26px; font-weight: 700; color: #0f172a; flex: 1 1 320px; }
-    button {
-      font: inherit; cursor: pointer; border: 1px solid #94a3b8;
-      background: #fff; padding: 8px 14px; border-radius: 6px; margin: 4px 6px 4px 0;
-    }
-    button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
-    button.danger  { background: #dc2626; border-color: #dc2626; color: #fff; }
-    code { background: #eef2f7; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
-    #log {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 12px; white-space: pre-wrap; background: #0b1020; color: #d1e0ff;
-      border-radius: 6px; padding: 12px; max-height: 260px; overflow: auto; margin: 0;
-    }
-    .cls-slot { min-height: 8px; }
-    .filler { color: #334155; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #0b1020; color: #e5e9f0; }
-      section { background: #131a2b; border-color: #24314d; }
-      .lcp-block { color: #e5e9f0; }
-      code { background: #1e293b; color: #cbd5e1; }
-    }
-  </style>
+  <!-- Same-origin external stylesheet: CSP-safe and populates resource timing
+       as a "link"/"css" entry. -->
+  <link rel="stylesheet" href="/rum-demo.css" />
 </head>
 <body>
   <header>
@@ -131,7 +80,7 @@
       <button id="btn-fetch" class="primary" type="button">Re-run API calls</button>
       <button id="btn-error" class="danger" type="button">Throw error</button>
       <button id="btn-flush" type="button">Flush now</button>
-      <p class="filler" style="margin-bottom:0">
+      <p class="filler tight-bottom">
         <strong>Throw error</strong> raises an uncaught <code>Error</code> (captured via the global <code>error</code> handler).
         <strong>Flush now</strong> calls <code>window.OpaRum.flush()</code>. The beacon also auto-flushes on page hide / tab close.
       </p>
@@ -152,89 +101,8 @@
     </section>
   </main>
 
-  <script>
-    (function () {
-      'use strict';
-      var logEl = document.getElementById('log');
-      function log(msg) {
-        var line = '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n';
-        if (logEl) logEl.textContent += line;
-        // eslint-disable-next-line no-console
-        console.log('[rum-demo]', msg);
-      }
-
-      // --- AJAX activity: same-origin /api calls (populate ajax_requests) ---
-      function callApi(path, label) {
-        var t0 = performance.now();
-        return fetch(path, { headers: { 'Accept': 'application/json' } })
-          .then(function (res) {
-            var ms = Math.round(performance.now() - t0);
-            log(label + ' -> ' + res.status + ' (' + ms + 'ms)');
-            return res;
-          })
-          .catch(function (err) {
-            log(label + ' -> network error: ' + err.message);
-          });
-      }
-
-      function runApiBurst() {
-        log('Firing API calls...');
-        callApi('/api/services/metadata', 'GET /api/services/metadata');
-        callApi('/api/rum/metrics', 'GET /api/rum/metrics');
-        callApi('/api/rum/metrics?window=1h', 'GET /api/rum/metrics?window=1h');
-        // Deliberate 404 so an error / 4xx AJAX entry is recorded.
-        callApi('/api/this-endpoint-does-not-exist', 'GET /api/this-endpoint-does-not-exist (expect 404)');
-      }
-
-      // --- Forced layout shift (CLS): inject a late, un-sized image ---
-      function forceLayoutShift() {
-        setTimeout(function () {
-          var slot = document.getElementById('cls-slot');
-          if (!slot) return;
-          var img = document.createElement('img');
-          // No width/height attributes => the browser reflows when it paints,
-          // shifting everything below it and producing a measurable CLS.
-          img.alt = 'late banner';
-          img.src = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='820'%20height='140'%3E%3Crect%20width='820'%20height='140'%20fill='%23f59e0b'/%3E%3Ctext%20x='410'%20y='82'%20font-family='sans-serif'%20font-size='24'%20fill='%23111'%20text-anchor='middle'%3ELate%20banner%20(causes%20CLS)%3C/text%3E%3C/svg%3E";
-          img.style.maxWidth = '100%';
-          img.style.display = 'block';
-          slot.appendChild(img);
-          log('Injected late un-sized image (layout shift).');
-        }, 900);
-      }
-
-      // --- Wire up buttons ---
-      var fetchBtn = document.getElementById('btn-fetch');
-      if (fetchBtn) fetchBtn.addEventListener('click', runApiBurst);
-
-      var errBtn = document.getElementById('btn-error');
-      if (errBtn) errBtn.addEventListener('click', function () {
-        log('Raising an uncaught error...');
-        // Deferred so it is genuinely uncaught (reaches window "error"), not
-        // swallowed by this click handler.
-        setTimeout(function () {
-          throw new Error('OPA RUM demo: intentional uncaught error at ' + Date.now());
-        }, 0);
-      });
-
-      var flushBtn = document.getElementById('btn-flush');
-      if (flushBtn) flushBtn.addEventListener('click', function () {
-        if (window.OpaRum && typeof window.OpaRum.flush === 'function') {
-          window.OpaRum.flush();
-          log('Called window.OpaRum.flush().');
-        } else {
-          log('window.OpaRum.flush() not available (is /opa-rum.js loaded & not sampled out?).');
-        }
-      });
-
-      // --- Kick things off after load ---
-      window.addEventListener('load', function () {
-        log('Page loaded. OpaRum present: ' + !!window.OpaRum);
-        forceLayoutShift();
-        // Small delay so the initial navigation/resource timings settle first.
-        setTimeout(runApiBurst, 300);
-      });
-    })();
-  </script>
+  <!-- Demo orchestration (buttons, fetch bursts, forced CLS) — external
+       same-origin script so it runs under the strict CSP. -->
+  <script src="/rum-demo.js"></script>
 </body>
 </html>

@@ -166,9 +166,6 @@ function Login() {
             </div>
           )}
 
-          <div className="login-footer">
-            Default credentials: admin / admin
-          </div>
         </Panel>
       </div>
     </div>

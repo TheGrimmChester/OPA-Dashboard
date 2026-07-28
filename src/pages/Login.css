@@ -106,10 +106,3 @@
   flex: 1;
   border-bottom: 1px solid var(--border-subtle);
 }
-
-.login-footer {
-  margin-top: var(--sp-4);
-  text-align: center;
-  font-size: var(--fs-11);
-  color: var(--text-muted);
-}

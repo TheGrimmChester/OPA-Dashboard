@@ -20,7 +20,7 @@ Add the RUM script to your HTML template. The script should be included in the `
         window.OPA_RUM_AGENT_URL = '/api/rum';
         window.OPA_RUM_SAMPLE_RATE = 1.0; // 1.0 = 100%, 0.1 = 10%
     </script>
-    <script src="/rum.js"></script>
+    <script src="/opa-rum.js"></script>
 </head>
 <body>
     <!-- Your content -->
@@ -39,7 +39,7 @@ location / {
     # ... your existing config ...
     
     # Inject RUM script before </body>
-    sub_filter '</body>' '<script src="/rum.js"></script></body>';
+    sub_filter '</body>' '<script src="/opa-rum.js"></script></body>';
     sub_filter_once on;
 }
 ```
@@ -50,7 +50,7 @@ location / {
 <Location />
     # Inject RUM script
     AddOutputFilterByType SUBSTITUTE text/html
-    Substitute "s|</body>|<script src=\"/rum.js\"></script></body>|ni"
+    Substitute "s|</body>|<script src=\"/opa-rum.js\"></script></body>|ni"
 </Location>
 ```
 
