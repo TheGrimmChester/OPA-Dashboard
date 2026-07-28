@@ -1,31 +1,22 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useRef, useEffect, useId } from 'react'
 import {
-  FiInfo,
-  FiGitBranch,
-  FiDatabase,
-  FiGlobe,
-  FiZap,
-  FiHardDrive,
-  FiCode,
-  FiTag,
-  FiActivity,
-  FiServer,
-  FiLayers,
-  FiFileText
+  FiActivity, FiCode, FiCpu, FiDatabase, FiDownload, FiFileText, FiGitBranch,
+  FiGlobe, FiHardDrive, FiInfo, FiLayers, FiServer, FiSliders, FiTag, FiUpload, FiZap,
 } from 'react-icons/fi'
 import CallGraph from './CallGraph'
 import FlameGraph from './FlameGraph'
 import ExecutionStackTree from './ExecutionStackTree'
 import LogCorrelation from './LogCorrelation'
 import JsonTreeViewer from './JsonTreeViewer'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import MetricComparisonCard from './comparison/MetricComparisonCard'
 import SqlComparisonTable from './comparison/SqlComparisonTable'
 import HttpComparisonTable from './comparison/HttpComparisonTable'
 import CacheComparisonTable from './comparison/CacheComparisonTable'
 import RedisComparisonTable from './comparison/RedisComparisonTable'
 import TagComparisonView from './comparison/TagComparisonView'
+import {
+  Panel, KpiTile, DataTable, DeltaIndicator, Badge, StatusPill, HealthDot, Tabs, EmptyState,
+} from './ui'
+import { fmtMs, fmtBytes, fmtNum, fmtPct } from '../theme/format'
 import {
   calculateOverallMetrics,
   extractSqlQueries,
@@ -44,239 +35,218 @@ import {
 } from '../utils/comparisonUtils'
 import './ProfileComparison.css'
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+// ---------------------------------------------------------------------------
+// diff model
+// ---------------------------------------------------------------------------
 
-// Helper to get node signature for matching
+// Field names arrive in both snake_case and PascalCase depending on the agent.
 function getNodeSignature(node) {
   const className = node.class || node.Class || ''
   const functionName = node.function || node.Function || node.name || ''
   return className ? `${className}::${functionName}` : functionName
 }
 
-// Match nodes between two call stacks by signature
-function matchNodes(oldStack, newStack) {
-  const oldMap = new Map()
-  const newMap = new Map()
-  
-  const buildMap = (nodes, map, depth = 0) => {
-    nodes.forEach(node => {
-      const sig = getNodeSignature(node)
-      if (!map.has(sig)) {
-        map.set(sig, [])
-      }
-      map.get(sig).push({ node, depth })
-      
-      if (node.children && Array.isArray(node.children) && node.children.length > 0) {
-        buildMap(node.children, map, depth + 1)
-      }
-    })
-  }
-  
-  buildMap(oldStack, oldMap)
-  buildMap(newStack, newMap)
-  
-  return { oldMap, newMap }
+// Index one call stack by signature. Stacks reach us FLAT (linked by parent_id),
+// but legacy payloads can still nest under .children, so both are covered.
+function indexBySignature(nodes, index = new Map()) {
+  nodes.forEach((node) => {
+    const sig = getNodeSignature(node)
+    const bucket = index.get(sig)
+    if (bucket) bucket.push(node)
+    else index.set(sig, [node])
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      indexBySignature(node.children, index)
+    }
+  })
+  return index
 }
 
-// Calculate differences between two nodes
-function calculateDifferences(oldNode, newNode) {
-  const oldDuration = oldNode.duration_ms || oldNode.DurationMs || oldNode.duration || 0
-  const newDuration = newNode.duration_ms || newNode.DurationMs || newNode.duration || 0
-  const oldCpu = oldNode.cpu_ms || oldNode.CPUMs || oldNode.cpu || 0
-  const newCpu = newNode.cpu_ms || newNode.CPUMs || newNode.cpu || 0
-  const oldMemory = oldNode.memory_delta || oldNode.MemoryDelta || 0
-  const newMemory = newNode.memory_delta || newNode.MemoryDelta || 0
-  const oldNetwork = (oldNode.network_bytes_sent || oldNode.NetworkBytesSent || 0) + 
-                    (oldNode.network_bytes_received || oldNode.NetworkBytesReceived || 0)
-  const newNetwork = (newNode.network_bytes_sent || newNode.NetworkBytesSent || 0) + 
-                    (newNode.network_bytes_received || newNode.NetworkBytesReceived || 0)
-  const oldSQL = (oldNode.sql_queries || oldNode.SQLQueries || []).length
-  const newSQL = (newNode.sql_queries || newNode.SQLQueries || []).length
-  
-  const durationDiff = oldDuration > 0 ? ((newDuration - oldDuration) / oldDuration) * 100 : 0
-  const cpuDiff = oldCpu > 0 ? ((newCpu - oldCpu) / oldCpu) * 100 : 0
-  const memoryDiff = oldMemory !== 0 ? ((newMemory - oldMemory) / Math.abs(oldMemory)) * 100 : 0
-  const networkDiff = oldNetwork > 0 ? ((newNetwork - oldNetwork) / oldNetwork) * 100 : 0
-  const sqlDiff = oldSQL > 0 ? ((newSQL - oldSQL) / oldSQL) * 100 : (newSQL > 0 ? 100 : 0)
-  
-  return {
-    duration: { old: oldDuration, new: newDuration, diff: durationDiff },
-    cpu: { old: oldCpu, new: newCpu, diff: cpuDiff },
-    memory: { old: oldMemory, new: newMemory, diff: memoryDiff },
-    network: { old: oldNetwork, new: newNetwork, diff: networkDiff },
-    sql: { old: oldSQL, new: newSQL, diff: sqlDiff },
-  }
+function metricPair(node, snake, pascal) {
+  return node[snake] || node[pascal] || 0
 }
 
-// Determine change status (improvement, degradation, or no change)
-function getChangeStatus(diffs, threshold = 5) {
-  const significantChanges = []
-  
-  if (Math.abs(diffs.duration.diff) >= threshold) {
-    significantChanges.push({
-      metric: 'duration',
-      type: diffs.duration.diff > 0 ? 'degradation' : 'improvement',
-      value: diffs.duration.diff,
-    })
-  }
-  if (Math.abs(diffs.cpu.diff) >= threshold) {
-    significantChanges.push({
-      metric: 'cpu',
-      type: diffs.cpu.diff > 0 ? 'degradation' : 'improvement',
-      value: diffs.cpu.diff,
-    })
-  }
-  if (Math.abs(diffs.memory.diff) >= threshold) {
-    significantChanges.push({
-      metric: 'memory',
-      type: diffs.memory.diff > 0 ? 'degradation' : 'improvement',
-      value: diffs.memory.diff,
-    })
-  }
-  if (Math.abs(diffs.network.diff) >= threshold) {
-    significantChanges.push({
-      metric: 'network',
-      type: diffs.network.diff > 0 ? 'degradation' : 'improvement',
-      value: diffs.network.diff,
-    })
-  }
-  
-  if (significantChanges.length === 0) return 'no-change'
-  
-  // If any degradation, return degradation (red)
-  const hasDegradation = significantChanges.some(c => c.type === 'degradation')
-  return hasDegradation ? 'degradation' : 'improvement'
+// Percent change of one metric, guarding division by an absent baseline.
+function pctChange(oldValue, newValue) {
+  if (oldValue === 0) return 0
+  return ((newValue - oldValue) / Math.abs(oldValue)) * 100
 }
 
-// Create a diff call stack with color coding
+// 'improvement' | 'degradation' | 'no-change' for a matched pair of nodes.
+// Only primitives are allocated: this runs once per node of a stack that can
+// reach 200k entries, so no per-node diff objects are built.
+function nodeChangeStatus(oldNode, newNode, threshold) {
+  const changes = [
+    pctChange(metricPair(oldNode, 'duration_ms', 'DurationMs') || oldNode.duration || 0,
+      metricPair(newNode, 'duration_ms', 'DurationMs') || newNode.duration || 0),
+    pctChange(metricPair(oldNode, 'cpu_ms', 'CPUMs') || oldNode.cpu || 0,
+      metricPair(newNode, 'cpu_ms', 'CPUMs') || newNode.cpu || 0),
+    pctChange(metricPair(oldNode, 'memory_delta', 'MemoryDelta'),
+      metricPair(newNode, 'memory_delta', 'MemoryDelta')),
+    pctChange(
+      metricPair(oldNode, 'network_bytes_sent', 'NetworkBytesSent') + metricPair(oldNode, 'network_bytes_received', 'NetworkBytesReceived'),
+      metricPair(newNode, 'network_bytes_sent', 'NetworkBytesSent') + metricPair(newNode, 'network_bytes_received', 'NetworkBytesReceived'),
+    ),
+  ]
+  let significant = false
+  for (let i = 0; i < changes.length; i++) {
+    if (Math.abs(changes[i]) < threshold) continue
+    // Any degradation dominates the node's colour.
+    if (changes[i] > 0) return 'degradation'
+    significant = true
+  }
+  return significant ? 'improvement' : 'no-change'
+}
+
+// Tag every node of the new stack with _diffStatus, which callGraphModel folds
+// into its diff column (DIFF_CODES: no-change | improvement | degradation | new).
 function createDiffCallStack(oldStack, newStack, threshold = 5) {
-  const { oldMap } = matchNodes(oldStack, newStack)
-  
+  const oldIndex = indexBySignature(oldStack)
+
   const processNode = (newNode) => {
-    const sig = getNodeSignature(newNode)
-    const oldNodes = oldMap.get(sig) || []
-    
-    let diffNode = { ...newNode }
-    
-    if (oldNodes.length > 0) {
-      const oldNode = oldNodes[0].node
-      const diffs = calculateDifferences(oldNode, newNode)
-      const status = getChangeStatus(diffs, threshold)
-      
-      diffNode._diffStatus = status
-      diffNode._diffs = diffs
-      diffNode._isNew = false
-    } else {
-      diffNode._diffStatus = 'new'
-      diffNode._diffs = null
-      diffNode._isNew = true
+    const matches = oldIndex.get(getNodeSignature(newNode))
+    const diffNode = { ...newNode }
+    diffNode._diffStatus = matches ? nodeChangeStatus(matches[0], newNode, threshold) : 'new'
+    if (Array.isArray(newNode.children) && newNode.children.length > 0) {
+      diffNode.children = newNode.children.map(processNode)
     }
-    
-    if (newNode.children && Array.isArray(newNode.children) && newNode.children.length > 0) {
-      diffNode.children = newNode.children.map(child => processNode(child))
-    }
-    
     return diffNode
   }
-  
-  return newStack.map(root => processNode(root))
+
+  return newStack.map(processNode)
 }
 
-// Format functions
-function formatDuration(ms) {
-  if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`
-  if (ms < 1000) return `${ms.toFixed(2)}ms`
-  return `${(ms / 1000).toFixed(2)}s`
-}
+// ---------------------------------------------------------------------------
+// static config
+// ---------------------------------------------------------------------------
 
-function formatMemory(bytes) {
-  if (bytes === 0) return '0B'
-  if (Math.abs(bytes) < 1024) return `${bytes}B`
-  if (Math.abs(bytes) < 1024 * 1024) return `${(bytes / 1024).toFixed(2)}KB`
-  if (Math.abs(bytes) < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)}MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`
-}
-
-function formatBytes(bytes) {
-  if (bytes === 0) return '0B'
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)}KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`
-}
-
-const TABS = [
-  { id: 'overview', label: 'Overview', icon: FiInfo },
-  { id: 'stacktree', label: 'Execution Stack Tree', icon: FiActivity },
-  { id: 'flame', label: 'Flame Graph', icon: FiLayers },
-  { id: 'callgraph', label: 'Call Graph', icon: FiGitBranch },
-  { id: 'sql', label: 'SQL Queries', icon: FiDatabase },
-  { id: 'http', label: 'HTTP Requests', icon: FiGlobe },
-  { id: 'cache', label: 'Cache', icon: FiZap },
-  { id: 'redis', label: 'Redis', icon: FiHardDrive },
-  { id: 'stacks', label: 'Stack Traces', icon: FiCode },
-  { id: 'tags', label: 'Tags', icon: FiTag },
-  { id: 'logs', label: 'Logs', icon: FiFileText },
-  { id: 'dumps', label: 'Dumps', icon: FiCode },
+// Overview tiles. `invert` is implicit and always on: every metric here is
+// "more is worse", which is what compareMetrics()' changeType already assumes.
+const OVERVIEW_METRICS = [
+  { key: 'duration', label: 'Duration', icon: <FiActivity />, fmt: fmtMs },
+  { key: 'cpu', label: 'CPU time', icon: <FiCpu />, fmt: fmtMs },
+  { key: 'memory', label: 'Memory', icon: <FiServer />, fmt: fmtBytes },
+  { key: 'spans', label: 'Spans', icon: <FiLayers />, fmt: fmtNum, exact: true },
+  { key: 'sqlQueries', label: 'SQL queries', icon: <FiDatabase />, fmt: fmtNum, exact: true },
+  { key: 'httpRequests', label: 'HTTP requests', icon: <FiGlobe />, fmt: fmtNum, exact: true },
+  { key: 'cacheOperations', label: 'Cache ops', icon: <FiZap />, fmt: fmtNum, exact: true },
+  { key: 'redisOperations', label: 'Redis ops', icon: <FiHardDrive />, fmt: fmtNum, exact: true },
+  { key: 'networkSent', label: 'Bytes sent', icon: <FiUpload />, fmt: fmtBytes },
+  { key: 'networkReceived', label: 'Bytes received', icon: <FiDownload />, fmt: fmtBytes },
+  { key: 'stackTraces', label: 'Stack traces', icon: <FiCode />, fmt: fmtNum, exact: true },
+  { key: 'tags', label: 'Tags', icon: <FiTag />, fmt: fmtNum, exact: true },
 ]
 
+const CHANGE_STATUS = { improvement: 'ok', degradation: 'error', 'no-change': 'neutral' }
+
+// Same A/B vocabulary as the Compare page's trace selectors.
+const A_TITLE = <>Trace A <span className="opa-muted">· Baseline</span></>
+const B_TITLE = <>Trace B <span className="opa-muted">· New</span></>
+
+const AB_COLUMNS = [
+  { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="cell-strong">{r.label}</span> },
+  { key: 'a', header: 'Baseline (A)', num: true, sortable: false, render: (r) => r.fmt(r.a) },
+  { key: 'b', header: 'New (B)', num: true, sortable: false, render: (r) => r.fmt(r.b) },
+  { key: 'delta', header: 'Δ', num: true, sortable: false, render: (r) => <DeltaIndicator current={r.b} previous={r.a} invert /> },
+]
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+// Two panels: 2-up when comparing side by side, stacked full-width in diff mode.
+function AbSplit({ stacked, children }) {
+  return <div className={stacked ? 'opa-stack' : 'opa-grid cols-2'}>{children}</div>
+}
+
+function dumpTotal(items) {
+  return items.reduce((sum, item) => sum + item.dumps.length, 0)
+}
+
+// Dump payloads arrive already parsed or as a JSON string; keep the raw string
+// when it is not JSON at all so nothing is silently swallowed.
+function parseDump(data) {
+  if (typeof data !== 'string') return data
+  try {
+    return JSON.parse(data)
+  } catch {
+    return data
+  }
+}
+
+function shortId(id) {
+  const s = String(id || '')
+  if (!s) return '—'
+  return s.length > 14 ? `${s.slice(0, 14)}…` : s
+}
+
+function DumpList({ items }) {
+  return (
+    <div className="opa-cmp-dumps">
+      {items.map((item, spanIdx) => (
+        <div key={`${item.spanId || 'span'}-${spanIdx}`} className="opa-cmp-dump-group">
+          <div className="opa-cmp-dump-head">
+            <span className="cell-strong">{item.span || 'unnamed span'}</span>
+            <Badge title={`Span ${item.spanId || 'unknown'}`}>{shortId(item.spanId)}</Badge>
+            <span className="opa-muted opa-cmp-dump-count">{fmtNum(item.dumps.length)} dumps</span>
+          </div>
+          {item.dumps.map((dump, dumpIdx) => (
+            <div key={dumpIdx} className="opa-cmp-dump">
+              <div className="opa-cmp-dump-meta">
+                <span className="opa-mono">{dump.file || 'unknown'}</span>
+                <span className="opa-muted">line {dump.line ?? '?'}</span>
+              </div>
+              <div className="opa-cmp-dump-body">
+                <JsonTreeViewer data={parseDump(dump.data)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
 function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
+  const uid = useId()
   const [activeTab, setActiveTab] = useState('overview')
   const [threshold, setThreshold] = useState(5)
+  // Tagging a 200k-node stack costs a full copy, so only do it once the diff
+  // call graph has actually been opened. Latched, not gated on the live tab, so
+  // switching away and back does not recompute.
+  const [diffArmed, setDiffArmed] = useState(false)
 
   // The flame/call graphs render fixed-width SVG; measure the panel so they
   // fill it instead of being pinned to hardcoded 600/1200px widths (which
   // squeezed large stacks in side-by-side mode and overflowed narrow screens).
   const vizRef = useRef(null)
   const [vizW, setVizW] = useState(viewMode === 'side-by-side' ? 600 : 1200)
-  useEffect(() => {
-    const measure = () => {
-      if (!vizRef.current) return
-      const full = Math.max(320, vizRef.current.offsetWidth - 4)
-      // Side-by-side splits the row between two panels.
-      setVizW(viewMode === 'side-by-side' ? Math.max(320, Math.floor(full / 2) - 12) : full)
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [viewMode, activeTab])
 
   // Extract call stacks from traces
   const callStack1 = useMemo(() => {
     if (!trace1 || !trace1.spans) return []
-    const root = trace1.spans.find(s => !s.parent_id) || trace1.spans[0]
+    const root = trace1.spans.find((s) => !s.parent_id) || trace1.spans[0]
     return root?.stack || []
   }, [trace1])
-  
+
   const callStack2 = useMemo(() => {
     if (!trace2 || !trace2.spans) return []
-    const root = trace2.spans.find(s => !s.parent_id) || trace2.spans[0]
+    const root = trace2.spans.find((s) => !s.parent_id) || trace2.spans[0]
     return root?.stack || []
   }, [trace2])
-  
-  // Calculate overall metrics
+
+  // Overall metrics + their A/B deltas (changeType uses compareMetrics' 5% band).
   const metrics1 = useMemo(() => calculateOverallMetrics(trace1), [trace1])
   const metrics2 = useMemo(() => calculateOverallMetrics(trace2), [trace2])
-  
-  // Compare overall metrics
   const metricsComparison = useMemo(() => {
-    if (!metrics1 || !metrics2) return null
-    
-    return {
-      duration: compareMetrics(metrics1.duration, metrics2.duration),
-      cpu: compareMetrics(metrics1.cpu, metrics2.cpu),
-      memory: compareMetrics(metrics1.memory, metrics2.memory),
-      networkSent: compareMetrics(metrics1.networkSent, metrics2.networkSent),
-      networkReceived: compareMetrics(metrics1.networkReceived, metrics2.networkReceived),
-      spans: compareMetrics(metrics1.spans, metrics2.spans),
-      sqlQueries: compareMetrics(metrics1.sqlQueries, metrics2.sqlQueries),
-      httpRequests: compareMetrics(metrics1.httpRequests, metrics2.httpRequests),
-      cacheOperations: compareMetrics(metrics1.cacheOperations, metrics2.cacheOperations),
-      redisOperations: compareMetrics(metrics1.redisOperations, metrics2.redisOperations),
-      stackTraces: compareMetrics(metrics1.stackTraces, metrics2.stackTraces),
-      tags: compareMetrics(metrics1.tags, metrics2.tags),
-    }
+    const out = {}
+    OVERVIEW_METRICS.forEach((m) => {
+      out[m.key] = compareMetrics(metrics1?.[m.key] ?? 0, metrics2?.[m.key] ?? 0)
+    })
+    return out
   }, [metrics1, metrics2])
-  
+
   // Extract and compare SQL queries
   const sqlQueries1 = useMemo(() => extractSqlQueries(trace1), [trace1])
   const sqlQueries2 = useMemo(() => extractSqlQueries(trace2), [trace2])
@@ -284,7 +254,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
     if (sqlQueries1.length === 0 && sqlQueries2.length === 0) return null
     return compareSqlQueries(sqlQueries1, sqlQueries2)
   }, [sqlQueries1, sqlQueries2])
-  
+
   // Extract and compare HTTP requests
   const httpRequests1 = useMemo(() => extractHttpRequests(trace1), [trace1])
   const httpRequests2 = useMemo(() => extractHttpRequests(trace2), [trace2])
@@ -292,7 +262,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
     if (httpRequests1.length === 0 && httpRequests2.length === 0) return null
     return compareHttpRequests(httpRequests1, httpRequests2)
   }, [httpRequests1, httpRequests2])
-  
+
   // Extract and compare cache operations
   const cacheOps1 = useMemo(() => extractCacheOperations(trace1), [trace1])
   const cacheOps2 = useMemo(() => extractCacheOperations(trace2), [trace2])
@@ -300,7 +270,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
     if (cacheOps1.length === 0 && cacheOps2.length === 0) return null
     return compareCacheOperations(cacheOps1, cacheOps2)
   }, [cacheOps1, cacheOps2])
-  
+
   // Extract and compare Redis operations
   const redisOps1 = useMemo(() => extractRedisOperations(trace1), [trace1])
   const redisOps2 = useMemo(() => extractRedisOperations(trace2), [trace2])
@@ -308,7 +278,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
     if (redisOps1.length === 0 && redisOps2.length === 0) return null
     return compareRedisOperations(redisOps1, redisOps2)
   }, [redisOps1, redisOps2])
-  
+
   // Extract and compare tags
   const tags1 = useMemo(() => extractTags(trace1), [trace1])
   const tags2 = useMemo(() => extractTags(trace2), [trace2])
@@ -316,710 +286,334 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
     if (tags1.length === 0 && tags2.length === 0) return null
     return compareTags(tags1, tags2)
   }, [tags1, tags2])
-  
-  // Extract stack traces
+
   const stacks1 = useMemo(() => extractStackTraces(trace1), [trace1])
   const stacks2 = useMemo(() => extractStackTraces(trace2), [trace2])
-  
-  // Extract dumps
+
   const dumps1 = useMemo(() => extractDumps(trace1), [trace1])
   const dumps2 = useMemo(() => extractDumps(trace2), [trace2])
-  
-  // Get trace IDs for log correlation
+
+  // Trace IDs for log correlation
   const trace1Id = trace1?.trace_id || trace1?.id || trace1?.spans?.[0]?.trace_id || trace1?.spans?.[0]?.traceId
   const trace2Id = trace2?.trace_id || trace2?.id || trace2?.spans?.[0]?.trace_id || trace2?.spans?.[0]?.traceId
-  
-  // Create diff call stack
-  const diffCallStack = useMemo(() => {
-    if (viewMode === 'diff' && callStack1.length > 0 && callStack2.length > 0) {
-      return createDiffCallStack(callStack1, callStack2, threshold)
+
+  // Tabs whose data is missing are hidden entirely; the ones that carry a count
+  // show it as a badge (A + B). `count === undefined` means always visible.
+  const tabs = useMemo(() => {
+    const hasStack = callStack1.length > 0 || callStack2.length > 0
+    const pairTotal = (c) => (c ? (c.total1 || 0) + (c.total2 || 0) : 0)
+    return [
+      { value: 'overview', label: 'Overview', icon: <FiInfo /> },
+      { value: 'stacktree', label: 'Stack tree', icon: <FiActivity />, show: hasStack },
+      { value: 'flame', label: 'Flame graph', icon: <FiLayers />, show: hasStack },
+      { value: 'callgraph', label: 'Call graph', icon: <FiGitBranch />, show: hasStack },
+      { value: 'sql', label: 'SQL', icon: <FiDatabase />, count: pairTotal(sqlComparison) },
+      { value: 'http', label: 'HTTP', icon: <FiGlobe />, count: pairTotal(httpComparison) },
+      { value: 'cache', label: 'Cache', icon: <FiZap />, count: pairTotal(cacheComparison) },
+      { value: 'redis', label: 'Redis', icon: <FiHardDrive />, count: pairTotal(redisComparison) },
+      { value: 'stacks', label: 'Stack traces', icon: <FiCode />, count: stacks1.length + stacks2.length },
+      { value: 'tags', label: 'Tags', icon: <FiTag />, count: pairTotal(tagsComparison) },
+      { value: 'logs', label: 'Logs', icon: <FiFileText /> },
+      { value: 'dumps', label: 'Dumps', icon: <FiCode />, count: dumpTotal(dumps1) + dumpTotal(dumps2) },
+    ]
+      .filter((t) => t.show !== false && t.count !== 0)
+      .map((t) => ({
+        value: t.value,
+        icon: t.icon,
+        label: (
+          <>
+            {t.label}
+            {t.count ? <Badge title={`${t.count} across both traces`}>{fmtNum(t.count)}</Badge> : null}
+          </>
+        ),
+      }))
+  }, [
+    callStack1, callStack2, sqlComparison, httpComparison, cacheComparison,
+    redisComparison, tagsComparison, stacks1, stacks2, dumps1, dumps2,
+  ])
+
+  // A tab can disappear when its data does (traces reload); fall back rather
+  // than render a body with no tab selected.
+  const currentTab = tabs.some((t) => t.value === activeTab) ? activeTab : 'overview'
+  const sideBySide = viewMode === 'side-by-side'
+
+  // Arm the diff in the same commit as the tab switch, so the graph never
+  // flashes its empty state on the way in.
+  const selectTab = (value) => {
+    if (value === 'callgraph') setDiffArmed(true)
+    setActiveTab(value)
+  }
+
+  useEffect(() => {
+    const measure = () => {
+      if (!vizRef.current) return
+      const full = Math.max(320, vizRef.current.offsetWidth - 4)
+      // Side-by-side splits the row between two panels.
+      setVizW(sideBySide ? Math.max(320, Math.floor(full / 2) - 12) : full)
     }
-    return []
-  }, [callStack1, callStack2, viewMode, threshold])
-  
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [sideBySide, currentTab])
+
+  const diffCallStack = useMemo(() => {
+    if (!diffArmed || sideBySide || callStack1.length === 0 || callStack2.length === 0) return []
+    return createDiffCallStack(callStack1, callStack2, threshold)
+  }, [callStack1, callStack2, sideBySide, threshold, diffArmed])
+
+  // Headline verdict on wall time. OPA durations are frequently placeholders, so
+  // an all-zero pair is called out instead of being shown as a confident "0%".
+  const verdict = useMemo(() => {
+    const a = metrics1?.duration || 0
+    const b = metrics2?.duration || 0
+    if (!a && !b) {
+      return { tone: 'neutral', label: 'No timing', text: 'Neither trace recorded a wall time — compare the volume counters below.' }
+    }
+    if (!a) {
+      return { tone: 'warn', label: 'Partial', text: `Baseline has no wall time; B ran in ${fmtMs(b)}.` }
+    }
+    const pct = pctChange(a, b)
+    if (Math.abs(pct) < 5) {
+      return { tone: 'neutral', label: 'No change', text: `Within 5%: ${fmtMs(a)} → ${fmtMs(b)}.` }
+    }
+    return {
+      tone: pct > 0 ? 'error' : 'ok',
+      label: pct > 0 ? 'Regression' : 'Improvement',
+      text: `B is ${fmtPct(Math.abs(pct))} ${pct > 0 ? 'slower' : 'faster'} than A: ${fmtMs(a)} → ${fmtMs(b)}.`,
+    }
+  }, [metrics1, metrics2])
+
   if (!trace1 || !trace2) {
     return (
-      <div className="profile-comparison-empty">
-        <p>Please select two traces to compare</p>
-      </div>
+      <EmptyState
+        icon={<FiGitBranch />}
+        title="Select two traces to compare"
+        hint="Load a baseline (A) and a new trace (B) above."
+      />
     )
   }
-  
+
+  const stackTraceRows = [
+    { key: 'stackTraces', label: 'Stack traces', a: stacks1.length, b: stacks2.length, fmt: fmtNum },
+  ]
+
   return (
-    <div className="profile-comparison">
-      <div className="comparison-header">
-        <div className="comparison-controls">
-          <div className="control-group">
-            <label>Change Threshold:</label>
-            <input
-              type="range"
-              min="0"
-              max="50"
-              step="1"
-              value={threshold}
-              onChange={(e) => setThreshold(parseFloat(e.target.value))}
-              className="slider"
-            />
-            <span className="slider-value">{threshold}%</span>
+    <div className="opa-stack">
+      <div className="opa-row opa-cmp-bar">
+        <FiSliders aria-hidden="true" />
+        <label htmlFor={`${uid}-threshold`} className="opa-cmp-bar-label">Diff threshold</label>
+        <input
+          id={`${uid}-threshold`}
+          type="range"
+          min="0"
+          max="50"
+          step="1"
+          value={threshold}
+          onChange={(e) => setThreshold(parseFloat(e.target.value))}
+          className="opa-cmp-slider"
+          aria-describedby={`${uid}-hint`}
+        />
+        <span className="opa-mono opa-tnum opa-cmp-slider-val">{fmtPct(threshold, 0)}</span>
+        <span id={`${uid}-hint`} className="opa-muted opa-cmp-bar-hint">
+          Minimum per-function change before the diff call graph colours a node
+        </span>
+      </div>
+
+      <div className="opa-cmp-tabs">
+        <Tabs tabs={tabs} value={currentTab} onChange={selectTab} />
+      </div>
+
+      {currentTab === 'overview' && (
+        <div className="opa-stack">
+          <div className="opa-row opa-cmp-verdict">
+            <StatusPill tone={verdict.tone}>{verdict.label}</StatusPill>
+            <span>{verdict.text}</span>
+          </div>
+          <div className="opa-grid cols-4">
+            {OVERVIEW_METRICS.map((m) => {
+              const a = metrics1?.[m.key] ?? 0
+              const b = metrics2?.[m.key] ?? 0
+              const missing = !a && !b
+              return (
+                <KpiTile
+                  key={m.key}
+                  label={m.label}
+                  icon={m.icon}
+                  value={m.fmt(b)}
+                  status={missing ? 'neutral' : (CHANGE_STATUS[metricsComparison[m.key].changeType] || 'neutral')}
+                  current={missing ? null : b}
+                  previous={missing ? null : a}
+                  invert
+                  footer={
+                    missing
+                      ? <span className="opa-cmp-base">not recorded</span>
+                      : <span className="opa-cmp-base" title={m.exact ? `A ${a} → B ${b}` : undefined}>vs {m.fmt(a)}</span>
+                  }
+                />
+              )
+            })}
           </div>
         </div>
-      </div>
-      
-      <div className="comparison-tabs">
-        {TABS.map(tab => {
-          const Icon = tab.icon
-          let badge = null
-          let shouldShow = true
-          
-          // Conditionally show tabs based on data availability
-          if (tab.id === 'stacktree' || tab.id === 'flame') {
-            shouldShow = callStack1.length > 0 || callStack2.length > 0
-          } else if (tab.id === 'callgraph') {
-            shouldShow = callStack1.length > 0 || callStack2.length > 0
-          } else if (tab.id === 'sql') {
-            shouldShow = sqlComparison && (sqlComparison.total1 > 0 || sqlComparison.total2 > 0)
-            if (shouldShow) {
-              badge = sqlComparison.total1 + sqlComparison.total2
-            }
-          } else if (tab.id === 'http') {
-            shouldShow = httpComparison && (httpComparison.total1 > 0 || httpComparison.total2 > 0)
-            if (shouldShow) {
-              badge = httpComparison.total1 + httpComparison.total2
-            }
-          } else if (tab.id === 'cache') {
-            shouldShow = cacheComparison && (cacheComparison.total1 > 0 || cacheComparison.total2 > 0)
-            if (shouldShow) {
-              badge = cacheComparison.total1 + cacheComparison.total2
-            }
-          } else if (tab.id === 'redis') {
-            shouldShow = redisComparison && (redisComparison.total1 > 0 || redisComparison.total2 > 0)
-            if (shouldShow) {
-              badge = redisComparison.total1 + redisComparison.total2
-            }
-          } else if (tab.id === 'stacks') {
-            shouldShow = stacks1.length > 0 || stacks2.length > 0
-            if (shouldShow) {
-              badge = stacks1.length + stacks2.length
-            }
-          } else if (tab.id === 'tags') {
-            shouldShow = tagsComparison && (tagsComparison.total1 > 0 || tagsComparison.total2 > 0)
-            if (shouldShow) {
-              badge = tagsComparison.total1 + tagsComparison.total2
-            }
-          } else if (tab.id === 'dumps') {
-            const dumpsCount1 = dumps1.reduce((sum, item) => sum + item.dumps.length, 0)
-            const dumpsCount2 = dumps2.reduce((sum, item) => sum + item.dumps.length, 0)
-            shouldShow = dumpsCount1 > 0 || dumpsCount2 > 0
-            if (shouldShow) {
-              badge = dumpsCount1 + dumpsCount2
-            }
-          }
-          // logs and overview are always shown
-          
-          if (!shouldShow) return null
-          
-          return (
-            <button
-              key={tab.id}
-              className={`comparison-tab ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
+      )}
+
+      {currentTab === 'stacktree' && (
+        sideBySide ? (
+          <AbSplit stacked={false}>
+            <Panel title={A_TITLE} icon={<FiActivity />} flush empty={callStack1.length === 0} emptyText="No call stack recorded">
+              <ExecutionStackTree callStack={callStack1} />
+            </Panel>
+            <Panel title={B_TITLE} icon={<FiActivity />} flush empty={callStack2.length === 0} emptyText="No call stack recorded">
+              <ExecutionStackTree callStack={callStack2} />
+            </Panel>
+          </AbSplit>
+        ) : (
+          <Panel
+            title={B_TITLE}
+            icon={<FiActivity />}
+            flush
+            actions={<span className="opa-muted opa-cmp-meta">{fmtNum(callStack2.length)} calls</span>}
+            empty={callStack2.length === 0}
+            emptyText="No call stack recorded"
+          >
+            <ExecutionStackTree callStack={callStack2} />
+          </Panel>
+        )
+      )}
+
+      {currentTab === 'flame' && (
+        <div ref={vizRef}>
+          {sideBySide ? (
+            <AbSplit stacked={false}>
+              <Panel title={A_TITLE} icon={<FiLayers />} flush empty={callStack1.length === 0} emptyText="No call stack recorded">
+                <div className="opa-cmp-viz"><FlameGraph callStack={callStack1} width={vizW} height={600} /></div>
+              </Panel>
+              <Panel title={B_TITLE} icon={<FiLayers />} flush empty={callStack2.length === 0} emptyText="No call stack recorded">
+                <div className="opa-cmp-viz"><FlameGraph callStack={callStack2} width={vizW} height={600} /></div>
+              </Panel>
+            </AbSplit>
+          ) : (
+            <Panel
+              title={B_TITLE}
+              icon={<FiLayers />}
+              flush
+              actions={<span className="opa-muted opa-cmp-meta">{fmtNum(callStack2.length)} calls</span>}
+              empty={callStack2.length === 0}
+              emptyText="No call stack recorded"
             >
-              <Icon className="tab-icon" />
-              <span>{tab.label}</span>
-              {badge !== null && badge > 0 && (
-                <span className="tab-badge">{badge}</span>
-              )}
-            </button>
-          )
-        })}
-      </div>
-      
-      <div className="comparison-content">
-        {activeTab === 'overview' && metricsComparison && (
-          <div className="overview-tab">
-            <h2 className="tab-title">Overview Comparison</h2>
-            <div className="metrics-grid">
-              <MetricComparisonCard
-                label="Duration"
-                value1={metrics1.duration}
-                value2={metrics2.duration}
-                diff={metricsComparison.duration.diff}
-                unit=""
-                formatValue={formatDuration}
-                icon={FiActivity}
-              />
-              <MetricComparisonCard
-                label="CPU Time"
-                value1={metrics1.cpu}
-                value2={metrics2.cpu}
-                diff={metricsComparison.cpu.diff}
-                unit=""
-                formatValue={formatDuration}
-                icon={FiActivity}
-              />
-              <MetricComparisonCard
-                label="Memory"
-                value1={metrics1.memory}
-                value2={metrics2.memory}
-                diff={metricsComparison.memory.diff}
-                unit=""
-                formatValue={formatMemory}
-                icon={FiServer}
-              />
-              <MetricComparisonCard
-                label="Network Sent"
-                value1={metrics1.networkSent}
-                value2={metrics2.networkSent}
-                diff={metricsComparison.networkSent.diff}
-                unit=""
-                formatValue={formatBytes}
-                icon={FiGlobe}
-              />
-              <MetricComparisonCard
-                label="Network Received"
-                value1={metrics1.networkReceived}
-                value2={metrics2.networkReceived}
-                diff={metricsComparison.networkReceived.diff}
-                unit=""
-                formatValue={formatBytes}
-                icon={FiGlobe}
-              />
-              <MetricComparisonCard
-                label="Spans"
-                value1={metrics1.spans}
-                value2={metrics2.spans}
-                diff={metricsComparison.spans.diff}
-                unit=""
-                formatValue={(v) => v}
-                icon={FiLayers}
-              />
-              <MetricComparisonCard
-                label="SQL Queries"
-                value1={metrics1.sqlQueries}
-                value2={metrics2.sqlQueries}
-                diff={metricsComparison.sqlQueries.diff}
-                unit=""
-                formatValue={(v) => v}
-                icon={FiDatabase}
-              />
-              <MetricComparisonCard
-                label="HTTP Requests"
-                value1={metrics1.httpRequests}
-                value2={metrics2.httpRequests}
-                diff={metricsComparison.httpRequests.diff}
-                unit=""
-                formatValue={(v) => v}
-                icon={FiGlobe}
-              />
-              <MetricComparisonCard
-                label="Cache Operations"
-                value1={metrics1.cacheOperations}
-                value2={metrics2.cacheOperations}
-                diff={metricsComparison.cacheOperations.diff}
-                unit=""
-                formatValue={(v) => v}
-                icon={FiZap}
-              />
-              <MetricComparisonCard
-                label="Redis Operations"
-                value1={metrics1.redisOperations}
-                value2={metrics2.redisOperations}
-                diff={metricsComparison.redisOperations.diff}
-                unit=""
-                formatValue={(v) => v}
-                icon={FiHardDrive}
-              />
-              <MetricComparisonCard
-                label="Stack Traces"
-                value1={metrics1.stackTraces}
-                value2={metrics2.stackTraces}
-                diff={metricsComparison.stackTraces.diff}
-                unit=""
-                formatValue={(v) => v}
-                icon={FiCode}
-              />
-              <MetricComparisonCard
-                label="Tags"
-                value1={metrics1.tags}
-                value2={metrics2.tags}
-                diff={metricsComparison.tags.diff}
-                unit=""
-                formatValue={(v) => v}
-                icon={FiTag}
-              />
-            </div>
+              <div className="opa-cmp-viz"><FlameGraph callStack={callStack2} width={vizW} height={600} /></div>
+            </Panel>
+          )}
+        </div>
+      )}
+
+      {currentTab === 'callgraph' && (
+        <div ref={vizRef}>
+          {sideBySide ? (
+            <AbSplit stacked={false}>
+              <Panel title={A_TITLE} icon={<FiGitBranch />} flush empty={callStack1.length === 0} emptyText="No call stack recorded">
+                <div className="opa-cmp-viz"><CallGraph callStack={callStack1} width={vizW} height={600} /></div>
+              </Panel>
+              <Panel title={B_TITLE} icon={<FiGitBranch />} flush empty={callStack2.length === 0} emptyText="No call stack recorded">
+                <div className="opa-cmp-viz"><CallGraph callStack={callStack2} width={vizW} height={600} /></div>
+              </Panel>
+            </AbSplit>
+          ) : (
+            <Panel
+              title="Diff call graph"
+              icon={<FiGitBranch />}
+              flush
+              actions={
+                <div className="opa-row opa-cmp-legend">
+                  <span><HealthDot tone="ok" /> Improved</span>
+                  <span><HealthDot tone="error" /> Degraded</span>
+                  <span><HealthDot tone="neutral" /> Unchanged</span>
+                  <span className="opa-muted">≥ {fmtPct(threshold, 0)}</span>
+                </div>
+              }
+              empty={diffCallStack.length === 0}
+              emptyText="Both traces need a call stack to diff"
+            >
+              <div className="opa-cmp-viz"><CallGraph callStack={diffCallStack} width={vizW} height={800} /></div>
+            </Panel>
+          )}
+        </div>
+      )}
+
+      {currentTab === 'sql' && (
+        <Panel title="SQL queries" icon={<FiDatabase />} flush empty={!sqlComparison} emptyText="No SQL queries to compare">
+          <div className="opa-cmp-embed"><SqlComparisonTable comparison={sqlComparison} /></div>
+        </Panel>
+      )}
+
+      {currentTab === 'http' && (
+        <Panel title="HTTP requests" icon={<FiGlobe />} flush empty={!httpComparison} emptyText="No HTTP requests to compare">
+          <div className="opa-cmp-embed"><HttpComparisonTable comparison={httpComparison} /></div>
+        </Panel>
+      )}
+
+      {currentTab === 'cache' && (
+        <Panel title="Cache operations" icon={<FiZap />} flush empty={!cacheComparison} emptyText="No cache operations to compare">
+          <div className="opa-cmp-embed"><CacheComparisonTable comparison={cacheComparison} /></div>
+        </Panel>
+      )}
+
+      {currentTab === 'redis' && (
+        <Panel title="Redis operations" icon={<FiHardDrive />} flush empty={!redisComparison} emptyText="No Redis operations to compare">
+          <div className="opa-cmp-embed"><RedisComparisonTable comparison={redisComparison} /></div>
+        </Panel>
+      )}
+
+      {currentTab === 'stacks' && (
+        <Panel title="Stack traces" icon={<FiCode />} flush>
+          <DataTable columns={AB_COLUMNS} rows={stackTraceRows} rowKey={(r) => r.key} />
+          <div className="opa-cmp-note">
+            <FiInfo aria-hidden="true" />
+            <span>Counts only. Open a single trace to inspect individual frames.</span>
           </div>
-        )}
-        
-        {activeTab === 'stacktree' && (
-          <div className="stacktree-tab">
-            {viewMode === 'side-by-side' ? (
-              <div className="side-by-side-view">
-                <div className="comparison-panel">
-                  <h3>Trace 1 (Baseline)</h3>
-                  {callStack1.length > 0 ? (
-                    <ExecutionStackTree callStack={callStack1} />
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No call stack data available</p>
-                    </div>
-                  )}
-                </div>
-                <div className="comparison-panel">
-                  <h3>Trace 2 (New)</h3>
-                  {callStack2.length > 0 ? (
-                    <ExecutionStackTree callStack={callStack2} />
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No call stack data available</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="diff-view">
-                <h3>Trace 2 (New) - Execution Stack Tree</h3>
-                {callStack2.length > 0 ? (
-                  <ExecutionStackTree callStack={callStack2} />
-                ) : (
-                  <div className="comparison-empty">
-                    <p>No call stack data available</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'flame' && (
-          <div className="flame-tab" ref={vizRef}>
-            {viewMode === 'side-by-side' ? (
-              <div className="side-by-side-view">
-                <div className="comparison-panel">
-                  <h3>Trace 1 (Baseline)</h3>
-                  {callStack1.length > 0 ? (
-                    <FlameGraph callStack={callStack1} width={vizW} height={600} />
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No call stack data available</p>
-                    </div>
-                  )}
-                </div>
-                <div className="comparison-panel">
-                  <h3>Trace 2 (New)</h3>
-                  {callStack2.length > 0 ? (
-                    <FlameGraph callStack={callStack2} width={vizW} height={600} />
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No call stack data available</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="diff-view">
-                <h3>Trace 2 (New) - Flame Graph</h3>
-                {callStack2.length > 0 ? (
-                  <FlameGraph callStack={callStack2} width={vizW} height={600} />
-                ) : (
-                  <div className="comparison-empty">
-                    <p>No call stack data available</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'callgraph' && (
-          <div className="callgraph-tab" ref={vizRef}>
-            {viewMode === 'side-by-side' ? (
-              <div className="side-by-side-view">
-                <div className="comparison-panel">
-                  <h3>Trace 1 (Baseline)</h3>
-                  <CallGraph callStack={callStack1} width={vizW} height={600} />
-                </div>
-                <div className="comparison-panel">
-                  <h3>Trace 2 (New)</h3>
-                  <CallGraph callStack={callStack2} width={vizW} height={600} />
-                </div>
-              </div>
-            ) : (
-              <div className="diff-view">
-                <h3>Difference View</h3>
-                <div className="legend">
-                  <div className="legend-item">
-                    <span className="legend-color improvement"></span>
-                    <span>Improvement (Green)</span>
-                  </div>
-                  <div className="legend-item">
-                    <span className="legend-color degradation"></span>
-                    <span>Degradation (Red)</span>
-                  </div>
-                  <div className="legend-item">
-                    <span className="legend-color no-change"></span>
-                    <span>No Change (Gray)</span>
-                  </div>
-                </div>
-                {diffCallStack.length > 0 ? (
-                  <CallGraph callStack={diffCallStack} width={vizW} height={800} />
-                ) : (
-                  <div className="no-diff-data">
-                    <p>No differences found or call stacks are empty</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'sql' && (
-          <div className="sql-tab">
-            <h2 className="tab-title">SQL Queries Comparison</h2>
-            {sqlComparison ? (
-              <SqlComparisonTable comparison={sqlComparison} />
-            ) : (
-              <div className="comparison-empty">
-                <p>No SQL queries to compare</p>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'http' && (
-          <div className="http-tab">
-            <h2 className="tab-title">HTTP Requests Comparison</h2>
-            {httpComparison ? (
-              <HttpComparisonTable comparison={httpComparison} />
-            ) : (
-              <div className="comparison-empty">
-                <p>No HTTP requests to compare</p>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'cache' && (
-          <div className="cache-tab">
-            <h2 className="tab-title">Cache Operations Comparison</h2>
-            {cacheComparison ? (
-              <CacheComparisonTable comparison={cacheComparison} />
-            ) : (
-              <div className="comparison-empty">
-                <p>No cache operations to compare</p>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'redis' && (
-          <div className="redis-tab">
-            <h2 className="tab-title">Redis Operations Comparison</h2>
-            {redisComparison ? (
-              <RedisComparisonTable comparison={redisComparison} />
-            ) : (
-              <div className="comparison-empty">
-                <p>No Redis operations to compare</p>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'stacks' && (
-          <div className="stacks-tab">
-            <h2 className="tab-title">Stack Traces Comparison</h2>
-            <div className="stacks-comparison">
-              <div className="stacks-summary">
-                <div className="summary-item">
-                  <span className="summary-label">Trace 1 Stack Traces:</span>
-                  <span className="summary-value">{stacks1.length}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-label">Trace 2 Stack Traces:</span>
-                  <span className="summary-value">{stacks2.length}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-label">Difference:</span>
-                  <span className={`summary-value ${metricsComparison?.stackTraces.changeType || 'no-change'}`}>
-                    {metricsComparison?.stackTraces ? 
-                      `${metricsComparison.stackTraces.diff > 0 ? '+' : ''}${metricsComparison.stackTraces.diff.toFixed(1)}%` :
-                      '0%'
-                    }
-                  </span>
-                </div>
-              </div>
-              <div className="stacks-info">
-                <p>Stack trace comparison shows the count difference. For detailed stack trace analysis, view individual traces.</p>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {activeTab === 'tags' && (
-          <div className="tags-tab">
-            <h2 className="tab-title">Tags Comparison</h2>
-            {tagsComparison ? (
-              <TagComparisonView comparison={tagsComparison} />
-            ) : (
-              <div className="comparison-empty">
-                <p>No tags to compare</p>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'logs' && (
-          <div className="logs-tab">
-            <h2 className="tab-title">Logs Comparison</h2>
-            {viewMode === 'side-by-side' ? (
-              <div className="side-by-side-view">
-                <div className="comparison-panel">
-                  <h3>Trace 1 (Baseline)</h3>
-                  {trace1Id ? (
-                    <LogCorrelation traceId={trace1Id} />
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No trace ID available</p>
-                    </div>
-                  )}
-                </div>
-                <div className="comparison-panel">
-                  <h3>Trace 2 (New)</h3>
-                  {trace2Id ? (
-                    <LogCorrelation traceId={trace2Id} />
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No trace ID available</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="diff-view">
-                <div className="comparison-panel">
-                  <h3>Trace 1 (Baseline)</h3>
-                  {trace1Id ? (
-                    <LogCorrelation traceId={trace1Id} />
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No trace ID available</p>
-                    </div>
-                  )}
-                </div>
-                <div className="comparison-panel">
-                  <h3>Trace 2 (New)</h3>
-                  {trace2Id ? (
-                    <LogCorrelation traceId={trace2Id} />
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No trace ID available</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'dumps' && (
-          <div className="dumps-tab">
-            <h2 className="tab-title">Variable Dumps Comparison</h2>
-            {viewMode === 'side-by-side' ? (
-              <div className="side-by-side-view">
-                <div className="comparison-panel">
-                  <h3>Trace 1 (Baseline)</h3>
-                  {dumps1.length > 0 ? (
-                    <div className="dumps-list">
-                      {dumps1.map((item, spanIdx) => (
-                        <div key={spanIdx} className="dumps-item">
-                          <div className="dumps-header">
-                            <h4>{item.span}</h4>
-                            <span className="span-id">Span: {item.spanId}</span>
-                          </div>
-                          {item.dumps.map((dump, dumpIdx) => {
-                            const parsedData = typeof dump.data === 'string' 
-                              ? (() => {
-                                  try {
-                                    return JSON.parse(dump.data)
-                                  } catch {
-                                    return dump.data
-                                  }
-                                })()
-                              : dump.data
-                            const jsonString = typeof dump.data === 'string' 
-                              ? (() => {
-                                  try {
-                                    return JSON.stringify(JSON.parse(dump.data), null, 2)
-                                  } catch {
-                                    return dump.data
-                                  }
-                                })()
-                              : JSON.stringify(dump.data, null, 2)
-                            
-                            return (
-                              <div key={dumpIdx} className="dump-entry">
-                                <div className="dump-meta">
-                                  <span className="dump-file">{dump.file || 'unknown'}</span>
-                                  <span className="dump-line">Line {dump.line || '?'}</span>
-                                </div>
-                                <div className="dump-content">
-                                  <JsonTreeViewer data={parsedData} />
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No dumps available</p>
-                    </div>
-                  )}
-                </div>
-                <div className="comparison-panel">
-                  <h3>Trace 2 (New)</h3>
-                  {dumps2.length > 0 ? (
-                    <div className="dumps-list">
-                      {dumps2.map((item, spanIdx) => (
-                        <div key={spanIdx} className="dumps-item">
-                          <div className="dumps-header">
-                            <h4>{item.span}</h4>
-                            <span className="span-id">Span: {item.spanId}</span>
-                          </div>
-                          {item.dumps.map((dump, dumpIdx) => {
-                            const parsedData = typeof dump.data === 'string' 
-                              ? (() => {
-                                  try {
-                                    return JSON.parse(dump.data)
-                                  } catch {
-                                    return dump.data
-                                  }
-                                })()
-                              : dump.data
-                            const jsonString = typeof dump.data === 'string' 
-                              ? (() => {
-                                  try {
-                                    return JSON.stringify(JSON.parse(dump.data), null, 2)
-                                  } catch {
-                                    return dump.data
-                                  }
-                                })()
-                              : JSON.stringify(dump.data, null, 2)
-                            
-                            return (
-                              <div key={dumpIdx} className="dump-entry">
-                                <div className="dump-meta">
-                                  <span className="dump-file">{dump.file || 'unknown'}</span>
-                                  <span className="dump-line">Line {dump.line || '?'}</span>
-                                </div>
-                                <div className="dump-content">
-                                  <JsonTreeViewer data={parsedData} />
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No dumps available</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="diff-view">
-                <div className="comparison-panel">
-                  <h3>Trace 1 (Baseline)</h3>
-                  {dumps1.length > 0 ? (
-                    <div className="dumps-list">
-                      {dumps1.map((item, spanIdx) => (
-                        <div key={spanIdx} className="dumps-item">
-                          <div className="dumps-header">
-                            <h4>{item.span}</h4>
-                            <span className="span-id">Span: {item.spanId}</span>
-                          </div>
-                          {item.dumps.map((dump, dumpIdx) => {
-                            const parsedData = typeof dump.data === 'string' 
-                              ? (() => {
-                                  try {
-                                    return JSON.parse(dump.data)
-                                  } catch {
-                                    return dump.data
-                                  }
-                                })()
-                              : dump.data
-                            
-                            return (
-                              <div key={dumpIdx} className="dump-entry">
-                                <div className="dump-meta">
-                                  <span className="dump-file">{dump.file || 'unknown'}</span>
-                                  <span className="dump-line">Line {dump.line || '?'}</span>
-                                </div>
-                                <div className="dump-content">
-                                  <JsonTreeViewer data={parsedData} />
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No dumps available</p>
-                    </div>
-                  )}
-                </div>
-                <div className="comparison-panel">
-                  <h3>Trace 2 (New)</h3>
-                  {dumps2.length > 0 ? (
-                    <div className="dumps-list">
-                      {dumps2.map((item, spanIdx) => (
-                        <div key={spanIdx} className="dumps-item">
-                          <div className="dumps-header">
-                            <h4>{item.span}</h4>
-                            <span className="span-id">Span: {item.spanId}</span>
-                          </div>
-                          {item.dumps.map((dump, dumpIdx) => {
-                            const parsedData = typeof dump.data === 'string' 
-                              ? (() => {
-                                  try {
-                                    return JSON.parse(dump.data)
-                                  } catch {
-                                    return dump.data
-                                  }
-                                })()
-                              : dump.data
-                            
-                            return (
-                              <div key={dumpIdx} className="dump-entry">
-                                <div className="dump-meta">
-                                  <span className="dump-file">{dump.file || 'unknown'}</span>
-                                  <span className="dump-line">Line {dump.line || '?'}</span>
-                                </div>
-                                <div className="dump-content">
-                                  <JsonTreeViewer data={parsedData} />
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="comparison-empty">
-                      <p>No dumps available</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        </Panel>
+      )}
+
+      {currentTab === 'tags' && (
+        <Panel title="Tags" icon={<FiTag />} flush empty={!tagsComparison} emptyText="No tags to compare">
+          <div className="opa-cmp-embed"><TagComparisonView comparison={tagsComparison} /></div>
+        </Panel>
+      )}
+
+      {currentTab === 'logs' && (
+        <AbSplit stacked={!sideBySide}>
+          <Panel title={A_TITLE} icon={<FiFileText />} flush empty={!trace1Id} emptyText="No trace ID available">
+            <LogCorrelation traceId={trace1Id} />
+          </Panel>
+          <Panel title={B_TITLE} icon={<FiFileText />} flush empty={!trace2Id} emptyText="No trace ID available">
+            <LogCorrelation traceId={trace2Id} />
+          </Panel>
+        </AbSplit>
+      )}
+
+      {currentTab === 'dumps' && (
+        <AbSplit stacked={!sideBySide}>
+          <Panel
+            title={A_TITLE}
+            icon={<FiCode />}
+            flush
+            actions={<span className="opa-muted opa-cmp-meta">{fmtNum(dumpTotal(dumps1))} dumps</span>}
+            empty={dumps1.length === 0}
+            emptyText="No dumps recorded"
+          >
+            <DumpList items={dumps1} />
+          </Panel>
+          <Panel
+            title={B_TITLE}
+            icon={<FiCode />}
+            flush
+            actions={<span className="opa-muted opa-cmp-meta">{fmtNum(dumpTotal(dumps2))} dumps</span>}
+            empty={dumps2.length === 0}
+            emptyText="No dumps recorded"
+          >
+            <DumpList items={dumps2} />
+          </Panel>
+        </AbSplit>
+      )}
     </div>
   )
 }

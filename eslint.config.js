@@ -52,4 +52,24 @@ export default [
       'react-hooks/exhaustive-deps': 'off',
     },
   },
+  {
+    // Vitest suites run in Node with the test globals injected, so they need
+    // more than the browser set (describe/it/expect, plus require() for the
+    // occasional CommonJS interop check).
+    files: ['src/**/*.{test,spec}.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        vi: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+      },
+    },
+  },
 ]

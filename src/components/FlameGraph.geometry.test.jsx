@@ -1,140 +1,170 @@
 import { describe, it, expect } from 'vitest'
-import React from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import FlameGraph from './FlameGraph'
+import { normalizeCallStack, buildFlameLayout } from './FlameGraph'
 
-// Pull every flame bar the graph drew, in document order, as geometry.
-// Scoped to class="flame-node" so <rect>s inside react-icons are ignored.
-function extractRects(markup) {
-  const rects = []
-  const re = /<rect([^>]*?)\/?>/g
-  let m
-  while ((m = re.exec(markup)) !== null) {
-    const attrs = m[1]
-    if (!attrs.includes('flame-node')) continue
-    const num = (name) => {
-      const hit = new RegExp(`${name}="([-0-9.]+)"`).exec(attrs)
-      return hit ? parseFloat(hit[1]) : null
-    }
-    const x = num('x')
-    const y = num('y')
-    const width = num('width')
-    const height = num('height')
-    if (x !== null && y !== null && width !== null && height !== null) {
-      rects.push({ x, y, width, height, right: x + width })
-    }
-  }
-  return rects
+// These exercise the pure layout passes rather than rendered markup: the
+// geometry invariants are what matter, and asserting them on the real numbers
+// is both stronger and less brittle than scraping SVG attributes.
+
+const CANVAS = 800
+
+function layoutOf(stack, opts = {}) {
+  const tree = normalizeCallStack(stack)
+  return { tree, layout: buildFlameLayout({ tree, canvasW: CANVAS, ...opts }) }
 }
 
-// Target the flame graph's own <svg>, not the react-icons SVGs that also
-// appear in the filter bar / legend markup.
-function svgWidth(markup) {
-  const re = /<svg([^>]*)>/g
-  let m
-  while ((m = re.exec(markup)) !== null) {
-    const attrs = m[1]
-    if (!attrs.includes('flame-graph-svg')) continue
-    const hit = /(?:^|\s)width="([0-9.]+)"/.exec(attrs)
-    return hit ? parseFloat(hit[1]) : null
-  }
-  return null
+function node(id, parent, duration, extra = {}) {
+  return { call_id: id, parent_id: parent, function: id, duration_ms: duration, ...extra }
 }
 
-// Two root spans, each with several very short children. The short children
-// are what trigger the MIN_BAR_WIDTH floor, and two roots are what exercise
-// the horizontal scale.
-function buildStack() {
-  const nodes = [
-    { call_id: 'r1', parent_id: '', function: 'rootOne', duration_ms: 100, depth: 0 },
-    { call_id: 'r2', parent_id: '', function: 'rootTwo', duration_ms: 100, depth: 0 },
+// root(100) -> a(60) -> a1(30), b(40)
+function simpleTree() {
+  return [
+    node('root', '', 100),
+    node('a', 'root', 60),
+    node('a1', 'a', 30),
+    node('b', 'root', 40),
   ]
-  for (let i = 0; i < 5; i++) {
-    nodes.push({
-      call_id: `r1c${i}`,
-      parent_id: 'r1',
-      function: `shortChild${i}`,
-      duration_ms: 0.01,
-      depth: 1,
-    })
-  }
-  return nodes
 }
 
-describe('FlameGraph layout geometry', () => {
-  const markup = renderToStaticMarkup(
-    <FlameGraph callStack={buildStack()} width={800} height={600} />
-  )
-  const rects = extractRects(markup)
-
-  it('renders a bar for every node', () => {
-    expect(rects.length).toBe(7) // 2 roots + 5 children
+describe('flame layout geometry', () => {
+  it('bounds every frame inside the canvas', () => {
+    const { layout } = layoutOf(simpleTree())
+    expect(layout.frames.length).toBeGreaterThan(0)
+    for (const f of layout.frames) {
+      expect(f.x).toBeGreaterThanOrEqual(0)
+      expect(f.x + f.w).toBeLessThanOrEqual(CANVAS + 0.001)
+    }
   })
 
-  it('never overlaps bars that sit on the same row', () => {
-    const byRow = new Map()
-    for (const r of rects) {
-      if (!byRow.has(r.y)) byRow.set(r.y, [])
-      byRow.get(r.y).push(r)
-    }
-    for (const [y, row] of byRow) {
-      const sorted = [...row].sort((a, b) => a.x - b.x)
+  it('contains every frame within ITS OWN parent frame', () => {
+    const { layout } = layoutOf(simpleTree())
+    let checked = 0
+    layout.frames.forEach((f) => {
+      if (f.p < 0) return
+      const parent = layout.frames[f.p]
+      expect(parent).toBeDefined()
+      expect(f.x).toBeGreaterThanOrEqual(parent.x - 0.001)
+      expect(f.x + f.w).toBeLessThanOrEqual(parent.x + parent.w + 0.001)
+      checked++
+    })
+    expect(checked).toBeGreaterThan(0)
+  })
+
+  it('never overlaps siblings that share a parent', () => {
+    const { layout } = layoutOf(simpleTree())
+    const byParent = new Map()
+    layout.frames.forEach((f) => {
+      if (!byParent.has(f.p)) byParent.set(f.p, [])
+      byParent.get(f.p).push(f)
+    })
+    for (const [, sibs] of byParent) {
+      const sorted = [...sibs].sort((a, b) => a.x - b.x)
       for (let i = 1; i < sorted.length; i++) {
-        expect(
-          sorted[i].x,
-          `bar at row y=${y} starts (${sorted[i].x}) before the previous bar ends (${sorted[i - 1].right})`
-        ).toBeGreaterThanOrEqual(sorted[i - 1].right)
+        expect(sorted[i].x).toBeGreaterThanOrEqual(sorted[i - 1].x + sorted[i - 1].w - 0.001)
       }
     }
   })
 
-  it('keeps children within the horizontal span of their parent', () => {
-    const rows = [...new Set(rects.map((r) => r.y))].sort((a, b) => a - b)
-    const parentRow = rects.filter((r) => r.y === rows[0])
-    const childRow = rects.filter((r) => r.y === rows[1])
-    expect(childRow.length).toBeGreaterThan(0)
-
-    const spanStart = Math.min(...parentRow.map((r) => r.x))
-    const spanEnd = Math.max(...parentRow.map((r) => r.right))
-    for (const child of childRow) {
-      expect(child.x).toBeGreaterThanOrEqual(spanStart)
-      expect(child.right).toBeLessThanOrEqual(spanEnd)
-    }
+  it('makes bar width proportional to the metric', () => {
+    // one root, children 10ms and 20ms -> the second is ~2x wider
+    const { tree, layout } = layoutOf([
+      node('r', '', 30),
+      node('small', 'r', 10),
+      node('big', 'r', 20),
+    ])
+    const byName = (name) => layout.frames.find((f) => f.m === 0 && tree.name[f.i] === name)
+    const small = byName('small')
+    const big = byName('big')
+    expect(small).toBeDefined()
+    expect(big).toBeDefined()
+    expect(big.w / small.w).toBeGreaterThan(1.8)
+    expect(big.w / small.w).toBeLessThan(2.2)
   })
 
-  it('grows the canvas to fit content instead of clipping it', () => {
-    const widest = Math.max(...rects.map((r) => r.right))
-    expect(svgWidth(markup)).toBeGreaterThanOrEqual(widest)
+  it('gives the root row the full canvas width', () => {
+    const { layout } = layoutOf(simpleTree())
+    const row0 = layout.frames.filter((f) => f.d === 0)
+    const span = row0.reduce((s, f) => s + f.w, 0)
+    expect(span).toBeCloseTo(CANVAS, 1)
+  })
+
+  it('produces no NaN or Infinity in any coordinate', () => {
+    const { layout } = layoutOf(simpleTree())
+    for (const f of layout.frames) {
+      expect(Number.isFinite(f.x)).toBe(true)
+      expect(Number.isFinite(f.w)).toBe(true)
+    }
   })
 })
 
-// Isolates the min-bar-width advance: a single root whose children are all
-// far too short to fill their own minimum bar width. Their x positions must
-// still advance by the *rendered* width, not the raw scaled metric.
-describe('FlameGraph short-sibling layout', () => {
-  const stack = [
-    { call_id: 'root', parent_id: '', function: 'handler', duration_ms: 100, depth: 0 },
-    ...Array.from({ length: 6 }, (_, i) => ({
-      call_id: `c${i}`,
-      parent_id: 'root',
-      function: `tinyCall${i}`,
-      duration_ms: 0.005,
-      depth: 1,
-    })),
-  ]
-  const rects = extractRects(
-    renderToStaticMarkup(<FlameGraph callStack={stack} width={800} height={600} />)
-  )
+describe('flame layout with hostile input', () => {
+  it('terminates on a self-referential parent_id', () => {
+    const { layout } = layoutOf([node('a', 'a', 10)])
+    expect(layout.frames.length).toBeGreaterThanOrEqual(0)
+  }, 5000)
 
-  it('spaces short sibling bars out instead of stacking them', () => {
-    const rows = [...new Set(rects.map((r) => r.y))].sort((a, b) => a - b)
-    const children = rects.filter((r) => r.y === rows[1]).sort((a, b) => a.x - b.x)
-    expect(children.length).toBe(6)
-    for (let i = 1; i < children.length; i++) {
-      expect(
-        children[i].x,
-        `short sibling ${i} at x=${children[i].x} overlaps previous bar ending at ${children[i - 1].right}`
-      ).toBeGreaterThanOrEqual(children[i - 1].right)
+  it('terminates on a two-node parent_id cycle', () => {
+    const { layout } = layoutOf([node('a', 'b', 10), node('b', 'a', 10)])
+    expect(Number.isFinite(layout.contentH)).toBe(true)
+  }, 5000)
+
+  it('terminates on a duplicated call_id that points at itself', () => {
+    const { layout } = layoutOf([node('a', '', 10), node('a', 'a', 10)])
+    expect(Number.isFinite(layout.contentH)).toBe(true)
+  }, 5000)
+
+  it('survives a 5000-deep chain without a stack overflow', () => {
+    const deep = [node('n0', '', 5000)]
+    for (let i = 1; i < 5000; i++) deep.push(node(`n${i}`, `n${i - 1}`, 5000 - i))
+    expect(() => layoutOf(deep)).not.toThrow()
+  }, 20000)
+
+  it('handles 20k siblings under one root within the frame budget', () => {
+    const wide = [node('r', '', 20000)]
+    for (let i = 0; i < 20000; i++) wide.push(node(`c${i}`, 'r', 1))
+    const { layout } = layoutOf(wide)
+    // Sub-pixel siblings must be merged/accounted for, never silently lost.
+    expect(layout.drawn + layout.mergedMembers + layout.hidden).toBeGreaterThan(0)
+    expect(layout.frames.length).toBeLessThanOrEqual(6000)
+    for (const f of layout.frames) {
+      expect(f.x + f.w).toBeLessThanOrEqual(CANVAS + 0.001)
     }
+  }, 20000)
+
+  it('lays out structurally when every metric is zero', () => {
+    const { layout } = layoutOf([
+      node('r', '', 0),
+      node('a', 'r', 0),
+      node('b', 'r', 0),
+    ])
+    expect(layout.frames.length).toBeGreaterThan(0)
+    for (const f of layout.frames) {
+      expect(Number.isFinite(f.w)).toBe(true)
+      expect(f.w).toBeGreaterThan(0)
+    }
+    // The component surfaces this as "not to scale" rather than pretending.
+    expect(layout.degraded).toBeTruthy()
+  })
+
+  it('does not blow up on a metric the synthetic root lacks', () => {
+    // mergeCallStacks injects a root carrying only duration/cpu, so memory and
+    // network are 0 there while children have real values. This used to make
+    // the scale collapse to 1px-per-byte and produce a multi-million-px canvas.
+    const stack = [
+      node('trace', '', 100),
+      node('a', 'trace', 50, { memory_delta: 3 * 1024 * 1024 }),
+      node('b', 'trace', 50, { memory_delta: 8 * 1024 * 1024 }),
+    ]
+    for (const metric of ['duration', 'cpu', 'memory', 'network']) {
+      const { layout } = layoutOf(stack, { metric })
+      for (const f of layout.frames) {
+        expect(f.x + f.w).toBeLessThanOrEqual(CANVAS + 0.001)
+      }
+    }
+  })
+
+  it('handles empty and single-node input', () => {
+    expect(layoutOf([]).layout.frames.length).toBe(0)
+    expect(layoutOf([node('only', '', 5)]).layout.frames.length).toBeGreaterThan(0)
   })
 })

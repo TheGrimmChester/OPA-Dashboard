@@ -1,38 +1,155 @@
-/* ProfilingView — Blackfire-style Self% flame-substitute bar.
-   Makes the InlineBar in the Self% column taller + more prominent than the
-   default inline table bar, so it reads as the visual weight of each function. */
-.opa-profiling-selfbar {
-  position: relative;
-  width: 100%;
-  min-width: 120px;
-  height: 16px;
-  border-radius: 3px;
-  background: var(--surface-2);
-  overflow: hidden;
+/* ProfilingView — the aggregate profile surface. Mirrors the banding of the
+   trace-level Profile panel: the Panel is flush so the shared toolbar spans
+   edge-to-edge, and these wrappers supply the padding and separators. */
+.opa-profiling { display: flex; flex-direction: column; min-width: 0; }
+.opa-profiling-bar {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+}
+.opa-profiling-limit { gap: var(--sp-2); font-size: var(--fs-12); white-space: nowrap; }
+
+.opa-profiling-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+  color: var(--warn);
+  background: var(--warn-dim);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.opa-profiling-note svg { flex: none; margin-top: 2px; }
+
+/* ---- function cell ---- */
+.opa-profiling-fnbtn {
   display: flex;
   align-items: center;
+  gap: var(--sp-2);
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.opa-profiling-selfbar .fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  height: 100%;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 40%, transparent), var(--accent));
-  border-radius: 3px;
+.opa-profiling-fnbtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
-.opa-profiling-selfbar .label {
-  position: relative;
-  margin-left: auto;
-  padding: 0 6px;
-  font-size: var(--fs-11);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
-  z-index: 1;
-}
-
+.opa-profiling-fnbtn.is-selected .opa-profiling-fn { color: var(--accent); }
+.opa-profiling-type { flex: none; }
 .opa-profiling-fn {
   display: block;
-  max-width: 320px;
+  min-width: 0;
+  max-width: 460px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.opa-profiling-kpifn {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-11);
+}
+
+/* ---- selected-function detail ---- */
+.opa-profiling-detail {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.opa-profiling-detail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.opa-profiling-detail-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-13);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opa-profiling-detail-close { flex: none; padding: 2px 6px; }
+.opa-profiling-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-3);
+}
+@media (max-width: 900px) { .opa-profiling-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.opa-profiling-stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.opa-profiling-stat .k {
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.opa-profiling-stat .v {
+  font-size: var(--fs-13);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.opa-profiling-detail-hint {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* self vs callees split */
+.opa-profiling-split { margin-top: var(--sp-3); }
+.opa-profiling-split-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.opa-profiling-split-bar .self { background: var(--accent); }
+.opa-profiling-split-bar .callees { background: var(--surface-3); }
+.opa-profiling-split-legend {
+  display: flex;
+  gap: var(--sp-4);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-11);
+  color: var(--text-secondary);
+}
+.opa-profiling-split-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.opa-profiling-split-legend .sw { width: 8px; height: 8px; border-radius: 2px; }
+.opa-profiling-split-legend .sw.self { background: var(--accent); }
+.opa-profiling-split-legend .sw.callees { background: var(--surface-3); }
+
+/* ---- footer + flame view ---- */
+.opa-profiling-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+}
+.opa-profiling-graph { padding: var(--sp-3); overflow-x: auto; }
+.opa-profiling-graph-head {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  font-size: var(--fs-12);
+  margin-bottom: var(--sp-2);
+}
+.opa-profiling-graph-head svg { vertical-align: -2px; }
+.opa-profiling-graph-inner { min-width: 0; }

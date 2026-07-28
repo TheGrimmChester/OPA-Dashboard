@@ -9,7 +9,8 @@ import { fmtMs, fmtNum, fmtPct, fmtBytes, latencyStatus, errorRateStatus } from 
 
 export default function Overview() {
   const navigate = useNavigate()
-  const stats = useApi('/api/stats')
+  // (No /api/stats call here: its result was never read, so it was a wasted
+  // request on every Overview load — the KPIs come from /api/services.)
   const services = useApi('/api/services')
   const perf = useApi('/api/metrics/performance')
 

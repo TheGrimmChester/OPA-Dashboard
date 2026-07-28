@@ -75,6 +75,15 @@ export default function Databases() {
     { key: 'key', header: 'Key', render: (r) => (
       <span className="opa-mono" title={r.key} style={{ display: 'block', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--tier-redis)' }}>{r.key || '—'}</span>
     ), sortValue: (r) => r.key || '' },
+    // Rows are grouped by command+key+host+port, so two rows can share a
+    // command and key and differ only by server — without this column they look
+    // like duplicates. Blank for data captured before the client reported it.
+    { key: 'server', header: 'Server', render: (r) => {
+      const server = [r.host, r.port].filter(Boolean).join(':')
+      return server
+        ? <span className="opa-mono opa-muted" title={server}>{server}</span>
+        : <span className="opa-muted">—</span>
+    }, sortValue: (r) => [r.host, r.port].filter(Boolean).join(':') },
     { key: 'execution_count', header: 'Calls', num: true, render: (r) => (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={r.execution_count || 0} max={maxRedisExec} label={fmtNum(r.execution_count || 0)} color="var(--tier-redis)" width={100} /></div>
     ), sortValue: (r) => r.execution_count || 0 },

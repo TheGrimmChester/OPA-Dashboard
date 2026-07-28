@@ -11,12 +11,28 @@ import {
 import FlameGraph from '../components/FlameGraph'
 import CallGraph from '../components/CallGraph'
 import ExecutionStackTree from '../components/ExecutionStackTree'
+import { useProfileModel, ProfileToolbar, ProfileSummary, HotSpots } from '../components/profile'
 import { fmtMs, fmtBytes, fmtNum, fmtAgo, tierColor, statusColor, latencyStatus, SERIES } from '../theme/format'
 import { mergeCallStacks } from '../utils/mergeCallStacks'
 import './TraceDetail.css'
 
 const TIERS = ['app', 'db', 'redis', 'http']
 const TIER_LABEL = { app: 'App / PHP', db: 'Database', redis: 'Redis', http: 'HTTP' }
+
+const PROFILE_VIEWS = [
+  { value: 'hotspots', label: 'Hot spots' },
+  { value: 'flame', label: 'Flame' },
+  { value: 'callgraph', label: 'Call graph' },
+  { value: 'stacktree', label: 'Stack tree' },
+]
+
+// Significance floor for the hot-spots list, as a % of the ranked metric total.
+const NOISE_FLOORS = [
+  { value: 0, label: 'All' },
+  { value: 0.1, label: '0.1%' },
+  { value: 1, label: '1%' },
+  { value: 5, label: '5%' },
+]
 
 // Classify a span into a breakdown tier from its name/service.
 function spanTier(span) {
@@ -66,7 +82,14 @@ export default function TraceDetail() {
   const { traceId } = useParams()
   const navigate = useNavigate()
   const [selected, setSelected] = useState(null)
-  const [profileView, setProfileView] = useState('flame')
+  // A ranked list answers "what is slow?" faster than any picture, so the
+  // profile opens on hot spots and the drawings are one click away.
+  const [profileView, setProfileView] = useState('hotspots')
+  const [metric, setMetric] = useState('duration')
+  const [groupBy, setGroupBy] = useState('method')
+  const [query, setQuery] = useState('')
+  const [minPct, setMinPct] = useState(0)
+  const [focusKey, setFocusKey] = useState(null)
 
   // /full carries the per-span call stacks (span.stack) that the flame/call
   // views need; the shape is otherwise identical to /api/traces/{id}, so the
@@ -82,15 +105,37 @@ export default function TraceDetail() {
   // graph / stack tree). See mergeCallStacks for the namespacing scheme.
   const callStack = useMemo(() => mergeCallStacks(root, flatSpans), [root, flatSpans])
 
-  // The flame/call graphs render fixed-width SVG; measure the panel so they fill it.
+  // One ingest + aggregate + rank for the whole page: every profile view reads
+  // this model, so a 200k-call stack is never walked twice per render.
+  const model = useProfileModel(callStack, { metric, groupBy, minPct })
+  const totals = model.totals || {}
+
+  // A regroup (or a new trace) rewrites the symbol set, so a stale selection has
+  // to go rather than point at a function that no longer exists.
+  useEffect(() => { setFocusKey(null) }, [groupBy, callStack])
+
+  // The flame/call graphs render fixed-width SVG; measure the panel so they fill
+  // it, and track viewport height so their boxes scale with the window instead
+  // of sitting at a magic constant.
   const profRef = useRef(null)
   const [profW, setProfW] = useState(960)
+  const [vpH, setVpH] = useState(() => (typeof window === 'undefined' ? 900 : window.innerHeight))
   useEffect(() => {
-    const measure = () => { if (profRef.current) setProfW(Math.max(320, profRef.current.offsetWidth - 4)) }
+    const measure = () => {
+      setVpH(window.innerHeight)
+      if (profRef.current) setProfW(Math.max(320, profRef.current.offsetWidth - 4))
+    }
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
   }, [callStack.length, profileView])
+
+  // Chrome above the profile view: page head + entity header + waterfall + the
+  // panel's own toolbar/summary. Clamped so an SVG stays readable on a 13" laptop
+  // and doesn't turn into a mile-high strip on a 4K panel.
+  const flameH = Math.max(320, Math.min(720, vpH - 360))
+  const callGraphH = Math.max(380, Math.min(880, vpH - 260))
+  const listH = Math.max(300, Math.min(680, vpH - 380))
 
   // Ordered waterfall rows.
   const rows = useMemo(() => {
@@ -239,7 +284,7 @@ export default function TraceDetail() {
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
-          <button className="td-drawer-close" style={{ float: 'left', marginRight: 10 }} onClick={() => navigate(-1)} title="Back">
+          <button className="td-drawer-close" style={{ float: 'left', marginRight: 10 }} onClick={() => navigate(-1)} title="Back" aria-label="Back">
             <FiChevronLeft size={15} />
           </button>
           <h1 className="opa-page-title">Trace</h1>
@@ -290,7 +335,15 @@ export default function TraceDetail() {
             const col = tierColor(tier)
             const isSel = selected && selected.span_id === s.span_id
             return (
-              <div key={s.span_id} className={`tw-row ${isSel ? 'is-selected' : ''}`} onClick={() => setSelected(s)}>
+              <div
+                key={s.span_id}
+                className={`tw-row ${isSel ? 'is-selected' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-pressed={!!isSel}
+                onClick={() => setSelected(s)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(s) } }}
+              >
                 <div className="tw-label" style={{ paddingLeft: (s._depth || 0) * 14 }}>
                   {multiService && <span className="tw-tierdot" style={{ background: serviceColor[s.service] || 'var(--neutral)' }} title={s.service} />}
                   <span className="tw-tierdot" style={{ background: col }} />
@@ -312,31 +365,71 @@ export default function TraceDetail() {
         </div>
       </Panel>
 
-      {/* Profile — flame graph / call graph / stack tree over every span's call stack */}
-      {callStack.length > 0 && (
-        <Panel
-          title="Profile"
-          icon={<FiCpu />}
-          flush
-          actions={
-            <SegmentedControl
-              options={[
-                { value: 'flame', label: 'Flame' },
-                { value: 'callgraph', label: 'Call graph' },
-                { value: 'stacktree', label: 'Stack tree' },
-              ]}
-              value={profileView}
-              onChange={setProfileView}
+      {/* Profile — ranked hot spots over every span's call stack, plus the
+          flame / call-graph / stack-tree drawings of the same data. */}
+      <Panel
+        title="Profile"
+        icon={<FiCpu />}
+        flush
+        loading={loading}
+        error={trace.error}
+        empty={!loading && !trace.error && callStack.length === 0}
+        emptyText="No call stack captured on this trace — enable the OPA profiler to record one."
+        actions={<SegmentedControl options={PROFILE_VIEWS} value={profileView} onChange={setProfileView} />}
+      >
+        <div className="td-prof">
+          <div className="td-prof-bar">
+            <ProfileToolbar
+              metric={metric}
+              onMetricChange={setMetric}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+              query={query}
+              onQueryChange={setQuery}
+              totals={totals}
+              right={
+                <div
+                  className="opa-row td-prof-floor"
+                  title="Hide functions contributing less than this share of the ranked metric. Hot spots reports how many are hidden."
+                >
+                  <span className="opa-muted">Threshold</span>
+                  <SegmentedControl options={NOISE_FLOORS} value={minPct} onChange={setMinPct} />
+                </div>
+              }
             />
-          }
-        >
-          <div ref={profRef} style={{ overflowX: 'auto', padding: 'var(--sp-3)' }}>
-            {profileView === 'flame' && <FlameGraph callStack={callStack} width={profW} height={440} />}
-            {profileView === 'callgraph' && <CallGraph callStack={callStack} width={profW} height={560} />}
-            {profileView === 'stacktree' && <ExecutionStackTree callStack={callStack} />}
           </div>
-        </Panel>
-      )}
+
+          {/* Ingest truncation and an unrecorded metric are both surfaced by the
+              toolbar, the summary strip and the hot-spots notice — not repeated here. */}
+          <div className="td-prof-sum">
+            <ProfileSummary totals={totals} metric={metric} />
+          </div>
+
+          <div className="td-prof-view">
+            {profileView === 'hotspots' ? (
+              <HotSpots
+                model={model}
+                metric={metric}
+                query={query}
+                onMetricChange={setMetric}
+                selectedKey={focusKey}
+                onSelectSymbol={(key) => setFocusKey((k) => (k === key ? null : key))}
+                maxHeight={listH}
+              />
+            ) : (
+              <div className="td-prof-graph">
+                {/* Measured on the inner (unpadded) box so the SVG width matches
+                    the real content width instead of overflowing by the padding. */}
+                <div ref={profRef} className="td-prof-graph-inner">
+                  {profileView === 'flame' && <FlameGraph callStack={callStack} width={profW} height={flameH} />}
+                  {profileView === 'callgraph' && <CallGraph callStack={callStack} width={profW} height={callGraphH} />}
+                  {profileView === 'stacktree' && <ExecutionStackTree callStack={callStack} />}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Panel>
 
       {/* Breakdown + Network I/O */}
       <div className="opa-grid cols-2">
@@ -501,7 +594,7 @@ function SpanDrawer({ span, traceStart, onClose }) {
               <span className="opa-mono opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{span.span_id}</span>
             </div>
           </div>
-          <button className="td-drawer-close" onClick={onClose} title="Close"><FiX size={15} /></button>
+          <button className="td-drawer-close" onClick={onClose} title="Close" aria-label="Close span detail"><FiX size={15} /></button>
         </div>
 
         <div className="td-drawer-body">
