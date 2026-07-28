@@ -3,6 +3,24 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
+// Live tenant selection, read by the axios interceptor below. Kept outside React
+// state so the interceptor always sees the current values: an interceptor
+// registered from an effect would still carry the previous tenant when a child's
+// effect fires its refetch (child effects run before the provider's).
+const tenantHeaders = {
+  organizationId: localStorage.getItem('organization_id') || 'default-org',
+  projectId: localStorage.getItem('project_id') || 'default-project',
+}
+
+// Registered once, at import time, so requests fired by the very first render
+// already carry the tenant headers.
+axios.interceptors.request.use((config) => {
+  // "all" is sent explicitly — the backend reads it as "do not filter".
+  if (tenantHeaders.organizationId) config.headers['X-Organization-ID'] = tenantHeaders.organizationId
+  if (tenantHeaders.projectId) config.headers['X-Project-ID'] = tenantHeaders.projectId
+  return config
+})
+
 const TenantContext = createContext()
 
 export const useTenant = () => {
@@ -95,24 +113,10 @@ export const TenantProvider = ({ children }) => {
     localStorage.setItem('project_id', projId)
   }
 
-  // Update axios interceptor to include tenant headers
-  useEffect(() => {
-    const interceptor = axios.interceptors.request.use((config) => {
-      // Send "all" explicitly so backend knows to return all data
-      // Backend expects "all" in header to indicate no filtering
-      if (organizationId) {
-        config.headers['X-Organization-ID'] = organizationId
-      }
-      if (projectId) {
-        config.headers['X-Project-ID'] = projectId
-      }
-      return config
-    })
-
-    return () => {
-      axios.interceptors.request.eject(interceptor)
-    }
-  }, [organizationId, projectId])
+  // Publish the selection to the interceptor synchronously, during render, so a
+  // child that refetches on this same commit sends the new tenant.
+  tenantHeaders.organizationId = organizationId
+  tenantHeaders.projectId = projectId
 
   const value = {
     organizationId,

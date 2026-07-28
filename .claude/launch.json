@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "VITE_API_PROXY_TARGET=http://localhost:8080 VITE_WS_PROXY_TARGET=http://localhost:8082 npm run dev -- --port 3001 --strictPort"
+      ],
+      "port": 3001
+    }
+  ]
+}

@@ -47,6 +47,7 @@ const ExternalHttp = lazy(() => import('./pages/ExternalHttp'))
 const HttpEndpointDetail = lazy(() => import('./pages/HttpEndpointDetail'))
 const PerformanceView = lazy(() => import('./pages/PerformanceView'))
 const LiveHub = lazy(() => import('./pages/LiveHub'))
+const Logs = lazy(() => import('./pages/Logs'))
 const SqlQueryDetail = lazy(() => import('./pages/SqlQueryDetail'))
 const ErrorDetail = lazy(() => import('./pages/ErrorDetail'))
 const KeyTransactions = lazy(() => import('./pages/KeyTransactions'))
@@ -236,6 +237,10 @@ function App() {
             <Route
               path="/live"
               element={<LiveHub />}
+            />
+            <Route
+              path="/logs"
+              element={<Logs />}
             />
             {/* Legacy live routes now consolidated into the Live hub. */}
             <Route path="/live-dumps" element={<Navigate to="/live?tab=dumps" replace />} />

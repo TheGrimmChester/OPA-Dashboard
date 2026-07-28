@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { useTimeRange } from '../contexts/TimeRangeContext'
+import { useTenant } from '../contexts/TenantContext'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 // Fetch a JSON endpoint, auto-merging the global time range (from/to) and
-// re-fetching when the range, the manual refresh tick, or params change.
+// re-fetching when the range, the selected tenant, the manual refresh tick, or
+// params change. The tenant travels as request headers (see TenantContext), so it
+// has to be an explicit dependency here or a switch would never re-query.
 // opts.noRange disables from/to injection. opts.skip defers the call.
 export function useApi(path, params = {}, opts = {}) {
   const { from, to, interval, tick } = useTimeRange()
+  const { organizationId, projectId } = useTenant()
   const [state, setState] = useState({ data: null, loading: true, error: null })
   const paramsKey = JSON.stringify(params)
   const skip = opts.skip
@@ -28,7 +32,7 @@ export function useApi(path, params = {}, opts = {}) {
       setState({ data: null, loading: false, error: e.response?.data?.error || e.response?.data || e.message || 'Request failed' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, paramsKey, from, to, interval, skip, opts.noRange])
+  }, [path, paramsKey, from, to, interval, skip, opts.noRange, organizationId, projectId])
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -41,6 +45,7 @@ export function useApi(path, params = {}, opts = {}) {
 
 // Poll a path on an interval (for Live views). Returns {data,loading,error}.
 export function usePolling(path, intervalMs, params = {}, opts = {}) {
+  const { organizationId, projectId } = useTenant()
   const [state, setState] = useState({ data: null, loading: true, error: null })
   const ref = useRef()
   const paramsKey = JSON.stringify(params)
@@ -58,6 +63,6 @@ export function usePolling(path, intervalMs, params = {}, opts = {}) {
     if (!opts.paused) ref.current = setInterval(fetchOnce, intervalMs)
     return () => { alive = false; clearInterval(ref.current) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, paramsKey, intervalMs, opts.paused])
+  }, [path, paramsKey, intervalMs, opts.paused, organizationId, projectId])
   return state
 }
