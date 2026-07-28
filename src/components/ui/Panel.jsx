@@ -22,7 +22,7 @@ export default function Panel({
   // out. Harmless for anything that already flexes.
   const nudgeLayout = useCallback(() => {
     requestAnimationFrame(() => {
-      try { window.dispatchEvent(new Event('resize')) } catch (e) { /* ignore */ }
+      try { window.dispatchEvent(new Event('resize')) } catch (_e) { /* ignore */ }
     })
   }, [])
 

@@ -485,7 +485,7 @@ function getCallStackPath(callTree, selectedNodeId, nodeDataMap) {
   return path
 }
 
-function CallGraph({ callStack, width = 1200, height = 800 }) {
+function CallGraph({ callStack, width: _width = 1200, height: _height = 800 }) {
   const containerRef = useRef(null)
   const networkRef = useRef(null)
   const [selectedNode, setSelectedNode] = useState(null)

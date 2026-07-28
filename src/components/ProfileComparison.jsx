@@ -48,16 +48,26 @@ function getNodeSignature(node) {
 
 // Index one call stack by signature. Stacks reach us FLAT (linked by parent_id),
 // but legacy payloads can still nest under .children, so both are covered.
+// Iterative with a WeakSet guard: .children can be cyclic and can nest thousands
+// deep, either of which kills a recursive walk.
 function indexBySignature(nodes, index = new Map()) {
-  nodes.forEach((node) => {
+  if (!Array.isArray(nodes)) return index
+  const seen = new WeakSet()
+  const stack = [...nodes]
+  while (stack.length > 0) {
+    const node = stack.pop()
+    if (!node || typeof node !== 'object') continue
+    if (seen.has(node)) continue
+    seen.add(node)
     const sig = getNodeSignature(node)
     const bucket = index.get(sig)
     if (bucket) bucket.push(node)
     else index.set(sig, [node])
-    if (Array.isArray(node.children) && node.children.length > 0) {
-      indexBySignature(node.children, index)
+    const kids = node.children
+    if (Array.isArray(kids)) {
+      for (let i = 0; i < kids.length; i++) stack.push(kids[i])
     }
-  })
+  }
   return index
 }
 
@@ -65,9 +75,15 @@ function metricPair(node, snake, pascal) {
   return node[snake] || node[pascal] || 0
 }
 
-// Percent change of one metric, guarding division by an absent baseline.
+// Percent change of one metric. A zero baseline is NOT "no change": going from
+// nothing to a real cost is the most important thing a regression diff can show,
+// so it reports +Infinity (and 0 -> 0 stays 0). Callers must therefore compare
+// magnitudes rather than assume a finite number.
 function pctChange(oldValue, newValue) {
-  if (oldValue === 0) return 0
+  if (oldValue === 0) {
+    if (newValue === 0) return 0
+    return newValue > 0 ? Infinity : -Infinity
+  }
   return ((newValue - oldValue) / Math.abs(oldValue)) * 100
 }
 
@@ -89,30 +105,86 @@ function nodeChangeStatus(oldNode, newNode, threshold) {
   ]
   let significant = false
   for (let i = 0; i < changes.length; i++) {
-    if (Math.abs(changes[i]) < threshold) continue
-    // Any degradation dominates the node's colour.
-    if (changes[i] > 0) return 'degradation'
+    const change = changes[i]
+    // An exactly-unchanged metric is never significant. Testing only
+    // `abs < threshold` classified every unchanged node as an improvement at
+    // threshold 0, because 0 is not < 0 and not > 0.
+    if (change === 0) continue
+    if (Math.abs(change) < threshold) continue
+    // Any degradation dominates the node's colour. Infinity lands here too:
+    // new cost against a zero baseline is a regression, not an improvement.
+    if (change > 0) return 'degradation'
     significant = true
   }
   return significant ? 'improvement' : 'no-change'
 }
 
+const AVG_FIELDS = [
+  ['duration_ms', 'DurationMs', 'duration'],
+  ['cpu_ms', 'CPUMs', 'cpu'],
+  ['memory_delta', 'MemoryDelta', null],
+  ['network_bytes_sent', 'NetworkBytesSent', null],
+  ['network_bytes_received', 'NetworkBytesReceived', null],
+]
+
+// A signature usually occurs many times in the baseline (a hot query called 40
+// times). Comparing against whichever instance happened to be indexed first made
+// the verdict depend on stack order, so compare against the signature's MEAN.
+function baselineAverage(bucket) {
+  const avg = {}
+  for (const [snake, pascal, plain] of AVG_FIELDS) {
+    let sum = 0
+    for (let i = 0; i < bucket.length; i++) {
+      const node = bucket[i]
+      const v = node[snake] || node[pascal] || (plain ? node[plain] : 0) || 0
+      sum += v
+    }
+    avg[snake] = sum / bucket.length
+  }
+  return avg
+}
+
 // Tag every node of the new stack with _diffStatus, which callGraphModel folds
 // into its diff column (DIFF_CODES: no-change | improvement | degradation | new).
+// Iterative + WeakSet-guarded for the same reason as indexBySignature.
 function createDiffCallStack(oldStack, newStack, threshold = 5) {
+  if (!Array.isArray(newStack)) return []
   const oldIndex = indexBySignature(oldStack)
-
-  const processNode = (newNode) => {
-    const matches = oldIndex.get(getNodeSignature(newNode))
-    const diffNode = { ...newNode }
-    diffNode._diffStatus = matches ? nodeChangeStatus(matches[0], newNode, threshold) : 'new'
-    if (Array.isArray(newNode.children) && newNode.children.length > 0) {
-      diffNode.children = newNode.children.map(processNode)
-    }
-    return diffNode
+  const avgCache = new Map()
+  const baselineFor = (sig) => {
+    if (avgCache.has(sig)) return avgCache.get(sig)
+    const bucket = oldIndex.get(sig)
+    const avg = bucket && bucket.length > 0 ? baselineAverage(bucket) : null
+    avgCache.set(sig, avg)
+    return avg
   }
 
-  return newStack.map(processNode)
+  const tag = (node) => {
+    const copy = { ...node }
+    const base = baselineFor(getNodeSignature(node))
+    copy._diffStatus = base ? nodeChangeStatus(base, node, threshold) : 'new'
+    return copy
+  }
+
+  const seen = new WeakSet()
+  const roots = newStack.map(tag)
+  const stack = []
+  for (let i = 0; i < newStack.length; i++) stack.push([newStack[i], roots[i]])
+  while (stack.length > 0) {
+    const [orig, copy] = stack.pop()
+    if (!orig || typeof orig !== 'object') continue
+    if (seen.has(orig)) continue
+    seen.add(orig)
+    const kids = orig.children
+    if (!Array.isArray(kids) || kids.length === 0) continue
+    const copies = new Array(kids.length)
+    for (let i = 0; i < kids.length; i++) {
+      copies[i] = tag(kids[i])
+      stack.push([kids[i], copies[i]])
+    }
+    copy.children = copies
+  }
+  return roots
 }
 
 // ---------------------------------------------------------------------------

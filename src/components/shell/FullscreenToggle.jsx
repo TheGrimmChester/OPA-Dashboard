@@ -25,7 +25,7 @@ export default function FullscreenToggle() {
       document.documentElement.classList.toggle('opa-page-fullscreen', on)
       // Fixed-width SVG children (flame/call graphs) re-measure on resize.
       requestAnimationFrame(() => {
-        try { window.dispatchEvent(new Event('resize')) } catch (e) { /* ignore */ }
+        try { window.dispatchEvent(new Event('resize')) } catch (_e) { /* ignore */ }
       })
     }
     document.addEventListener('fullscreenchange', sync)
@@ -39,7 +39,7 @@ export default function FullscreenToggle() {
     try {
       if (document.fullscreenElement) await document.exitFullscreen()
       else await document.documentElement.requestFullscreen()
-    } catch (e) {
+    } catch (_e) {
       // Denied (permissions policy, or not a user gesture): fall back to just
       // hiding the chrome, which is the useful half and always available.
       const on = !document.documentElement.classList.contains('opa-page-fullscreen')

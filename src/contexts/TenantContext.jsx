@@ -77,7 +77,11 @@ export const TenantProvider = ({ children }) => {
     loadProjects(organizationId)
   }, [organizationId])
 
+  // `loading` is part of the context value, so it has to actually track the
+  // in-flight fetches — it was exposed but never set, leaving every consumer to
+  // read a permanent false.
   const loadOrganizations = async () => {
+    setLoading(true)
     try {
       const token = localStorage.getItem('auth_token')
       const response = await axios.get(`${API_URL}/api/organizations`, {
@@ -88,6 +92,8 @@ export const TenantProvider = ({ children }) => {
       setOrganizations(response.data.organizations || [])
     } catch (error) {
       console.error('Failed to load organizations:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
