@@ -496,7 +496,8 @@ export default function TraceDetail() {
           onRowClick={(r) => {
             const fp = r.query_fingerprint || r.fingerprint
             if (fp) { navigate(`/sql/${encodeURIComponent(fp)}`); return }
-            if (r.query) goTraces(`query_fingerprint:"${r.query}"`)
+            const f = sqlDrillFilter(r)
+            if (f) goTraces(f)
           }}
           initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
       </Panel>
@@ -591,6 +592,22 @@ function statusPillTone(status) {
   if (s === 'warn' || s === 'warning') return 'warn'
   if (s === 'ok' || s === 'success') return 'ok'
   return 'neutral'
+}
+
+// SQL fingerprints are stored whitespace-collapsed (see the agent's
+// normalizeSQLQuery), so a raw statement — with its newlines and indentation —
+// can never match one by equality. When the backend gave us a fingerprint we use
+// it verbatim; otherwise we fall back to a LIKE on the first line-collapsed
+// fragment, because guessing at the agent's literal-replacement rules in JS
+// would drift from the real implementation.
+function sqlDrillFilter(op) {
+  const fingerprint = op?.query_fingerprint || op?.fingerprint
+  if (fingerprint) return `query_fingerprint:"${fingerprint}"`
+  const collapsed = String(op?.query || '').replace(/\s+/g, ' ').trim()
+  if (!collapsed) return null
+  // A prefix is enough to identify a statement and survives literal differences.
+  const fragment = collapsed.slice(0, 60).replace(/(["\\])/g, '\\$1')
+  return `query_fingerprint:LIKE "${fragment}%"`
 }
 
 // Build a filtered Trace Explorer link from a DSL clause.
@@ -754,7 +771,7 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
                   <DrillLink
                     to={(q.query_fingerprint || q.fingerprint)
                       ? `/sql/${encodeURIComponent(q.query_fingerprint || q.fingerprint)}`
-                      : tracesHref(`query_fingerprint:"${q.query}"`)}
+                      : tracesHref(sqlDrillFilter(q) || '')}
                     title="Open this query's detail (all traces running it)"
                     style={{ fontSize: 'var(--fs-12)', color: 'var(--text-primary)', wordBreak: 'break-word', textAlign: 'left' }}
                   >
