@@ -26,6 +26,7 @@ export const NAV_GROUPS = [
       { to: '/alerts', label: 'Alerts', icon: FiBell },
       { to: '/slos', label: 'SLOs', icon: FiTarget },
       { to: '/anomalies', label: 'Anomalies', icon: FiZap },
+      { to: '/synthetics', label: 'Synthetics', icon: FiRadio },
     ],
   },
   {

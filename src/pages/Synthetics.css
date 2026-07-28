@@ -1,0 +1,38 @@
+/* Synthetic monitoring page — check rows and inline errors. */
+
+.syn-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* The probed URL is secondary to the check name; keep it on one line. */
+.syn-url {
+  display: block;
+  max-width: 460px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-11);
+}
+
+.syn-err {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--error);
+  font-size: var(--fs-12);
+}
+
+.syn-error {
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--text-primary);
+  font-size: var(--fs-12);
+}
