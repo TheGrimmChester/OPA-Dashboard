@@ -168,7 +168,7 @@
 .td-drawer-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(4, 7, 12, 0.55);
+  background: var(--bg-overlay);
   z-index: 40;
   animation: td-fade 120ms ease;
 }
@@ -178,7 +178,7 @@
   width: min(560px, 92vw);
   background: var(--surface-1);
   border-left: 1px solid var(--border-default);
-  box-shadow: -12px 0 40px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-drawer);
   z-index: 41;
   display: flex;
   flex-direction: column;
