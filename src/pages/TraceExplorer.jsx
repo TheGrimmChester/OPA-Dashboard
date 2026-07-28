@@ -154,7 +154,7 @@ export default function TraceExplorer() {
             <option value="ok">OK</option>
             <option value="error">Error</option>
           </select>
-          <ExportButton filters={{ service, status }} label="Export" />
+          <ExportButton filters={{ service, status, filter }} label="Export" />
         </div>
       </div>
 

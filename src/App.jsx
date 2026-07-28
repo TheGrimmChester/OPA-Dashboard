@@ -1,6 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { 
+import axios from 'axios'
+import {
   FiHome, 
   FiActivity, 
   FiServer, 
@@ -56,6 +57,48 @@ const Slos = lazy(() => import('./pages/Slos'))
 const Alerts = lazy(() => import('./pages/Alerts'))
 const Anomalies = lazy(() => import('./pages/Anomalies'))
 
+// Result of the one-time auth probe, cached for the lifetime of the page so
+// client-side navigations never re-probe. `true` = render the app (auth off or
+// endpoint absent), `false` = auth enforced and no session → redirect to /login.
+let authProbe = null
+
+// Pre-render auth guard. Without it, an unauthenticated visit under enforced
+// auth briefly flashes the full app (every panel then 401s) before the axios
+// interceptor bounces to /login. With a stored token we render immediately —
+// if the token is stale, the 401 interceptor still handles it. Otherwise we
+// probe /api/auth/status once: 401/403 means auth is enforced (redirect),
+// 200/404 means auth is off or the endpoint doesn't exist (render).
+function RequireAuth({ children }) {
+  const [allowed, setAllowed] = useState(() => !!localStorage.getItem('auth_token'))
+
+  useEffect(() => {
+    if (allowed) return undefined
+    if (!authProbe) {
+      authProbe = axios
+        .get('/api/auth/status')
+        .then(() => true)
+        .catch((err) => {
+          const status = err?.response?.status
+          return status !== 401 && status !== 403
+        })
+    }
+    let active = true
+    authProbe.then((ok) => {
+      if (!active) return
+      if (ok) {
+        setAllowed(true)
+      } else {
+        const back = encodeURIComponent(window.location.pathname + window.location.search)
+        window.location.assign(`/login?next=${back}`)
+      }
+    })
+    return () => { active = false }
+  }, [allowed])
+
+  if (!allowed) return null
+  return children
+}
+
 function App() {
   const [filters, setFilters] = useState({})
   const [autoRefresh, setAutoRefresh] = useState(true)
@@ -84,6 +127,7 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <RequireAuth>
       <TenantProvider>
         <TimeRangeProvider>
         <AppShell>
@@ -206,6 +250,7 @@ function App() {
         </AppShell>
         </TimeRangeProvider>
       </TenantProvider>
+      </RequireAuth>
     </ErrorBoundary>
   )
 }

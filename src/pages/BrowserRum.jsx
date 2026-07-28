@@ -164,7 +164,7 @@ export default function BrowserRum() {
         }>
         {activeRows.length === 0 && !detail.loading
           ? <EmptyState icon={<FiGlobe />} title="No RUM detail in range"
-              hint="Include public/rum.js in your app to start capturing resource timing, AJAX calls and page views." />
+              hint="Add the opa-rum.js snippet (<script src=&quot;/opa-rum.js&quot; …>) to your app to start capturing resource timing, AJAX calls and page views." />
           : <DataTable columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
               onRowClick={tab === 'ajax' ? drillAjax : undefined}
               initialSort={{ key: 'count', dir: 'desc' }} maxHeight={420} />}

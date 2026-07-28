@@ -12,6 +12,7 @@ const VIEWPORT_MAX = 640     // max scroll-container height in px
 function ExecutionStackTree({ callStack }) {
   const [expandedNodes, setExpandedNodes] = useState(new Set())
   const [filters, setFilters] = useState({ enabled: false, thresholds: {} })
+  const [sortOrder, setSortOrder] = useState('newest') // 'newest' | 'oldest'
 
   // Normalize nodes - handle both flat and hierarchical structures
   const normalizeNode = useCallback((node) => {
@@ -81,20 +82,24 @@ function ExecutionStackTree({ callStack }) {
       }
     })
 
-    // Stable child sort by depth (matches previous getChildren ordering)
+    // Stable child sort by depth (matches previous getChildren ordering),
+    // then optionally reversed so the most recent call at each level shows first.
     const byDepth = (a, b) => {
       if (a.depth !== undefined && b.depth !== undefined) {
         return a.depth - b.depth
       }
       return 0
     }
-    childIndex.forEach(siblings => siblings.sort(byDepth))
-
-    // Sort root nodes by depth or original order
-    roots.sort(byDepth)
+    const applyOrder = (siblings) => {
+      siblings.sort(byDepth)
+      if (sortOrder === 'newest') siblings.reverse()
+      return siblings
+    }
+    childIndex.forEach(applyOrder)
+    applyOrder(roots)
 
     return { nodeMap: map, rootNodes: roots, childrenMap: childIndex }
-  }, [callStack, normalizeNode])
+  }, [callStack, normalizeNode, sortOrder])
 
   // Filter function - shared for both root nodes and children
   const shouldIncludeNode = useCallback((node) => {
@@ -292,6 +297,15 @@ function ExecutionStackTree({ callStack }) {
       <div className="execution-stack-tree-header">
         <h2>Execution Stack Tree</h2>
         <div className="execution-stack-tree-controls">
+          <select
+            className="control-select"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+            aria-label="Sort order"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
           <button onClick={expandAll} className="control-btn">
             Expand All
           </button>

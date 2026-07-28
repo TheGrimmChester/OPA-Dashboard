@@ -13,7 +13,9 @@ export default defineConfig({
         rewrite: (path) => path
       },
       '/ws': {
-        target: process.env.VITE_API_PROXY_TARGET || 'http://agent:8080',
+        // The agent's WebSocket listener is a separate server on :8082
+        // (wsAddr in main.go), not the :8080 HTTP API — mirror nginx.conf.
+        target: process.env.VITE_WS_PROXY_TARGET || 'http://agent:8082',
         ws: true,
         changeOrigin: true,
         secure: false,
@@ -23,6 +25,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks(id) {

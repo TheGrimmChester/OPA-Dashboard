@@ -46,6 +46,17 @@
   transform: translateY(-1px);
 }
 
+.execution-stack-tree-controls .control-select {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
 .execution-stack-tree-content {
   max-height: 800px;
   overflow-y: auto;
