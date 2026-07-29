@@ -435,8 +435,28 @@ export default function TraceDetail() {
                 {/* Measured on the inner (unpadded) box so the SVG width matches
                     the real content width instead of overflowing by the padding. */}
                 <div ref={profRef} className="td-prof-graph-inner">
-                  {profileView === 'flame' && <FlameGraph callStack={callStack} width={profW} height={flameH} />}
-                  {profileView === 'callgraph' && <CallGraph callStack={callStack} width={profW} height={callGraphH} />}
+                  {/* Driving `metric` from the shared toolbar hides the graph's
+                      own selector, so the panel has one metric control, not two. */}
+                  {profileView === 'flame' && (
+                    <FlameGraph
+                      callStack={callStack}
+                      width={profW}
+                      height={flameH}
+                      metric={metric}
+                      onMetricChange={setMetric}
+                    />
+                  )}
+                  {profileView === 'callgraph' && (
+                    <CallGraph
+                      callStack={callStack}
+                      width={profW}
+                      height={callGraphH}
+                      metric={metric}
+                      onMetricChange={setMetric}
+                      groupBy={groupBy}
+                      minPct={minPct}
+                    />
+                  )}
                   {profileView === 'stacktree' && <ExecutionStackTree callStack={callStack} />}
                 </div>
               </div>

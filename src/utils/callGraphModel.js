@@ -583,7 +583,14 @@ export function deriveSymbolGraph(calls, opts = {}) {
           const key = METRICS[m]
           const total = acc[key][level] + val[key][idx]
           if (level > 0) acc[key][level - 1] += total
-          if (e >= 0) eW[key][e] += total
+          // "Cost that flowed through this call site" is the callee's own
+          // INCLUSIVE value for duration/cpu/io/network — those already contain
+          // their children (self is derived by subtracting them, above), so
+          // adding the children's subtree totals counts them twice:
+          // P(100ms) -> C(60ms) -> G(30ms) labelled the P->C site 90ms.
+          // memory is a signed ADDITIVE delta, so there the subtree sum is
+          // exactly right.
+          if (e >= 0) eW[key][e] += key === 'memory' ? total : val[key][idx]
         }
         const s = symOf[idx]
         if (s >= 0) active[s]--

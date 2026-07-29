@@ -1,7 +1,10 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react'
-import { FiFilter, FiAlertTriangle, FiRotateCcw } from 'react-icons/fi'
-import TraceTabFilters from './TraceTabFilters'
-import { fmtMs, fmtBytes, fmtNum } from '../theme/format'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { FiAlertTriangle, FiChevronRight, FiInfo } from 'react-icons/fi'
+import { EmptyState, SegmentedControl } from './ui'
+import { fmtBytes, fmtMs, fmtNum, fmtPct } from '../theme/format'
+import { fmtMetric, middleEllipsis } from './profile/HotSpots'
+import { METRIC_LABELS } from './profile/ProfileToolbar'
+import { TYPE_ORDER, detectOpType, typeFill, typeLabel } from '../utils/opTypes'
 import './FlameGraph.css'
 
 /* ============================================================================
@@ -9,24 +12,28 @@ import './FlameGraph.css'
 
    The whole thing is three pure, iterative passes:
      A  normalizeCallStack  raw input (any shape) -> index-based arena
-     B  metric values + denominators + filter keep-mask
+     B  metric values + denominators + noise-floor keep-mask
      C  buildFlameLayout    breadth-first row packing into <= MAX_FRAMES rects
 
    Everything is iterative on purpose: OPA's collector emits unbounded
    stack_depth (thousands deep) and cyclic/self-referential parent_id, so any
    recursive walk either blows the JS stack or hangs. Cycles are cut ONCE in
    pass A, which makes every later traversal termination-safe by construction.
+
+   Presentation lives on the design tokens only (see FlameGraph.css) and borrows
+   the .opa-prof-* chrome from components/profile/profile.css, so this view is a
+   member of the Profile panel rather than a widget with its own look.
    ========================================================================== */
 
-const ROW_H = 18
+const ROW_H = 17
 const ROW_GAP = 1
-const PITCH = ROW_H + ROW_GAP          // 440px viewport => ~23 rows visible
+const PITCH = ROW_H + ROW_GAP          // 18px rows: ~24 visible in a 440px box
 const MIN_FRAME_PX = 1                 // thinner than this => folded into a merged run
 const MIN_RUN_PX = 0.25                // a run thinner than this is dropped (counted in `hidden`)
-const MIN_LABEL_PX = 34                // no <text> below this
-const VALUE_LABEL_PX = 120             // append " · 12.3ms" above this
+const MIN_LABEL_PX = 30                // no <text> below this
+const VALUE_LABEL_PX = 132             // append the metric value above this
 const CHAR_PX = 6.8                    // conservative advance for 11px mono; over-estimate never overflows
-const LABEL_PAD = 8
+const LABEL_PAD = 9
 const MAX_ROWS = 512                   // depth budget; deeper is reachable by zooming
 const MAX_FRAMES = 6000                // hard DOM budget
 const MAX_TREE_DEPTH = 8192            // cycle/depth backstop during normalization
@@ -34,49 +41,76 @@ const GUTTER = 12                      // reserves the vertical scrollbar so no 
 const MIN_CANVAS_W = 240
 const EPS = 1e-9
 
+const ECHO_CAP = 240                   // other occurrences of the hovered symbol to outline
+const CRUMB_TAIL = 4                   // zoom crumbs kept before collapsing to "…"
+const GRID_FRACS = [0.25, 0.5, 0.75]
+const AXIS_FRACS = [0, 0.25, 0.5, 0.75, 1]
+
+const TIP_W = 296
+const TIP_ROW_H = 17
+const TIP_CHROME_H = 46
+const TIP_EDGE = 6
+
 export const FLAME = {
   ROW_H, ROW_GAP, PITCH, MIN_FRAME_PX, MIN_RUN_PX, MIN_LABEL_PX,
   MAX_ROWS, MAX_FRAMES, CHAR_PX, MIN_CANVAS_W, GUTTER,
 }
 
-// Operation type -> color convention shared with the rest of the dashboard
-// (function=blue, sql=purple, http=orange, redis=red, cache=green). The fills
-// live in FlameGraph.css as `.t-*` classes so both themes resolve correctly.
-const OP_TYPES = { function: 'Function', sql: 'SQL', http: 'HTTP', redis: 'Redis', cache: 'Cache' }
-const OP_ORDER = ['function', 'sql', 'http', 'redis', 'cache', 'none']
-const OP_LABEL = { ...OP_TYPES, none: 'Other' }
+// The shared ProfileToolbar ranks by any of these, so the icicle speaks the same
+// vocabulary (io included) instead of silently falling back to duration.
+const METRIC_KEYS = ['duration', 'cpu', 'io', 'memory', 'network']
+const IS_METRIC = { duration: 1, cpu: 1, io: 1, memory: 1, network: 1 }
 
-const METRICS = [
-  { value: 'duration', label: 'Duration' },
-  { value: 'cpu', label: 'CPU' },
-  { value: 'memory', label: 'Memory' },
-  { value: 'network', label: 'Network' },
+const NOISE_FLOORS = [
+  { value: 0, label: 'All' },
+  { value: 0.1, label: '0.1%' },
+  { value: 1, label: '1%' },
+  { value: 5, label: '5%' },
 ]
-const METRIC_LABEL = { duration: 'Duration', cpu: 'CPU', memory: 'Memory', network: 'Network' }
+
+/* ---- paint -----------------------------------------------------------------
+   op index: -2 merged run, -1 unclassified, 0..4 = opTypes.TYPE_ORDER.
+   Hues come from opTypes.typeFill, so the icicle, the hot-spots table and the
+   call graph cannot drift apart on colour.
+
+   A frame is a 26% TINT of its type hue with the full hue as a 1px edge. The
+   edge separates adjacent same-type siblings (solid blocks merge into one
+   unreadable band), and the low-chroma ground means a single ink token
+   (--text-primary) is legible on every fill in BOTH themes — no JS contrast
+   table to go stale when a token moves. */
+const OP_MERGED = -2
+const OP_NONE = -1
+
+function tintOf(hue) {
+  return `color-mix(in srgb, ${hue} 26%, var(--surface-1))`
+}
+
+// Merged runs are deliberately hue-less: they are an aggregate, not an operation.
+// Unclassified frames use --surface-3 rather than opTypes' NEUTRAL_VAR, which is
+// tuned for swatches and is indistinguishable from the sunken plot area here.
+const OP_HUES = ['var(--border-strong)', 'var(--neutral)', ...TYPE_ORDER.map(typeFill)]
+const PAINT = OP_HUES.map((hue, k) => Object.freeze({
+  fill: k === 0 ? 'var(--surface-3)' : tintOf(hue),
+  stroke: hue,
+}))
+const SWATCH = OP_HUES.map((hue, k) => Object.freeze({
+  background: k === 0 ? 'var(--surface-3)' : tintOf(hue),
+  borderColor: hue,
+}))
+
+function paintOf(op) { return PAINT[op + 2] || PAINT[1] }
+function swatchOf(op) { return SWATCH[op + 2] || SWATCH[1] }
+
+const TYPE_INDEX = {}
+TYPE_ORDER.forEach((t, i) => { TYPE_INDEX[t] = i })
 
 const EMPTY_PATH = []
 const EMPTY_ARR = []
 
-// Detect the operation type from raw node data (explicit type field, or the
-// presence of sql/http/redis/cache detail arrays). null when nothing is known.
+// Kept as this module's public name; the classification itself lives in
+// opTypes so every profiling view labels the same call the same way.
 export function detectNodeType(node) {
-  if (!node) return null
-  const explicit = node.type || node.Type
-  if (explicit) {
-    const t = String(explicit).toLowerCase()
-    if (OP_TYPES[t]) return t
-  }
-  const sql = node.sql_queries || node.SQLQueries || node.sqlQueries
-  const http = node.http_requests || node.HttpRequests || node.httpRequests
-  const redis = node.redis_operations || node.RedisOperations || node.redisOperations
-  const cache = node.cache_operations || node.CacheOperations || node.cacheOperations
-  if (Array.isArray(sql) && sql.length > 0) return 'sql'
-  if (Array.isArray(http) && http.length > 0) return 'http'
-  if (Array.isArray(redis) && redis.length > 0) return 'redis'
-  if (Array.isArray(cache) && cache.length > 0) return 'cache'
-  const name = node.function || node.Function || node.name
-  if (!name || name === 'unknown') return null
-  return 'function'
+  return detectOpType(node)
 }
 
 // Every numeric field goes through this: the collector emits nulls, strings and
@@ -103,6 +137,7 @@ const K_LINE = ['line', 'Line']
 // field names are not pinned down anywhere in this repo.
 const K_DUR = ['duration_ms', 'DurationMs', 'duration', 'total_ms', 'wall_ms', 'value']
 const K_CPU = ['cpu_ms', 'CPUMs', 'cpu']
+const K_IO = ['io_wait_ms', 'IoWaitMs', 'io_wait_time', 'io_wait']
 const K_MEM = ['memory_delta', 'MemoryDelta']
 const K_SENT = ['network_bytes_sent', 'NetworkBytesSent']
 const K_RECV = ['network_bytes_received', 'NetworkBytesReceived']
@@ -112,7 +147,8 @@ const K_PARENT = ['parent_id', 'ParentID', 'parentId']
 const EMPTY_TREE = Object.freeze({
   n: 0,
   name: EMPTY_ARR, cls: EMPTY_ARR, file: EMPTY_ARR, line: EMPTY_ARR,
-  dur: EMPTY_ARR, cpu: EMPTY_ARR, memDelta: EMPTY_ARR, netSent: EMPTY_ARR, netRecv: EMPTY_ARR,
+  dur: EMPTY_ARR, cpu: EMPTY_ARR, io: EMPTY_ARR,
+  memDelta: EMPTY_ARR, netSent: EMPTY_ARR, netRecv: EMPTY_ARR,
   type: EMPTY_ARR, parent: EMPTY_ARR, firstChild: EMPTY_ARR, lastChild: EMPTY_ARR,
   nextSib: EMPTY_ARR, childCount: EMPTY_ARR, depth: EMPTY_ARR, subtreeSize: EMPTY_ARR,
   roots: EMPTY_ARR, rootsHead: -1, order: EMPTY_ARR,
@@ -179,13 +215,16 @@ export function normalizeCallStack(callStack) {
   const name = new Array(n)
   const cls = new Array(n)
   const file = new Array(n)
-  const type = new Array(n)
   const line = new Int32Array(n)
   const dur = new Float64Array(n)
   const cpu = new Float64Array(n)
+  const io = new Float64Array(n)
   const memDelta = new Float64Array(n)
   const netSent = new Float64Array(n)
   const netRecv = new Float64Array(n)
+  // Op type as an index into TYPE_ORDER (-1 = unclassified), matching the
+  // symOpType column in utils/callGraphModel.
+  const type = new Int8Array(n)
   const parent = new Int32Array(n)
   const typesPresent = new Set()
 
@@ -197,13 +236,15 @@ export function normalizeCallStack(callStack) {
     line[i] = num(pick(raw, K_LINE))
     dur[i] = num(pick(raw, K_DUR))
     cpu[i] = num(pick(raw, K_CPU))
+    io[i] = num(pick(raw, K_IO))
     memDelta[i] = num(pick(raw, K_MEM))
     netSent[i] = num(pick(raw, K_SENT))
     netRecv[i] = num(pick(raw, K_RECV))
     // Resolved once here; the old version recomputed it per node per render.
-    const t = detectNodeType(raw) || 'none'
-    type[i] = t
-    typesPresent.add(t)
+    const t = detectOpType(raw)
+    const ti = t !== null && TYPE_INDEX[t] !== undefined ? TYPE_INDEX[t] : OP_NONE
+    type[i] = ti
+    typesPresent.add(ti)
   }
 
   // ---- A3: nested `.children` wins when present (matches the previous
@@ -295,7 +336,7 @@ export function normalizeCallStack(callStack) {
   }
 
   return {
-    n, name, cls, file, line, dur, cpu, memDelta, netSent, netRecv,
+    n, name, cls, file, line, dur, cpu, io, memDelta, netSent, netRecv,
     type, parent, firstChild, lastChild, nextSib, childCount, depth, subtreeSize,
     roots, rootsHead, order, typesPresent, cyclesCut, maxDepth, truncatedDepth,
   }
@@ -307,6 +348,22 @@ const EMPTY_LAYOUT = Object.freeze({
   truncated: false, degraded: false, total: 0, considered: 0,
 })
 
+// Metric value of one node, always >= 0. memory is a SIGNED delta (a free is
+// negative) and network is two counters, so both are reduced to a magnitude.
+function metricValue(tree, metric, i) {
+  if (metric === 'cpu') return tree.cpu[i] > 0 ? tree.cpu[i] : 0
+  if (metric === 'io') return tree.io[i] > 0 ? tree.io[i] : 0
+  if (metric === 'memory') {
+    const v = tree.memDelta[i]
+    return v < 0 ? -v : v
+  }
+  if (metric === 'network') {
+    const v = tree.netSent[i] + tree.netRecv[i]
+    return v > 0 ? v : 0
+  }
+  return tree.dur[i] > 0 ? tree.dur[i] : 0
+}
+
 /* ---------------------------------------------------------------------------
    PASS B + C — values, keep-mask, then breadth-first row packing.
 
@@ -314,33 +371,29 @@ const EMPTY_LAYOUT = Object.freeze({
        parentW * value / max(parentValue, sumOfALLChildValues)
    packed left-to-right inside its own parent's span. The residue at the right
    edge is the parent's real self time and is deliberately left empty.
+
+   `minPct` is a noise floor expressed as a percentage of the VIEW total on the
+   current metric (not raw milliseconds), so the control means the same thing
+   whichever metric is selected.
    ------------------------------------------------------------------------- */
 export function buildFlameLayout({
-  tree, metric = 'duration', threshold = 0, focus = -1,
+  tree, metric = 'duration', minPct = 0, focus = -1,
   canvasW = 800, maxRows = MAX_ROWS, maxFrames = MAX_FRAMES,
 }) {
   const n = tree ? tree.n : 0
   if (!n) return EMPTY_LAYOUT
   const {
-    dur, cpu, memDelta, netSent, netRecv, parent, firstChild, nextSib,
-    childCount, subtreeSize, order, roots, rootsHead,
+    parent, firstChild, nextSib, childCount, subtreeSize, order, roots, rootsHead,
   } = tree
   const view = focus >= 0 && focus < n ? focus : -1
 
   // ---- B1: metric value per node. Negative / NaN / Infinity collapse to 0.
   const val = new Float64Array(n)
-  for (let i = 0; i < n; i++) {
-    let v
-    if (metric === 'cpu') v = cpu[i]
-    else if (metric === 'memory') v = memDelta[i] < 0 ? -memDelta[i] : memDelta[i]
-    else if (metric === 'network') v = netSent[i] + netRecv[i]
-    else v = dur[i]
-    val[i] = v > 0 ? v : 0
-  }
+  for (let i = 0; i < n; i++) val[i] = metricValue(tree, metric, i)
 
   // ---- B2: denominators. childSum sums ALL children, not just the kept ones,
-  // so a bar's width is invariant under filtering — toggling a filter never
-  // widens a survivor, which is what makes "wider == slower" always true.
+  // so a bar's width is invariant under filtering — toggling the noise floor
+  // never widens a survivor, which is what makes "wider == slower" always true.
   const childSum = new Float64Array(n)
   const structSum = new Float64Array(n)
   for (let i = 0; i < n; i++) {
@@ -348,12 +401,45 @@ export function buildFlameLayout({
     if (p !== -1) { childSum[p] += val[i]; structSum[p] += subtreeSize[i] }
   }
 
-  // ---- B3: filter keep-mask. Keep a node when it passes OR any descendant
-  // does (same semantics as the old recursive filter). Always on duration.
+  // ---- B3: the view total. Computed before the keep-mask because the noise
+  // floor is a share OF it — and because it is deliberately independent of
+  // filtering, so the axis does not move when the floor changes.
+  let total = 0
+  let rootStruct = 0
+  let considered = 0
+  if (view >= 0) {
+    total = val[view]
+    considered = subtreeSize[view]
+  } else {
+    for (let k = 0; k < roots.length; k++) {
+      total += val[roots[k]]
+      rootStruct += subtreeSize[roots[k]]
+      considered += subtreeSize[roots[k]]
+    }
+  }
+  // Two different questions, previously conflated into one flag:
+  //  - scaleZero: the value in view sums to 0, so widths cannot be proportional
+  //    and this band falls back to structural weighting.
+  //  - degraded:  the metric was never recorded ANYWHERE, which is the only
+  //    claim the UI may put in front of a user.
+  // They differ constantly: memory/network are signed additive deltas, and
+  // mergeCallStacks' synthetic root carries no memory key at all, so a trace
+  // that really allocated 16MB can still sum to 0 over the root set.
+  const scaleZero = !(total > 0)
+  let recorded = false
+  for (let i = 0; i < n; i++) {
+    if (val[i] !== 0) { recorded = true; break }
+  }
+  const degraded = !recorded
+
+  // ---- B4: keep-mask. Keep a node when it passes OR any descendant does, so
+  // a hot leaf under a cheap parent never disappears. Skipped in structure mode
+  // (nothing to be a share of).
   let keep = null
-  if (threshold > 0) {
+  if (minPct > 0 && total > EPS) {
+    const cut = (total * minPct) / 100
     keep = new Uint8Array(n)
-    for (let i = 0; i < n; i++) keep[i] = dur[i] >= threshold ? 1 : 0
+    for (let i = 0; i < n; i++) keep[i] = val[i] >= cut ? 1 : 0
     for (let k = n - 1; k >= 0; k--) {
       const v = order[k]
       const p = parent[v]
@@ -369,21 +455,6 @@ export function buildFlameLayout({
   let runCount = 0
   let filteredOut = 0
   let truncated = false
-
-  let total = 0
-  let rootStruct = 0
-  let considered = 0
-  if (view >= 0) {
-    total = val[view]
-    considered = subtreeSize[view]
-  } else {
-    for (let k = 0; k < roots.length; k++) {
-      total += val[roots[k]]
-      rootStruct += subtreeSize[roots[k]]
-      considered += subtreeSize[roots[k]]
-    }
-  }
-  const degraded = !(total > 0)
 
   // Pack the children of `pi` (or the roots when pi === -1) into [px, px+pw].
   function packInto(pi, px, pw, pf, depthRow) {
@@ -459,7 +530,9 @@ export function buildFlameLayout({
   // Row 0 is the focus (full width) or the roots.
   rowStart[0] = 0
   if (view >= 0) {
-    frames.push({ i: view, x: 0, w: canvasW, d: 0, p: -1, m: 0, mv: val[view], s: degraded ? 1 : 0 })
+    // Structural styling tracks whether THIS width is a real cost, not whether
+    // the metric exists somewhere in the trace.
+    frames.push({ i: view, x: 0, w: canvasW, d: 0, p: -1, m: 0, mv: val[view], s: scaleZero ? 1 : 0 })
     drawn++
   } else {
     packInto(-1, 0, canvasW, -1, 0)
@@ -508,8 +581,8 @@ export function buildFlameLayout({
   rowStart.length = rowCount
   rowStart.push(frames.length)
 
-  // Reachable when a threshold filters out every root: report the accounting so
-  // the caller can say "nothing matches" instead of drawing a 0-height canvas.
+  // Reachable when the noise floor filters out every root: report the accounting
+  // so the caller can say "nothing matches" instead of drawing a 0-height canvas.
   const hidden = Math.max(0, considered - filteredOut - drawn - mergedMembers)
   return {
     frames, rowStart, rowCount, contentH: rowCount * PITCH,
@@ -520,72 +593,101 @@ export function buildFlameLayout({
 
 /* ------------------------------ presentation ------------------------------ */
 
-function fmtMetric(v, metric) {
-  if (metric === 'memory' || metric === 'network') return fmtBytes(v)
-  return fmtMs(v)
+// Labels are computed, never measured: CHAR_PX over-estimates the advance of an
+// 11px mono glyph, so a label can never overflow its frame. No
+// getComputedTextLength, no clipPath, no textLength — zero layout thrash.
+// Widest-that-fits ladder: fully qualified, then class-qualified, then the bare
+// method. Middle-ellipsising a namespace spends characters that carry nothing.
+function frameText(tree, i, maxChars) {
+  const fn = tree.name[i]
+  const cls = tree.cls[i]
+  if (!cls) return middleEllipsis(fn, maxChars)
+  const full = `${cls}::${fn}`
+  if (full.length <= maxChars) return full
+  const short = `${cls.slice(cls.lastIndexOf('\\') + 1)}::${fn}`
+  if (short.length <= maxChars) return short
+  return middleEllipsis(fn, maxChars)
 }
 
-// Labels are computed, never measured: CHAR_PX over-estimates the advance of
-// 11px mono, so a label can never overflow its frame. No getComputedTextLength,
-// no clipPath, no textLength — zero layout thrash.
-function frameLabel(f, tree, metric) {
-  const maxChars = Math.floor((f.w - LABEL_PAD) / CHAR_PX)
-  if (maxChars < 2) return ''
-  let s = f.m > 0
-    ? (f.w >= VALUE_LABEL_PX ? `⋯ ${f.m} frames merged` : `⋯ ${f.m}`)
-    : tree.name[f.i]
-  if (f.m === 0 && f.w >= VALUE_LABEL_PX && f.mv > 0) s = `${s} · ${fmtMetric(f.mv, metric)}`
-  if (s.length > maxChars) s = `${s.slice(0, Math.max(1, maxChars - 1))}…`
-  return s
+function symbolOf(tree, i) {
+  const cls = tree.cls[i]
+  return cls ? `${cls}::${tree.name[i]}` : tree.name[i]
+}
+
+function srcOf(tree, i) {
+  const file = tree.file[i]
+  if (!file) return ''
+  const base = file.slice(file.lastIndexOf('/') + 1)
+  return tree.line[i] ? `${base}:${tree.line[i]}` : base
 }
 
 // The frame layer carries NO event handlers and is memoized, so a mouse sweep
 // re-renders the tooltip and one overlay rect — never these 6000 rects.
+// Labels are emitted after every rect so no frame can paint over a neighbour's
+// text.
 const FlameFrames = React.memo(function FlameFrames({ frames, tree, metric }) {
-  const out = []
+  const rects = []
+  const labels = []
   for (let k = 0; k < frames.length; k++) {
     const f = frames[k]
     const y = f.d * PITCH
-    const tcls = f.m > 0 ? 'is-merged' : `t-${tree.type[f.i]}`
-    out.push(
+    const merged = f.m > 0
+    const op = merged ? OP_MERGED : tree.type[f.i]
+    rects.push(
       <rect
         key={k}
-        className={`fg-f ${tcls}${f.s ? ' is-struct' : ''}`}
+        className={`fg-f${f.s ? ' is-struct' : ''}`}
+        style={paintOf(op)}
         x={f.x}
         y={y}
         width={f.w}
         height={ROW_H}
       />
     )
-    if (f.w >= MIN_LABEL_PX) {
-      const label = frameLabel(f, tree, metric)
-      if (label) {
-        out.push(
-          <text key={`t${k}`} className={`fg-t ${tcls}`} x={f.x + LABEL_PAD / 2} y={y + ROW_H / 2}>
-            {label}
-          </text>
-        )
-      }
+    if (f.w < MIN_LABEL_PX) continue
+    const maxChars = Math.floor((f.w - LABEL_PAD) / CHAR_PX)
+    if (maxChars < 3) continue
+    // The value only earns its space on a wide frame, and never in structure
+    // mode where the width is a node count rather than a cost.
+    let val = ''
+    if (!merged && f.s === 0 && f.w >= VALUE_LABEL_PX && f.mv > 0) {
+      const v = fmtMetric(metric, f.mv)
+      if (maxChars - v.length - 2 >= 8) val = v
     }
+    const budget = val ? maxChars - val.length - 2 : maxChars
+    const text = merged
+      ? (f.w >= VALUE_LABEL_PX ? `⋯ ${fmtNum(f.m)} frames merged` : `⋯ ${fmtNum(f.m)}`)
+      : frameText(tree, f.i, budget)
+    labels.push(
+      <text
+        key={`t${k}`}
+        className={`fg-t${merged ? ' is-merged' : ''}`}
+        x={f.x + LABEL_PAD / 2}
+        y={y + ROW_H / 2}
+      >
+        {text}
+        {val ? <tspan className="fg-tv" dx={6}>{val}</tspan> : null}
+      </text>
+    )
   }
-  return <g className="fg-frames">{out}</g>
+  return <g className="fg-frames">{rects}{labels}</g>
 })
 
-function TipRow({ k, v, mono }) {
+function TipRow({ k, v }) {
   return (
     <div className="fg-tip-row">
-      <span className="k">{k}</span>
-      <span className={mono ? 'v p' : 'p'}>{v}</span>
+      <span className="fg-tip-k">{k}</span>
+      <span className="fg-tip-v opa-mono opa-tnum">{v}</span>
     </div>
   )
 }
 
-function FlameGraph({ callStack, width = 800, height = 600 }) {
-  const [metric, setMetric] = useState('duration')
-  const [filters, setFilters] = useState({ enabled: false, thresholds: {} })
-  const [filtersOpen, setFiltersOpen] = useState(false)
+function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, onMetricChange }) {
+  const [ownMetric, setOwnMetric] = useState('duration')
+  const [minPct, setMinPct] = useState(0)
   const [zoom, setZoom] = useState({ tree: null, path: EMPTY_PATH })
   const [hover, setHover] = useState(null)
+  const [boxW, setBoxW] = useState(0)
 
   const hostRef = useRef(null)
   const scrollRef = useRef(null)
@@ -593,25 +695,93 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
   const rafRef = useRef(0)
   const ptRef = useRef(null)
 
+  // `metric` is OPTIONAL. TraceDetail owns ONE metric selector for the whole
+  // Profile panel, so when it passes the prop the internal <select> disappears;
+  // without the prop the component stays self-managed (ProfilingView,
+  // ProfileComparison). onMetricChange works in both modes.
+  const controlled = metricProp !== undefined
+  const wanted = controlled ? metricProp : ownMetric
+  const metric = IS_METRIC[wanted] ? wanted : 'duration'
+  const metricLabel = METRIC_LABELS[metric] || METRIC_LABELS.duration
+  const setMetric = (m) => {
+    if (!controlled) setOwnMetric(m)
+    if (onMetricChange) onMetricChange(m)
+  }
+
   const tree = useMemo(() => normalizeCallStack(callStack), [callStack])
   // Tokenizing the zoom path by the tree object invalidates stale node indices
   // when `callStack` changes — no reset effect, no double render, no StrictMode
   // hazard.
   const path = zoom.tree === tree ? zoom.path : EMPTY_PATH
   const focus = path.length ? path[path.length - 1] : -1
-  const threshold = filters.enabled ? num(filters.thresholds && filters.thresholds.duration) : 0
 
-  const canvasW = useMemo(() => Math.max(MIN_CANVAS_W, Math.floor(width) - GUTTER), [width])
-  const viewportH = useMemo(() => Math.max(180, Math.min(Math.floor(height), 2400)), [height])
+  // Measure the real box: ProfilingView/TraceDetail pass their measured width,
+  // but ProfileComparison measures the OUTER split and hands the same number to
+  // both halves. Taking the smaller of prop and reality keeps the SVG inside its
+  // container instead of overflowing (or being squashed by a viewBox stretch,
+  // which blurs every label).
+  useEffect(() => {
+    const el = hostRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth
+      setBoxW((prev) => (Math.abs(prev - w) >= 1 ? w : prev))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const canvasW = useMemo(() => {
+    const propW = Number.isFinite(width) && width > 0 ? Math.floor(width) : 0
+    const avail = boxW > 0 && propW > 0 ? Math.min(propW, boxW) : (boxW || propW)
+    return Math.max(MIN_CANVAS_W, avail - GUTTER)
+  }, [width, boxW])
+  const boxH = useMemo(() => Math.max(200, Math.min(Math.floor(height) || 0, 2400)), [height])
+
   const layout = useMemo(
-    () => buildFlameLayout({ tree, metric, threshold, focus, canvasW }),
-    [tree, metric, threshold, focus, canvasW]
+    () => buildFlameLayout({ tree, metric, minPct, focus, canvasW }),
+    [tree, metric, minPct, focus, canvasW]
   )
-  const crumbs = useMemo(() => path.map((i) => tree.name[i] || 'unknown'), [path, tree])
-  const legendTypes = useMemo(
-    () => OP_ORDER.filter((t) => tree.typesPresent.has(t)),
+
+  const crumbs = useMemo(() => path.map((i) => symbolOf(tree, i)), [path, tree])
+  const legend = useMemo(
+    () => TYPE_ORDER.map((_t, i) => i).concat(OP_NONE).filter((op) => tree.typesPresent.has(op)),
     [tree]
   )
+  // Σ|value| per metric — the honest "was this recorded?" test. |Σ| cannot be
+  // used: memory/network are signed deltas whose sum cancels to 0 on real data.
+  const hasData = useMemo(() => {
+    const out = { duration: 0, cpu: 0, io: 0, memory: 0, network: 0 }
+    for (let i = 0; i < tree.n; i++) {
+      out.duration += Math.abs(tree.dur[i])
+      out.cpu += Math.abs(tree.cpu[i])
+      out.io += Math.abs(tree.io[i])
+      out.memory += Math.abs(tree.memDelta[i])
+      out.network += Math.abs(tree.netSent[i]) + Math.abs(tree.netRecv[i])
+    }
+    return out
+  }, [tree])
+
+  const hf = hover && hover.lay === layout && hover.f < layout.frames.length
+    ? layout.frames[hover.f]
+    : null
+
+  // Every OTHER occurrence of the hovered symbol, outlined: the one question a
+  // flame graph cannot otherwise answer is "where else does this run?".
+  const echo = useMemo(() => {
+    if (!hf || hf.m > 0) return EMPTY_ARR
+    const fn = tree.name[hf.i]
+    const cls = tree.cls[hf.i]
+    const out = []
+    const frames = layout.frames
+    for (let k = 0; k < frames.length && out.length < ECHO_CAP; k++) {
+      if (k === hover.f) continue
+      const g = frames[k]
+      if (g.m > 0) continue
+      if (tree.name[g.i] === fn && tree.cls[g.i] === cls) out.push(g)
+    }
+    return out
+  }, [hf, hover, layout, tree])
 
   useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }, [])
 
@@ -629,20 +799,26 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
   const hoverFrameIdx = (fi) => {
     if (fi < 0 || fi >= layout.frames.length) return
     const f = layout.frames[fi]
-    const anchorX = f.x + Math.min(f.w / 2, 60)
-    const anchorY = f.d * PITCH + ROW_H
-    let mx = anchorX
-    let my = anchorY
-    const svg = svgRef.current
-    const host = hostRef.current
-    if (svg && host) {
-      const r = svg.getBoundingClientRect()
-      const hr = host.getBoundingClientRect()
-      mx = r.left - hr.left + anchorX * (r.width / canvasW)
-      my = r.top - hr.top + anchorY * (r.height / (layout.contentH || 1))
-    }
+    // Scroll BEFORE measuring: scrollTop applies synchronously, so the svg rect
+    // read below already reflects the row's final on-screen position.
     scrollRowIntoView(f.d)
-    setHover({ lay: layout, f: fi, mx, my })
+    const host = hostRef.current
+    const svg = svgRef.current
+    let mx = f.x
+    let my = f.d * PITCH + ROW_H
+    let hw = 0
+    let hh = 0
+    if (host) {
+      const hr = host.getBoundingClientRect()
+      hw = hr.width
+      hh = hr.height
+      if (svg) {
+        const r = svg.getBoundingClientRect()
+        mx = r.left - hr.left + f.x + Math.min(f.w / 2, 80)
+        my = r.top - hr.top + f.d * PITCH + ROW_H
+      }
+    }
+    setHover({ lay: layout, f: fi, mx, my, hw, hh })
   }
 
   // O(log n) hit test: rows are contiguous slices of `frames` sorted by x
@@ -664,17 +840,14 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
     return vx <= f.x + f.w ? best : -1
   }
 
+  // The SVG is rendered at 1:1 CSS pixels (no viewBox stretch), so client
+  // offsets ARE canvas coordinates.
   const toCanvas = (clientX, clientY) => {
     const svg = svgRef.current
     if (!svg) return null
     const r = svg.getBoundingClientRect()
     if (!r.width || !r.height) return null
-    return {
-      vx: (clientX - r.left) * (canvasW / r.width),
-      vy: (clientY - r.top) * (layout.contentH / r.height),
-      hx: clientX,
-      hy: clientY,
-    }
+    return { vx: clientX - r.left, vy: clientY - r.top }
   }
 
   // Mouse moves are coalesced into one setHover per animation frame, so a fast
@@ -691,8 +864,15 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
       const fi = hitTest(c.vx, c.vy)
       if (fi < 0) { setHover(null); return }
       const host = hostRef.current
-      const hr = host ? host.getBoundingClientRect() : { left: 0, top: 0 }
-      setHover({ lay: layout, f: fi, mx: pt.clientX - hr.left, my: pt.clientY - hr.top })
+      const hr = host ? host.getBoundingClientRect() : null
+      setHover({
+        lay: layout,
+        f: fi,
+        mx: hr ? pt.clientX - hr.left : 0,
+        my: hr ? pt.clientY - hr.top : 0,
+        hw: hr ? hr.width : 0,
+        hh: hr ? hr.height : 0,
+      })
     })
   }
 
@@ -716,6 +896,8 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
 
   const onDoubleClick = () => { if (path.length) setPath(path.slice(0, -1)) }
 
+  // Scoped to the SVG, never to window: ProfileComparison mounts two of these
+  // side by side and a window listener would drive both at once.
   const onKeyDown = (e) => {
     const fi = hover && hover.lay === layout ? hover.f : -1
     if (e.key === 'Escape') {
@@ -726,7 +908,7 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
       if (path.length) { e.preventDefault(); setPath(EMPTY_PATH) }
       return
     }
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === ' ') {
       if (fi >= 0) { e.preventDefault(); setPath([...path, layout.frames[fi].i]) }
       return
     }
@@ -759,197 +941,282 @@ function FlameGraph({ callStack, width = 800, height = 600 }) {
   }
 
   if (tree.n === 0) {
-    return <div className="fg-empty">No call stack data available for flame graph</div>
+    return (
+      <EmptyState
+        title="No call stack to draw"
+        hint="This trace carries no profiler frames — enable the OPA profiler to record one."
+      />
+    )
   }
 
-  const hf = hover && hover.lay === layout && hover.f < layout.frames.length ? layout.frames[hover.f] : null
-  const metricLabel = METRIC_LABEL[metric] || 'Duration'
+  /* ---- derived render data ---- */
 
-  // Self time is computed on demand for the one hovered node (O(childCount)),
+  const structural = layout.degraded
+  const otherMetrics = METRIC_KEYS.filter((k) => k !== metric && hasData[k] > 0)
+  const deeper = tree.maxDepth + 1 > layout.rowCount
+
+  // Self cost is computed on demand for the one hovered node (O(childCount)),
   // not precomputed for all n.
-  let selfMs = 0
-  let hoverChildren = 0
-  let hoverTitle = ''
+  let tipRows = EMPTY_ARR
+  let tipHint = ''
+  let tipHead = null
+  let srText = ''
   if (hf) {
-    let kidsDur = 0
-    for (let c = tree.firstChild[hf.i]; c !== -1; c = tree.nextSib[c]) { kidsDur += tree.dur[c]; hoverChildren++ }
-    selfMs = Math.max(0, tree.dur[hf.i] - kidsDur)
-    hoverTitle = hf.m > 0
-      ? `${hf.m} frames merged (widest: ${tree.name[hf.i]})`
-      : `${tree.name[hf.i]} — ${fmtMetric(hf.mv, metric)}`
+    const i = hf.i
+    if (hf.m > 0) {
+      tipRows = [
+        ['Merged', `${fmtNum(hf.m)} frames`],
+        [metricLabel, structural ? '—' : fmtMetric(metric, hf.mv)],
+        ['Widest', middleEllipsis(symbolOf(tree, i), 34)],
+      ]
+      tipHint = 'click to drill into the widest member'
+      srText = `${hf.m} merged frames, widest ${symbolOf(tree, i)}`
+    } else {
+      let kids = 0
+      let kidsDur = 0
+      for (let c = tree.firstChild[i]; c !== -1; c = tree.nextSib[c]) { kidsDur += tree.dur[c]; kids++ }
+      const self = Math.max(0, tree.dur[i] - kidsDur)
+      const rows = []
+      // Always state the selected metric, even when it was never recorded —
+      // omitting the row entirely left no way to see which metric was active.
+      rows.push([metricLabel, structural ? 'not recorded' : fmtMetric(metric, hf.mv)])
+      if (!structural && layout.total > 0) {
+        rows.push(['Share of view', fmtPct((hf.mv / layout.total) * 100, 2)])
+      }
+      if (metric !== 'duration') rows.push(['Wall time', fmtMs(tree.dur[i])])
+      rows.push(['Self (wall)', fmtMs(self)])
+      if (tree.cpu[i] > 0 && metric !== 'cpu') rows.push(['CPU time', fmtMs(tree.cpu[i])])
+      if (tree.io[i] > 0 && metric !== 'io') rows.push(['I/O wait', fmtMs(tree.io[i])])
+      if (tree.memDelta[i] !== 0 && metric !== 'memory') rows.push(['Memory', fmtBytes(tree.memDelta[i])])
+      if ((tree.netSent[i] > 0 || tree.netRecv[i] > 0) && metric !== 'network') {
+        rows.push(['Network', `↑${fmtBytes(tree.netSent[i])} ↓${fmtBytes(tree.netRecv[i])}`])
+      }
+      rows.push(['Children / subtree', `${fmtNum(kids)} / ${fmtNum(tree.subtreeSize[i])}`])
+      const src = srcOf(tree, i)
+      if (src) rows.push(['Source', middleEllipsis(src, 32)])
+      tipRows = rows
+      if (hf.s === 1) tipHint = 'width shows subtree size — not to scale'
+      else if (echo.length > 0) tipHint = `${fmtNum(echo.length)} other occurrence${echo.length === 1 ? '' : 's'} outlined`
+      tipHead = symbolOf(tree, i)
+      srText = `${tipHead}, ${structural ? 'no data' : fmtMetric(metric, hf.mv)}, depth ${hf.d}`
+    }
   }
-  const hostW = hostRef.current ? hostRef.current.clientWidth : 0
-  const tipFlip = hf && hostW > 0 && hover.mx > hostW / 2
+
+  const tipOp = hf ? (hf.m > 0 ? OP_MERGED : tree.type[hf.i]) : OP_NONE
+  let tipStyle = null
+  if (hf && hover) {
+    // Clamped inside the host box on both axes, and the box clips whatever a
+    // height estimate gets wrong, so the tip can never escape the panel.
+    const hw = hover.hw || 0
+    const hh = hover.hh || 0
+    const est = TIP_CHROME_H + tipRows.length * TIP_ROW_H + (tipHint ? 16 : 0)
+    const tw = Math.min(TIP_W, Math.max(150, hw - TIP_EDGE * 2))
+    let left = hover.mx + 14
+    if (left + tw > hw - TIP_EDGE) left = hover.mx - 14 - tw
+    if (left < TIP_EDGE) left = Math.max(TIP_EDGE, Math.min(hover.mx + 14, hw - tw - TIP_EDGE))
+    let top = hover.my + 16
+    if (top + est > hh - TIP_EDGE) top = hover.my - est - 12
+    if (top < TIP_EDGE) top = Math.max(TIP_EDGE, hh - est - TIP_EDGE)
+    tipStyle = { left, top, width: tw }
+  }
+
+  const ariaLabel = `Icicle graph of ${fmtNum(layout.drawn)} frames over ${layout.rowCount} levels, width proportional to ${metricLabel.toLowerCase()}. Arrow keys move between frames, Enter zooms, Escape returns.`
 
   return (
-    <div className="fg-root" ref={hostRef}>
-      <div className="fg-bar">
-        <select
-          className="opa-select fg-metric"
-          value={metric}
-          onChange={(e) => setMetric(e.target.value)}
-          aria-label="Flame graph metric"
-        >
-          {METRICS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-        </select>
-        <button
-          type="button"
-          className={`opa-btn ghost fg-filter-btn${filtersOpen ? ' is-on' : ''}`}
-          onClick={() => setFiltersOpen((v) => !v)}
-          aria-expanded={filtersOpen}
-        >
-          <FiFilter size={12} />
-          {threshold > 0 ? <span className="opa-badge">{`≥ ${threshold} ms`}</span> : 'Filter'}
-        </button>
-        {path.length > 0 && (
-          <div className="fg-crumbs">
-            <button type="button" className="fg-crumb" onClick={() => setPath(EMPTY_PATH)}>
-              {crumbs.length > 4 ? '…' : 'Root'}
-            </button>
-            {crumbs.slice(Math.max(0, crumbs.length - 4)).map((c, k, arr) => {
-              const depthIdx = Math.max(0, crumbs.length - 4) + k + 1
-              return (
-                <React.Fragment key={`${depthIdx}:${c}`}>
-                  <span className="fg-crumb-sep">›</span>
-                  <button
-                    type="button"
-                    className={`fg-crumb${k === arr.length - 1 ? ' is-current' : ''}`}
-                    onClick={() => setPath(path.slice(0, depthIdx))}
-                    title={c}
-                  >
-                    {c}
-                  </button>
-                </React.Fragment>
-              )
-            })}
-            <button type="button" className="opa-btn ghost fg-reset" onClick={() => setPath(EMPTY_PATH)}>
-              <FiRotateCcw size={12} /> Reset
-            </button>
+    <div className="fg-root" ref={hostRef} style={{ maxHeight: boxH }}>
+      {structural && (
+        <div className="opa-prof-notice warn">
+          <FiAlertTriangle aria-hidden="true" />
+          <div>
+            <strong>{metricLabel}</strong> is zero on every frame of this trace, so bar widths show
+            <strong> subtree size</strong> instead of cost. The shape is real; the scale is not.
           </div>
-        )}
-        <span className="fg-spacer" />
-        <span className="fg-status">
-          {fmtNum(layout.drawn)} frames · {layout.rowCount} rows
-          {tree.maxDepth + 1 > layout.rowCount ? ` of ${tree.maxDepth + 1}` : ''}
-        </span>
-      </div>
-
-      <div className="fg-notes">
-        <span className="fg-legend">
-          {legendTypes.map((t) => (
-            <span key={t}><span className={`fg-sw t-${t}`} />{OP_LABEL[t]}</span>
-          ))}
-        </span>
-        {layout.degraded && (
-          <span
-            className="opa-badge fg-warn"
-            title="Every value for this metric is zero, so widths show subtree size instead of cost."
-          >
-            <FiAlertTriangle size={11} /> structure only — no {metricLabel.toLowerCase()} data
-          </span>
-        )}
-        {layout.mergedMembers > 0 && (
-          <span>{fmtNum(layout.mergedMembers)} frames merged into {layout.runCount} slivers — click a sliver or zoom in</span>
-        )}
-        {layout.hidden > 0 && <span>{fmtNum(layout.hidden)} frames hidden</span>}
-        {layout.truncated && (
-          <span className="fg-note-warn">depth truncated at {layout.rowCount} rows — zoom into a deep frame to continue</span>
-        )}
-        {layout.filteredOut > 0 && <span>{fmtNum(layout.filteredOut)} filtered out</span>}
-        {tree.cyclesCut > 0 && (
-          <span className="fg-note-warn">{tree.cyclesCut} cyclic parent link{tree.cyclesCut > 1 ? 's' : ''} cut</span>
-        )}
-        {tree.truncatedDepth && <span className="fg-note-warn">input nested past {MAX_TREE_DEPTH} levels — deeper nodes dropped</span>}
-      </div>
-
-      {filtersOpen && (
-        <div className="fg-filters">
-          <TraceTabFilters onFiltersChange={setFilters} availableFilters={['duration']} />
+          {otherMetrics.length > 0 && (
+            <div className="opa-prof-notice-actions">
+              {otherMetrics.map((k) => (
+                <button key={k} type="button" className="opa-prof-mini" onClick={() => setMetric(k)}>
+                  Show {METRIC_LABELS[k]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {tree.cyclesCut > 0 && (
+        <div className="opa-prof-notice">
+          <FiInfo aria-hidden="true" />
+          <div>
+            {fmtNum(tree.cyclesCut)} cyclic parent link{tree.cyclesCut === 1 ? '' : 's'} cut — the collector
+            has no cycle guard, so the affected calls are drawn as extra roots.
+          </div>
+        </div>
+      )}
+      {tree.truncatedDepth && (
+        <div className="opa-prof-notice">
+          <FiInfo aria-hidden="true" />
+          <div>Input nested past {fmtNum(MAX_TREE_DEPTH)} levels; deeper calls were dropped before layout.</div>
         </div>
       )}
 
-      <div className="fg-canvas" ref={scrollRef} style={{ maxHeight: viewportH }}>
-        <svg
-          ref={svgRef}
-          className="fg-svg"
-          tabIndex={0}
-          role="img"
-          aria-label={`Icicle graph: ${layout.drawn} frames across ${layout.rowCount} rows, ${metricLabel} by width`}
-          width={canvasW}
-          height={layout.contentH}
-          viewBox={`0 0 ${canvasW} ${layout.contentH}`}
-          preserveAspectRatio="none"
-          style={{ width: '100%', height: layout.contentH }}
-          onMouseMove={onMouseMove}
-          onMouseLeave={onMouseLeave}
-          onClick={onClick}
-          onDoubleClick={onDoubleClick}
-          onKeyDown={onKeyDown}
-        >
-          <FlameFrames frames={layout.frames} tree={tree} metric={metric} />
-          {hf && (
-            <g className="fg-overlay">
-              <line
-                className="fg-guide"
-                x1={0}
-                x2={canvasW}
-                y1={hf.d * PITCH + ROW_H + 0.5}
-                y2={hf.d * PITCH + ROW_H + 0.5}
-              />
-              <rect className="fg-hi" x={hf.x} y={hf.d * PITCH} width={hf.w} height={ROW_H}>
-                <title>{hoverTitle}</title>
-              </rect>
-            </g>
-          )}
-        </svg>
-
-        {hf && (
+      <div className="fg-bar">
+        {!controlled && (
+          <label className="opa-prof-field">
+            Metric
+            <select className="opa-select" value={metric} onChange={(e) => setMetric(e.target.value)}>
+              {METRIC_KEYS.map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
+            </select>
+          </label>
+        )}
+        {!structural && (
           <div
-            className="fg-tip"
-            style={
-              tipFlip
-                ? { right: `${Math.max(8, hostW - hover.mx + 12)}px`, top: `${hover.my + 12}px` }
-                : { left: `${hover.mx + 12}px`, top: `${hover.my + 12}px` }
-            }
+            className="fg-floor"
+            title={`Hide frames worth less than this share of the ${metricLabel.toLowerCase()} in view. A parent stays whenever any descendant passes.`}
           >
-            {hf.m > 0 ? (
-              <>
-                <TipRow k="Merged" v={`${hf.m} frames`} />
-                <TipRow k="Total" v={fmtMetric(hf.mv, metric)} mono />
-                <TipRow k="Widest" v={tree.name[hf.i]} mono />
-                <div className="fg-tip-hint">click to drill in</div>
-              </>
-            ) : (
-              <>
-                <TipRow k="Function" v={tree.name[hf.i]} mono />
-                {tree.type[hf.i] !== 'none' && <TipRow k="Type" v={OP_LABEL[tree.type[hf.i]]} />}
-                {tree.cls[hf.i] && <TipRow k="Class" v={tree.cls[hf.i]} mono />}
-                {tree.file[hf.i] && (
-                  <TipRow k="File" v={tree.line[hf.i] ? `${tree.file[hf.i]}:${tree.line[hf.i]}` : tree.file[hf.i]} mono />
-                )}
-                {metric !== 'duration' && <TipRow k={metricLabel} v={fmtMetric(hf.mv, metric)} mono />}
-                <TipRow k="Total" v={fmtMs(tree.dur[hf.i])} mono />
-                <TipRow k="Self" v={fmtMs(selfMs)} mono />
-                {tree.cpu[hf.i] > 0 && <TipRow k="CPU" v={fmtMs(tree.cpu[hf.i])} mono />}
-                {tree.memDelta[hf.i] !== 0 && <TipRow k="Memory" v={fmtBytes(tree.memDelta[hf.i])} mono />}
-                {(tree.netSent[hf.i] > 0 || tree.netRecv[hf.i] > 0) && (
-                  <TipRow
-                    k="Network"
-                    v={`↑${fmtBytes(tree.netSent[hf.i])} ↓${fmtBytes(tree.netRecv[hf.i])}`}
-                    mono
-                  />
-                )}
-                {layout.total > 0 && (
-                  <TipRow k="% of view" v={`${((hf.mv / layout.total) * 100).toFixed(2)}%`} mono />
-                )}
-                <TipRow k="children" v={fmtNum(hoverChildren)} mono />
-                <TipRow k="subtree" v={`${fmtNum(tree.subtreeSize[hf.i])} frames`} mono />
-                {hf.s === 1 && <div className="fg-tip-hint">width shows subtree size — not to scale</div>}
-              </>
-            )}
+            <span className="opa-prof-field">Floor</span>
+            <SegmentedControl options={NOISE_FLOORS} value={minPct} onChange={setMinPct} />
           </div>
         )}
+
+        <div className="fg-crumbs">
+          <button
+            type="button"
+            className={`opa-prof-crumb${path.length === 0 ? ' is-focus' : ''}`}
+            onClick={() => setPath(EMPTY_PATH)}
+            title="Zoom out to the whole trace"
+          >
+            Whole trace
+          </button>
+          {crumbs.length > CRUMB_TAIL && <span className="opa-prof-crumb-sep">…</span>}
+          {crumbs.slice(Math.max(0, crumbs.length - CRUMB_TAIL)).map((c, k, arr) => {
+            const depthIdx = Math.max(0, crumbs.length - CRUMB_TAIL) + k + 1
+            const last = k === arr.length - 1
+            return (
+              <React.Fragment key={`${depthIdx}:${c}`}>
+                <FiChevronRight className="opa-prof-crumb-sep" size={11} aria-hidden="true" />
+                <button
+                  type="button"
+                  className={`opa-prof-crumb${last ? ' is-focus' : ''}`}
+                  onClick={() => setPath(path.slice(0, depthIdx))}
+                  title={c}
+                  aria-current={last ? 'true' : undefined}
+                >
+                  {middleEllipsis(c, 28)}
+                </button>
+              </React.Fragment>
+            )
+          })}
+        </div>
+
+        <div className="fg-meta">
+          {legend.map((op) => (
+            <span key={op} className="fg-legend-item">
+              <span className="fg-sw" style={swatchOf(op)} />
+              {typeLabel(TYPE_ORDER[op])}
+            </span>
+          ))}
+          <span className="opa-muted opa-tnum fg-count">
+            {fmtNum(layout.drawn)} frames · {layout.rowCount}
+            {deeper ? ` of ${fmtNum(tree.maxDepth + 1)}` : ''} levels
+          </span>
+        </div>
       </div>
+
+      <div className="fg-plot">
+        <div className="fg-axis" style={{ width: canvasW }} aria-hidden="true">
+          {structural ? (
+            <span className="fg-tick is-first">width = subtree size</span>
+          ) : AXIS_FRACS.map((fr, k) => (
+            <span
+              key={fr}
+              className={`fg-tick${k === 0 ? ' is-first' : ''}${k === AXIS_FRACS.length - 1 ? ' is-last' : ''}`}
+              style={k === 0 || k === AXIS_FRACS.length - 1 ? undefined : { left: `${fr * 100}%` }}
+            >
+              {/* fmtMs(0) is "0µs", which reads as a measurement rather than an origin */}
+              {fr === 0 ? '0' : fmtMetric(metric, layout.total * fr)}
+            </span>
+          ))}
+        </div>
+
+        <div className="fg-canvas" ref={scrollRef}>
+          {layout.frames.length === 0 ? (
+            <EmptyState
+              title="Nothing passes the floor"
+              hint={`No frame reaches ${minPct}% of the ${metricLabel.toLowerCase()} in view. Lower the floor to see the rest.`}
+            />
+          ) : (
+            <svg
+              ref={svgRef}
+              className="fg-svg"
+              tabIndex={0}
+              role="img"
+              aria-label={ariaLabel}
+              aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Enter Escape"
+              width={canvasW}
+              height={layout.contentH}
+              viewBox={`0 0 ${canvasW} ${layout.contentH}`}
+              onMouseMove={onMouseMove}
+              onMouseLeave={onMouseLeave}
+              onClick={onClick}
+              onDoubleClick={onDoubleClick}
+              onKeyDown={onKeyDown}
+              onBlur={() => setHover(null)}
+            >
+              {!structural && GRID_FRACS.map((fr) => (
+                <line
+                  key={fr}
+                  className="fg-grid"
+                  x1={Math.round(canvasW * fr) + 0.5}
+                  x2={Math.round(canvasW * fr) + 0.5}
+                  y1={0}
+                  y2={layout.contentH}
+                />
+              ))}
+              <FlameFrames frames={layout.frames} tree={tree} metric={metric} />
+              {hf && (
+                <g className="fg-overlay">
+                  {echo.map((g, k) => (
+                    <rect key={k} className="fg-echo" x={g.x} y={g.d * PITCH} width={g.w} height={ROW_H} />
+                  ))}
+                  <rect className="fg-hi" x={hf.x} y={hf.d * PITCH} width={hf.w} height={ROW_H} />
+                </g>
+              )}
+            </svg>
+          )}
+        </div>
+      </div>
+
+      <div className="opa-prof-foot fg-foot">
+        {layout.mergedMembers > 0 && (
+          <span>
+            {fmtNum(layout.mergedMembers)} sub-pixel frames folded into {fmtNum(layout.runCount)} slivers.
+          </span>
+        )}
+        {layout.filteredOut > 0 && <span>{fmtNum(layout.filteredOut)} below the floor.</span>}
+        {layout.hidden > 0 && <span>{fmtNum(layout.hidden)} too thin to place.</span>}
+        {layout.truncated && (
+          <span className="opa-prof-warn">
+            Depth capped at {layout.rowCount} levels — zoom into a deep frame to continue.
+          </span>
+        )}
+        <span className="opa-prof-dim">Click a frame to zoom · Esc or double-click to go back · arrow keys to walk.</span>
+      </div>
+
+      {hf && tipStyle && (
+        <div className="fg-tip" style={tipStyle} aria-hidden="true">
+          {tipHead && (
+            <div className="fg-tip-head">
+              <span className="opa-prof-type fg-tip-type" style={{ color: OP_HUES[tipOp + 2] }}>
+                {typeLabel(TYPE_ORDER[tipOp])}
+              </span>
+              <span className="opa-mono">{middleEllipsis(tipHead, 40)}</span>
+            </div>
+          )}
+          {tipRows.map(([k, v]) => <TipRow key={k} k={k} v={v} />)}
+          {tipHint && <div className="fg-tip-hint">{tipHint}</div>}
+        </div>
+      )}
+
+      <div className="fg-sr" aria-live="polite">{srText}</div>
     </div>
   )
 }

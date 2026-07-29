@@ -1,1848 +1,696 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react'
-import { Network } from 'vis-network'
-import TraceTabFilters from './TraceTabFilters'
+import React, { useCallback, useMemo, useState } from 'react'
+import {
+  FiAlertTriangle, FiCornerDownRight, FiCornerLeftUp, FiCrosshair, FiInfo, FiSearch, FiX,
+} from 'react-icons/fi'
+import { EmptyState, SegmentedControl } from './ui'
+import { fmtNum, fmtPct } from '../theme/format'
+import { DIFF_LABELS, METRICS, neighbours, shortestEntryPath } from '../utils/callGraphModel'
+import { TYPE_ORDER, typeFill, typeLabel } from '../utils/opTypes'
+import { EGO, layoutEgo } from '../utils/callGraphLayout'
+import useProfileModel from './profile/useProfileModel'
+import { METRIC_LABELS } from './profile/ProfileToolbar'
+import { fmtMetric, middleEllipsis } from './profile/HotSpots'
+
+// A hot symbol's callers are typically siblings in one namespace with the SAME
+// method name (App\Handler\MessageHandlerN::process), and a box label only has
+// ~16-24 characters. Middle-ellipsising those keeps the shared head and the
+// shared tail and throws away the one discriminating part, so several different
+// boxes render an identical label — which defeats the whole point of the view.
+// Drop the namespace instead (it is shared, therefore uninformative here) and
+// truncate from the LEFT so Class::method always survives intact.
+function boxLabel(key, max) {
+  let s = key == null ? '' : String(key)
+  const cut = Math.max(s.lastIndexOf('\\'), s.lastIndexOf('/'))
+  // Only strip a qualifier that sits on the CLASS side of the separator.
+  if (cut >= 0 && cut < s.length - 1) {
+    const method = s.indexOf('::')
+    if (method < 0 || cut < method) s = s.slice(cut + 1)
+  }
+  if (s.length <= max) return s
+  if (max <= 1) return '…'
+  return `…${s.slice(s.length - (max - 1))}`
+}
 import './CallGraph.css'
 
-// Metric type for different graph views
-const METRIC_TYPES = ['wall_time', 'io_wait', 'cpu', 'memory', 'network']
+/* ============================================================================
+   Call graph — an EGO view, not a drawing of the whole graph.
 
-// Helper function to normalize node data (handle both camelCase and snake_case, convert duration units)
-function normalizeNode(node) {
-  // Convert duration from milliseconds to seconds if needed (Blackfire uses seconds)
-  const duration = node.duration_ms || node.DurationMs || node.duration || 0
-  const durationInSeconds = duration > 1000 ? duration / 1000 : duration // Assume > 1000 is ms
-  
-  return {
-    id: node.id || node.call_id || node.CallID,
-    function: node.function || node.Function || node.name || 'unknown',
-    class: node.class || node.Class,
-    file: node.file || node.File,
-    line: node.line || node.Line,
-    duration: durationInSeconds,
-    memory_delta: node.memory_delta || node.MemoryDelta || 0,
-    cpu_time: node.cpu_ms ? node.cpu_ms / 1000 : (node.CPUMs ? node.CPUMs / 1000 : (node.cpu_time || node.cpu)),
-    io_wait_time: node.io_wait_time || node.io_wait,
-    wall_time: node.wall_time || node.wall_time_ms ? node.wall_time_ms / 1000 : durationInSeconds,
-    bytes_sent_delta: node.bytes_sent_delta || node.network_bytes_sent || node.NetworkBytesSent,
-    bytes_received_delta: node.bytes_received_delta || node.network_bytes_received || node.NetworkBytesReceived,
-    function_type: node.function_type !== undefined ? node.function_type : (node.FunctionType !== undefined ? node.FunctionType : -1),
-    children: node.children || []
-  }
+   A real PHP request aggregates to thousands of symbols and tens of thousands
+   of call sites; no layout of that fits the ~340px of usable canvas a 440px
+   panel gives you without zooming labels into illegibility. So this draws ONE
+   symbol with its callers above and its callees below, at scale 1, and makes
+   refocusing the primary interaction. Geometry lives in utils/callGraphLayout
+   (pure, unit-tested); this file owns typography, colour and interaction.
+
+   The model comes from useProfileModel -> callGraphModel, which rebuilds the
+   tree from parent_id. That is the whole point: the previous version read only
+   node.children, which mergeCallStacks never emits, so every node became a
+   childless root and the drawing degenerated into a star.
+   ========================================================================== */
+
+const DEPTHS = [{ value: 1, label: '1 hop' }, { value: 2, label: '2 hops' }]
+
+const PICKER_MODES = [
+  { value: 'all', label: 'All' },
+  { value: 'in', label: 'Callers' },
+  { value: 'out', label: 'Callees' },
+]
+
+// symDiff codes are DIFF_CODES order: no-change, improvement, degradation, new.
+// Tones match ProfileComparison's legend (ok / error / neutral) so the compare
+// view's legend describes something that is actually drawn.
+const DIFF_TONE = ['var(--neutral)', 'var(--ok)', 'var(--error)', 'var(--info)']
+
+const PICKER_ROWS = 200
+const CRUMB_CHARS = 22
+const NARROW = 480     // below this the control bar and the legend wrap
+const SUB_CHAR_W = 6.1 // 10px mono advance; keeps a value line inside its box
+
+// Chrome the SVG has to share the panel height with. Estimated from the width
+// rather than measured: measuring would make the drawing depend on layout
+// timing, and the view is meant to be reproducible from its inputs alone. The
+// estimate is deliberately generous — over-reserving costs a little canvas,
+// under-reserving pushes the drawing out of the panel.
+const CHROME_NOTICE = 42
+const CHROME_PAD = 10
+const MIN_CANVAS = 200 // layoutEgo's tightest depth-1 drawing is 190px
+
+// typeFill's neutral is a surface colour — invisible on a panel-coloured box.
+function tone(op) {
+  return op >= 0 ? typeFill(TYPE_ORDER[op]) : 'var(--neutral)'
 }
 
-// Format duration (expects milliseconds)
-function formatDuration(ms) {
-  if (ms < 1) return `${Math.round(ms * 1000)}µs`
-  if (ms < 1000) return `${Math.round(ms)}ms`
-  return `${(ms / 1000).toFixed(2)}s`
+// Namespace-stripped tail: the informative part of a PHP symbol in a breadcrumb.
+function shortKey(key) {
+  const s = String(key || '')
+  const cut = s.lastIndexOf('\\')
+  return cut === -1 ? s : s.slice(cut + 1)
 }
 
-// Format memory (bytes)
-function formatMemory(bytes) {
-  if (bytes === 0) return '0B'
-  if (Math.abs(bytes) < 1024) return `${bytes}B`
-  if (Math.abs(bytes) < 1024 * 1024) return `${(bytes / 1024).toFixed(2)}KB`
-  if (Math.abs(bytes) < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)}MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`
+// SVG text cannot be ellipsised by CSS, so value lines are cut to what fits.
+function fitSub(text, boxW) {
+  const max = Math.max(4, Math.floor((boxW - EGO.TEXT_X - 8) / SUB_CHAR_W))
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
 }
 
-// Format bytes
-function formatBytes(bytes) {
-  if (bytes === 0) return '0B'
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)}KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)}MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`
+function EgoNode({ n, label, lines, fill, diff, share, title, onSelect }) {
+  const inner = n.w - EGO.TEXT_X - 8
+  // A negligible-but-present cost keeps 1px, so "tiny" never reads as "absent".
+  const barW = share > 0 ? Math.max(1, Math.round(inner * Math.min(1, share) * 10) / 10) : 0
+  const nameY = n.isFocus ? 16 : 15
+  return (
+    <g
+      className={`opa-cg-node${n.isFocus ? ' is-focus' : ''}`}
+      transform={`translate(${n.x} ${n.y})`}
+      role="button"
+      tabIndex={0}
+      aria-label={title}
+      onClick={() => onSelect(n.sym)}
+      onKeyDown={(ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onSelect(n.sym) }
+      }}
+    >
+      <title>{title}</title>
+      <rect className="opa-cg-box" width={n.w} height={n.h} rx="5" />
+      <rect className="opa-cg-type" width="3" height={n.h} rx="1.5" style={{ fill }} />
+      {diff >= 0 && (
+        <rect className="opa-cg-diffmark" x={n.w - 3} width="3" height={n.h} rx="1.5" style={{ fill: DIFF_TONE[diff] }} />
+      )}
+      <text className="opa-cg-name" x={EGO.TEXT_X} y={nameY}>{label}</text>
+      {n.flag !== '' && (
+        <text className="opa-cg-flag" x={n.w - 8} y={nameY} textAnchor="end">{n.flag}</text>
+      )}
+      {lines.map((t, i) => (
+        <text key={i} className="opa-cg-sub" x={EGO.TEXT_X} y={(n.isFocus ? 31 : 28) + i * 13}>{t}</text>
+      ))}
+      <rect className="opa-cg-barbg" x={EGO.TEXT_X} y={n.h - 6} width={inner} height="2.5" rx="1.25" />
+      {barW > 0 && (
+        <rect className="opa-cg-bar" x={EGO.TEXT_X} y={n.h - 6} width={barW} height="2.5" rx="1.25" style={{ fill }} />
+      )}
+    </g>
+  )
 }
 
-// Get function type color
-function getFunctionTypeColor(functionType) {
-  switch (functionType) {
-    case 0: return '#4caf50' // Green for user functions
-    case 1: return '#ff9800' // Orange for internal functions
-    case 2: return '#2196f3' // Blue for methods
-    default: return '#757575' // Gray for unknown
-  }
-}
+function EgoGraph({ model, metric, onMetricChange, metricControlled, width, height }) {
+  const { graph, ranked, totals } = model
+  const W = Math.max(220, Math.floor(width) || 640)
 
-// Operation type -> color. Concrete hex values are required by vis-network,
-// so we mirror the CSS design tokens from src/index.css here:
-//   function -> --color-primary-blue   (#3b82f6)
-//   sql      -> --color-primary-purple (#8b5cf6)
-//   http     -> --color-primary-orange (#f59e0b)
-//   redis    -> --color-primary-red    (#ef4444)
-//   cache    -> --color-primary-green  (#10b981)
-const OPERATION_TYPE_COLORS = {
-  function: '#3b82f6', // var(--color-primary-blue)
-  sql: '#8b5cf6',      // var(--color-primary-purple)
-  http: '#f59e0b',     // var(--color-primary-orange)
-  redis: '#ef4444',    // var(--color-primary-red)
-  cache: '#10b981',    // var(--color-primary-green)
-}
+  const keyIndex = useMemo(() => {
+    const m = new Map()
+    for (let s = 0; s < graph.S; s++) m.set(graph.symKey[s], s)
+    return m
+  }, [graph])
 
-const OPERATION_TYPE_LABELS = {
-  function: 'Function',
-  sql: 'SQL',
-  http: 'HTTP',
-  redis: 'Redis',
-  cache: 'Cache',
-}
+  const [focusKey, setFocusKey] = useState(null)
+  const [history, setHistory] = useState([])
+  // null = auto: request the deepest ring and let layoutEgo clamp it to what
+  // the panel height actually fits. Defaulting to 1 wasted a tall panel — at
+  // 800px the drawing used ~390px while the band label still said "+8 more".
+  const [depthChoice, setDepthChoice] = useState(null)
+  const depth = depthChoice == null ? EGO.MAX_DEPTH : depthChoice
+  const [picker, setPicker] = useState(null) // null | 'all' | 'in' | 'out'
+  const [query, setQuery] = useState('')
 
-const OPERATION_TYPE_ORDER = ['function', 'sql', 'http', 'redis', 'cache']
+  // Focus is keyed by SYMBOL NAME, not index: a new trace or a different
+  // grouping renumbers the symbols, and a stale index would silently point at
+  // an unrelated function. An unknown key falls back to the hottest symbol, so
+  // the view is useful the moment it mounts.
+  const hottest = ranked.hotOrder.length > 0 ? ranked.hotOrder[0] : 0
+  const focus = focusKey != null && keyIndex.has(focusKey) ? keyIndex.get(focusKey) : hottest
+  const focusName = graph.symKey[focus]
 
-// Classify a node/group into an operation type using explicit type hints when
-// present, otherwise falling back to keyword detection on the signature.
-function getOperationType(source) {
-  if (!source) return 'function'
+  const noData = !totals.hasData[metric]
+  const selfM = graph.selfM[metric]
+  const inclM = graph.inclM[metric]
+  const valueOf = useCallback(
+    (sym) => (noData ? graph.callCount[sym] : Math.abs(selfM[sym])),
+    [graph, selfM, noData],
+  )
 
-  // Explicit type hint on the call data (e.g. node.type / node.op)
-  const explicit = (source.type || source.op || source.operation || '').toString().toLowerCase()
-  if (explicit) {
-    if (explicit.includes('sql') || explicit.includes('db') || explicit.includes('query')) return 'sql'
-    if (explicit.includes('http') || explicit.includes('curl')) return 'http'
-    if (explicit.includes('redis')) return 'redis'
-    if (explicit.includes('cache')) return 'cache'
-    if (OPERATION_TYPE_COLORS[explicit]) return explicit
-  }
+  const refocus = useCallback((sym) => {
+    setPicker(null)
+    setQuery('')
+    if (!(sym >= 0) || sym >= graph.S) return
+    const key = graph.symKey[sym]
+    if (key === focusName) return
+    setHistory((h) => (h.length >= 32 ? [...h.slice(1), focusKey] : [...h, focusKey]))
+    setFocusKey(key)
+  }, [graph, focusName, focusKey])
 
-  // Boolean/marker flags on the call data
-  if (source.sql) return 'sql'
-  if (source.http) return 'http'
-  if (source.redis) return 'redis'
-  if (source.cache) return 'cache'
+  const back = useCallback(() => {
+    if (history.length === 0) return
+    setFocusKey(history[history.length - 1])
+    setHistory(history.slice(0, -1))
+  }, [history])
 
-  // Keyword detection on the class/file/function signature
-  const haystack = [source.class, source.file, source.function, source.fileName, source.className]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
+  const flagText = useCallback((sym) => {
+    const rec = graph.recursiveCalls[sym]
+    // One flag only — two never fit next to a name at 132px.
+    if (rec > 0) return `↻${fmtNum(rec)}`
+    if (graph.symIsWrapper[sym] === 1) return 'entry'
+    return ''
+  }, [graph])
 
-  if (/\bredis\b|predis|phpredis/.test(haystack)) return 'redis'
-  if (/cache|memcach/.test(haystack)) return 'cache'
-  if (/\bsql\b|pdo|mysqli|doctrine|query|statement|database|\bdbal\b|eloquent/.test(haystack)) return 'sql'
-  if (/http|curl|guzzle|\bclient\b|request|fetch|socket|stream_socket/.test(haystack)) return 'http'
+  const edgeLabel = useCallback((e) => {
+    if (!(e >= 0)) return null
+    const calls = fmtNum(graph.eCount[e])
+    if (noData) return `${calls}×`
+    return `${fmtMetric(metric, graph.eW[metric][e])} · ${calls}×`
+  }, [graph, metric, noData])
 
-  return 'function'
-}
+  const entryPath = useMemo(() => shortestEntryPath(graph, ranked, focus), [graph, ranked, focus])
+  const showCrumbs = entryPath.length > 1
+  // One crumb per ~110px, so the breadcrumb never wraps and never steals the
+  // canvas height the chrome estimate below has already committed.
+  const crumbCap = Math.max(2, Math.min(9, Math.floor(W / 110)))
 
-// Resolve the operation type for a grouped node (checks the group's methods too)
-function getGroupOperationType(group, classKey) {
-  const base = getOperationType({
-    className: group.className,
-    fileName: group.fileName,
-    class: group.className,
-    file: group.fileName,
-    function: classKey,
-  })
-  if (base !== 'function') return base
+  const withData = useMemo(() => METRICS.filter((m) => totals.hasData[m]), [totals])
+  const noticeCount = (noData ? 1 : 0) + (totals.truncated ? 1 : 0)
+  const narrow = W < NARROW
+  const chrome = (narrow ? 72 : 38) + (narrow ? 46 : 30) + CHROME_PAD
+    + (showCrumbs ? (narrow ? 32 : 26) : 0) + noticeCount * CHROME_NOTICE
+  const canvasH = Math.max(MIN_CANVAS, (Math.floor(height) || 520) - chrome)
 
-  // Fall back to inspecting the group's method nodes
-  if (group.methods && group.methods.size > 0) {
-    for (const [methodName, methodData] of group.methods.entries()) {
-      const t = getOperationType({ ...methodData.node, function: methodName })
-      if (t !== 'function') return t
+  // -2 for the canvas' own 1px border: the SVG has to fit the CONTENT box, or
+  // overflow:hidden shaves the last column of boxes.
+  const layout = useMemo(
+    () => layoutEgo(graph, ranked, { focus, width: W - 2, height: canvasH, depth, edgeLabel, flagText }),
+    [graph, ranked, focus, W, canvasH, depth, edgeLabel, flagText],
+  )
+
+  // Cost bars compare against the hottest box IN VIEW — that is the comparison
+  // the user is making. Against the trace total every neighbour would be a
+  // hairline.
+  const maxInView = useMemo(() => {
+    let m = 0
+    for (let i = 0; i < layout.nodes.length; i++) {
+      const v = valueOf(layout.nodes[i].sym)
+      if (v > m) m = v
     }
-  }
-  return 'function'
-}
+    return m
+  }, [layout, valueOf])
 
-// Get function type label
-function getFunctionTypeLabel(functionType) {
-  switch (functionType) {
-    case 0: return 'User Function'
-    case 1: return 'Internal Function'
-    case 2: return 'Method'
-    default: return 'Unknown'
-  }
-}
-
-// Get metric value from node (inclusive - includes children)
-function getMetricValue(node, metric) {
-  switch (metric) {
-    case 'wall_time':
-      return node.wall_time ?? node.duration ?? 0
-    case 'io_wait':
-      return node.io_wait_time ?? 0
-    case 'cpu':
-      return node.cpu_time ?? (node.duration ?? 0)
-    case 'memory':
-      return Math.abs(node.memory_delta ?? 0)
-    case 'network':
-      return (node.bytes_sent_delta ?? 0) + (node.bytes_received_delta ?? 0)
-    default:
-      return node.duration ?? 0
-  }
-}
-
-// Get self/exclusive metric value (excludes children) - relative to parent
-function getSelfMetricValue(node, metric) {
-  // For memory, handle signed values differently
-  if (metric === 'memory') {
-    // Get inclusive memory delta (signed)
-    const inclusiveMemory = node.memory_delta ?? 0
-    
-    // Subtract children's memory deltas (signed)
-    let childrenMemory = 0
-    if (node.children && node.children.length > 0) {
-      node.children.forEach(child => {
-        childrenMemory += (child.memory_delta ?? 0)
-      })
+  const typesInView = useMemo(() => {
+    const seen = new Set()
+    for (let i = 0; i < layout.nodes.length; i++) {
+      const op = graph.symOpType[layout.nodes[i].sym]
+      seen.add(op >= 0 ? TYPE_ORDER[op] : 'other')
     }
-    
-    // Self memory = inclusive - children (can be negative)
-    const selfMemory = inclusiveMemory - childrenMemory
-    return Math.abs(selfMemory) // Return absolute value for display
-  }
-  
-  // For other metrics, use standard calculation
-  const inclusiveValue = getMetricValue(node, metric)
-  
-  // Subtract children's values to get self/exclusive value
-  let childrenValue = 0
-  if (node.children && node.children.length > 0) {
-    node.children.forEach(child => {
-      childrenValue += getMetricValue(child, metric)
-    })
-  }
-  
-  // Self value = inclusive - children (but never negative)
-  return Math.max(0, inclusiveValue - childrenValue)
-}
+    return TYPE_ORDER.filter((t) => seen.has(t)).concat(seen.has('other') ? ['other'] : [])
+  }, [layout, graph])
 
-// Calculate total metric using self/exclusive values (not inclusive)
-function calculateTotalMetric(callTree, metric) {
-  const calculate = (nodes) => {
-    let total = 0
-    nodes.forEach(node => {
-      // Use self/exclusive metric, not inclusive
-      total += getSelfMetricValue(node, metric)
-      if (node.children && node.children.length > 0) {
-        total += calculate(node.children)
-      }
-    })
-    return total
-  }
-  return calculate(callTree)
-}
+  const diffsInGraph = useMemo(() => {
+    if (!graph.hasDiff) return []
+    const seen = new Set()
+    for (let s = 0; s < graph.S; s++) if (graph.symDiff[s] >= 0) seen.add(graph.symDiff[s])
+    return DIFF_LABELS.map((label, code) => ({ label, code })).filter((d) => seen.has(d.code))
+  }, [graph])
 
-// Get metric label
-function getMetricLabel(metric) {
-  switch (metric) {
-    case 'wall_time': return 'Wall Time'
-    case 'io_wait': return 'I/O Wait'
-    case 'cpu': return 'CPU'
-    case 'memory': return 'Memory'
-    case 'network': return 'Network'
-    default: return 'Duration'
-  }
-}
-
-// Format metric value
-function formatMetricValue(value, metric) {
-  switch (metric) {
-    case 'wall_time':
-    case 'io_wait':
-    case 'cpu':
-      return formatDuration(value * 1000) // Convert seconds to milliseconds
-    case 'memory':
-      return formatMemory(value)
-    case 'network':
-      return formatBytes(value)
-    default:
-      return formatDuration(value * 1000)
-  }
-}
-
-// Get function signature
-function getFunctionSignature(node) {
-  return node.class ? `${node.class}::${node.function}` : node.function
-}
-
-// Count internal calls
-function countInternalCalls(children) {
-  const callCounts = new Map()
-  if (!children || children.length === 0) return callCounts
-  
-  children.forEach(child => {
-    const signature = getFunctionSignature(child)
-    callCounts.set(signature, (callCounts.get(signature) || 0) + 1)
-  })
-  
-  return callCounts
-}
-
-// Format internal calls
-function formatInternalCalls(callCounts, limit = 15) {
-  if (callCounts.size === 0) return ''
-  
-  const sorted = Array.from(callCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-  
-  const lines = sorted.map(([signature, count]) => {
-    const shortSig = signature.length > 30 ? signature.substring(0, 27) + '...' : signature
-    return `${shortSig} (${count}x)`
-  })
-  
-  return lines.join('\n')
-}
-
-// Extract filename from file path
-function extractFileName(filePath) {
-  if (!filePath) return null
-  
-  const normalizedPath = filePath.replace(/\\/g, '/')
-  const parts = normalizedPath.split('/')
-  const fileName = parts[parts.length - 1]
-  
-  return fileName || null
-}
-
-// ClassGroup interface (as object structure)
-// {
-//   className: string | null,
-//   fileName: string | null,
-//   methods: Map<string, { node, callCount, totalDuration }>,
-//   totalDuration: number,
-//   totalMemoryDelta: number,
-//   totalCpuTime?: number,
-//   totalIoWaitTime?: number,
-//   totalWallTime?: number,
-//   totalNetworkBytes?: number,
-//   functionType?: number,
-//   depth: number
-// }
-
-// Group nodes by class, file, or function name
-function groupNodesByClass(nodes, nodeDataMap) {
-  const grouped = new Map()
-  
-  // Collect all included nodes
-  const includedNodes = []
-  nodeDataMap.forEach((nodeData, id) => {
-    if (nodeData.shouldInclude) {
-      includedNodes.push({ node: nodeData.node, depth: nodeData.depth })
-    }
-  })
-  
-  // Group by: 1) class name, 2) file name, 3) function name
-  includedNodes.forEach(({ node, depth }) => {
-    let groupKey
-    let className = null
-    let fileName = null
-    
-    if (node.class) {
-      groupKey = node.class
-      className = node.class
-    } else if (node.file) {
-      const extractedFileName = extractFileName(node.file)
-      if (extractedFileName) {
-        groupKey = extractedFileName
-        fileName = extractedFileName
-      } else {
-        groupKey = node.function
+  const pickRows = useMemo(() => {
+    if (!picker) return []
+    const q = query.trim().toLowerCase()
+    const rows = []
+    if (picker === 'all') {
+      const order = ranked.hotOrder
+      for (let k = 0; k < order.length && rows.length < PICKER_ROWS; k++) {
+        const s = order[k]
+        const key = graph.symKey[s]
+        if (q && key.toLowerCase().indexOf(q) < 0) continue
+        rows.push({ sym: s, key, rank: k + 1, e: -1 })
       }
     } else {
-      groupKey = node.function
-    }
-    
-    const methodKey = node.function
-    
-    if (!grouped.has(groupKey)) {
-      grouped.set(groupKey, {
-        className,
-        fileName,
-        methods: new Map(),
-        totalDuration: 0,
-        totalMemoryDelta: 0,
-        totalCpuTime: 0,
-        totalIoWaitTime: 0,
-        totalWallTime: 0,
-        totalNetworkBytes: 0,
-        functionType: node.function_type,
-        depth: depth,
-      })
-    }
-    
-    const group = grouped.get(groupKey)
-    
-    // Aggregate method data
-    if (!group.methods.has(methodKey)) {
-      group.methods.set(methodKey, {
-        node,
-        callCount: 0,
-        totalDuration: 0,
-      })
-    }
-    
-    const method = group.methods.get(methodKey)
-    method.callCount++
-    
-    // Calculate self/exclusive metrics (excluding children) - relative to parent
-    const selfDuration = getSelfMetricValue(node, 'wall_time')
-    const selfMemoryDelta = getSelfMetricValue(node, 'memory')
-    const selfCpuTime = getSelfMetricValue(node, 'cpu')
-    const selfIoWaitTime = getSelfMetricValue(node, 'io_wait')
-    const selfWallTime = getSelfMetricValue(node, 'wall_time')
-    const selfNetworkBytes = getSelfMetricValue(node, 'network')
-    
-    method.totalDuration += selfDuration
-    
-    // Aggregate group-level metrics using self/exclusive values (relative, not absolute)
-    group.totalDuration += selfDuration
-    group.totalMemoryDelta += selfMemoryDelta
-    if (selfCpuTime > 0) {
-      group.totalCpuTime = (group.totalCpuTime || 0) + selfCpuTime
-    }
-    if (selfIoWaitTime > 0) {
-      group.totalIoWaitTime = (group.totalIoWaitTime || 0) + selfIoWaitTime
-    }
-    if (selfWallTime > 0) {
-      group.totalWallTime = (group.totalWallTime || 0) + selfWallTime
-    }
-    group.totalNetworkBytes = (group.totalNetworkBytes || 0) + selfNetworkBytes
-  })
-  
-  return grouped
-}
-
-// Find dominant method
-function findDominantMethod(group) {
-  if (group.methods.size === 0) return null
-  
-  let dominant = null
-  let maxScore = 0
-  
-  group.methods.forEach((methodData, methodName) => {
-    const durationScore = methodData.totalDuration * 0.7
-    const callCountScore = methodData.callCount * (group.totalDuration / group.methods.size) * 0.3
-    const score = durationScore + callCountScore
-    
-    if (score > maxScore) {
-      maxScore = score
-      dominant = {
-        methodName,
-        callCount: methodData.callCount,
-        duration: methodData.totalDuration,
+      const list = neighbours(graph, ranked, focus, picker, PICKER_ROWS)
+      for (let i = 0; i < list.length && rows.length < PICKER_ROWS; i++) {
+        const s = list[i].sym
+        const key = graph.symKey[s]
+        if (q && key.toLowerCase().indexOf(q) < 0) continue
+        rows.push({ sym: s, key, rank: ranked.rankOf[s] + 1, e: list[i].e })
       }
     }
-  })
-  
-  return dominant
-}
+    return rows
+  }, [picker, query, graph, ranked, focus])
 
-// Format methods list
-function formatMethodsList(group, dominantMethod, limit = 15) {
-  if (group.methods.size === 0) return ''
-  
-  const methodsArray = Array.from(group.methods.entries())
-    .map(([methodName, methodData]) => ({
-      methodName,
-      callCount: methodData.callCount,
-      duration: methodData.totalDuration,
-    }))
-    .sort((a, b) => {
-      if (dominantMethod && a.methodName === dominantMethod.methodName) return -1
-      if (dominantMethod && b.methodName === dominantMethod.methodName) return 1
-      return b.duration - a.duration
-    })
-    .slice(0, limit)
-  
-  const lines = methodsArray.map(({ methodName, callCount }) => {
-    const isDominant = dominantMethod && methodName === dominantMethod.methodName
-    const prefix = isDominant ? '▶ ' : '  '
-    const methodDisplay = group.className 
-      ? `${group.className}::${methodName}` 
-      : methodName
-    const shortName = methodDisplay.length > 28 ? methodDisplay.substring(0, 25) + '...' : methodDisplay
-    return `${prefix}${shortName} (${callCount}x)`
-  })
-  
-  return lines.join('\n')
-}
+  const pickerTotal = picker === 'in' ? ranked.inDeg[focus]
+    : picker === 'out' ? ranked.outDeg[focus] : graph.S
 
-// Get call stack path
-function getCallStackPath(callTree, selectedNodeId, nodeDataMap) {
-  if (!callTree || callTree.length === 0 || !selectedNodeId) {
-    return []
-  }
-
-  const path = []
-  let currentNodeId = selectedNodeId
-  const visited = new Set()
-
-  while (currentNodeId && !visited.has(currentNodeId)) {
-    visited.add(currentNodeId)
-    const nodeData = nodeDataMap.get(currentNodeId)
-    if (nodeData) {
-      path.unshift(nodeData.node)
-      currentNodeId = nodeData.parentId
-    } else {
-      break
-    }
-  }
-
-  return path
-}
-
-function CallGraph({ callStack, width: _width = 1200, height: _height = 800 }) {
-  const containerRef = useRef(null)
-  const networkRef = useRef(null)
-  const [selectedNode, setSelectedNode] = useState(null)
-  const [selectedMetric, setSelectedMetric] = useState('wall_time')
-  const [viewMode, setViewMode] = useState('hierarchical')
-  const [durationFilters, setDurationFilters] = useState({ enabled: false, thresholds: {} })
-  
-  // Per-metric filter state
-  const [metricFilters, setMetricFilters] = useState(() => {
-    const defaultFilters = {
-      minPercentage: 0.5,
-      showInternalFunctions: true,
-      showMethods: true,
-      showUserFunctions: true,
-    }
-    const map = new Map()
-    METRIC_TYPES.forEach(metric => {
-      map.set(metric, { ...defaultFilters })
-    })
-    return map
-  })
-  
-  // Get current metric's filters
-  const currentFilters = metricFilters.get(selectedMetric) || {
-    minPercentage: 0.5,
-    showInternalFunctions: true,
-    showMethods: true,
-    showUserFunctions: true,
-  }
-
-  // Helper to update current metric's filters
-  const updateCurrentFilters = (updates) => {
-    const newFilters = new Map(metricFilters)
-    const current = newFilters.get(selectedMetric) || currentFilters
-    newFilters.set(selectedMetric, { ...current, ...updates })
-    setMetricFilters(newFilters)
-  }
-  
-  const setMinPercentage = (value) => updateCurrentFilters({ minPercentage: value })
-  const setShowInternalFunctions = (value) => updateCurrentFilters({ showInternalFunctions: value })
-  const setShowMethods = (value) => updateCurrentFilters({ showMethods: value })
-  const setShowUserFunctions = (value) => updateCurrentFilters({ showUserFunctions: value })
-  
-  const minPercentage = currentFilters.minPercentage
-  const showInternalFunctions = currentFilters.showInternalFunctions
-  const showMethods = currentFilters.showMethods
-  const showUserFunctions = currentFilters.showUserFunctions
-
-  // Normalize call tree (handle data format differences)
-  const normalizedCallTree = useMemo(() => {
-    if (!callStack || callStack.length === 0) return []
-    
-    const normalizeRecursive = (node) => {
-      const normalized = normalizeNode(node)
-      if (node.children && Array.isArray(node.children) && node.children.length > 0) {
-        normalized.children = node.children.map(child => normalizeRecursive(child))
-      } else {
-        normalized.children = []
-      }
-      return normalized
-    }
-    
-    let tree = callStack.map(node => normalizeRecursive(node))
-    
-    // Apply duration filter if enabled
-    if (durationFilters.enabled && durationFilters.thresholds.duration !== undefined) {
-      // Convert threshold from milliseconds to seconds (node duration is in seconds)
-      const thresholdInSeconds = durationFilters.thresholds.duration / 1000
-      const filterNode = (node) => {
-        const duration = node.duration || 0
-        if (duration < thresholdInSeconds) {
-          // Filter children first
-          const filteredChildren = node.children
-            ? node.children.map(filterNode).filter(child => child !== null)
-            : []
-          // If has filtered children, keep node but with filtered children
-          if (filteredChildren.length > 0) {
-            return { ...node, children: filteredChildren }
-          }
-          return null
-        }
-        // Filter children recursively
-        const filteredChildren = node.children
-          ? node.children.map(filterNode).filter(child => child !== null)
-          : []
-        return { ...node, children: filteredChildren }
-      }
-      tree = tree.map(filterNode).filter(node => node !== null)
-    }
-    
-    return tree
-  }, [callStack, durationFilters])
-
-  // Calculate total metric value
-  const totalMetricValue = useMemo(() => {
-    return calculateTotalMetric(normalizedCallTree, selectedMetric)
-  }, [normalizedCallTree, selectedMetric])
-
-  // Build node data map for call stack path finding
-  const nodeDataMap = useMemo(() => {
-    const map = new Map()
-    
-    if (!normalizedCallTree || normalizedCallTree.length === 0) {
-      return map
-    }
-
-    let normalizedTree
-    if (normalizedCallTree.length === 1) {
-      normalizedTree = normalizedCallTree
-    } else {
-      const syntheticRoot = {
-        id: 'synthetic_root',
-        function: 'Root',
-        duration: normalizedCallTree.reduce((sum, node) => sum + (node.duration || 0), 0),
-        memory_delta: normalizedCallTree.reduce((sum, node) => sum + (node.memory_delta || 0), 0),
-        children: normalizedCallTree,
-      }
-      normalizedTree = [syntheticRoot]
-    }
-
-    let nodeIdCounter = 0
-    const collectAllNodes = (node, parentId = null, depth = 0) => {
-      const id = node.id || `node_${nodeIdCounter++}`
-      
-      if (!map.has(id)) {
-        map.set(id, { node, parentId, depth })
-      }
-      
-      if (node.children && node.children.length > 0) {
-        node.children.forEach(child => {
-          collectAllNodes(child, id, depth + 1)
-        })
-      }
-    }
-
-    normalizedTree.forEach(root => {
-      collectAllNodes(root, null, 0)
-    })
-
-    return map
-  }, [normalizedCallTree])
-
-  // Calculate call stack path for selected node
-  const callStackPathWithDepth = useMemo(() => {
-    if (!normalizedCallTree || normalizedCallTree.length === 0 || nodeDataMap.size === 0) {
-      return []
-    }
-    
-    if (selectedNode) {
-      let selectedNodeId = null
-      const signature = selectedNode.class ? `${selectedNode.class}::${selectedNode.function}` : selectedNode.function
-      
-      nodeDataMap.forEach((data, id) => {
-        const nodeSignature = data.node.class ? `${data.node.class}::${data.node.function}` : data.node.function
-        if (nodeSignature === signature && 
-            (!selectedNode.file || data.node.file === selectedNode.file) &&
-            (!selectedNode.line || data.node.line === selectedNode.line)) {
-          selectedNodeId = id
-        }
-      })
-
-      if (selectedNodeId) {
-        const path = getCallStackPath(normalizedCallTree, selectedNodeId, nodeDataMap)
-        return path.map((node, index) => ({ node, depth: index }))
-      }
-      return []
-    }
-    
-    // Show full call tree
-    const flattenTree = (nodes, depth = 0) => {
-      const result = []
-      const traverse = (node, currentDepth) => {
-        result.push({ node, depth: currentDepth })
-        if (node.children && node.children.length > 0) {
-          node.children.forEach(child => traverse(child, currentDepth + 1))
-        }
-      }
-      nodes.forEach(node => traverse(node, depth))
-      return result
-    }
-    
-    let normalizedTree
-    if (normalizedCallTree.length === 1) {
-      normalizedTree = normalizedCallTree
-    } else {
-      const syntheticRoot = {
-        id: 'synthetic_root',
-        function: 'Root',
-        duration: normalizedCallTree.reduce((sum, node) => sum + (node.duration || 0), 0),
-        memory_delta: normalizedCallTree.reduce((sum, node) => sum + (node.memory_delta || 0), 0),
-        children: normalizedCallTree,
-      }
-      normalizedTree = [syntheticRoot]
-    }
-    
-    return flattenTree(normalizedTree, 0)
-  }, [normalizedCallTree, selectedNode, nodeDataMap])
-
-  // Build graph data with three-pass approach
-  const graphData = useMemo(() => {
-    if (!normalizedCallTree || normalizedCallTree.length === 0) {
-      return { nodes: [], edges: [], nodeDataMap: new Map() }
-    }
-
-    // Normalize call tree
-    let normalizedTree
-    if (normalizedCallTree.length === 1) {
-      normalizedTree = normalizedCallTree
-    } else {
-      const totalDuration = normalizedCallTree.reduce((sum, node) => sum + (node.duration || 0), 0)
-      const totalMemoryDelta = normalizedCallTree.reduce((sum, node) => sum + (node.memory_delta || 0), 0)
-      const totalCpuTime = normalizedCallTree.reduce((sum, node) => sum + (node.cpu_time || 0), 0)
-      const totalIoWaitTime = normalizedCallTree.reduce((sum, node) => sum + (node.io_wait_time || 0), 0)
-      const totalWallTime = normalizedCallTree.reduce((sum, node) => sum + (node.wall_time || node.duration || 0), 0)
-      const totalNetworkBytes = normalizedCallTree.reduce((sum, node) => 
-        sum + (node.bytes_sent_delta || 0) + (node.bytes_received_delta || 0), 0)
-      
-      const syntheticRoot = {
-        id: 'synthetic_root',
-        function: 'Root',
-        duration: totalDuration,
-        memory_delta: totalMemoryDelta,
-        cpu_time: totalCpuTime > 0 ? totalCpuTime : undefined,
-        io_wait_time: totalIoWaitTime > 0 ? totalIoWaitTime : undefined,
-        wall_time: totalWallTime > 0 ? totalWallTime : undefined,
-        bytes_sent_delta: undefined,
-        bytes_received_delta: undefined,
-        children: normalizedCallTree,
-      }
-      normalizedTree = [syntheticRoot]
-    }
-
-    // PASS 1: Collect all node data
-    const nodeDataMap = new Map()
-    let nodeIdCounter = 0
-
-    const collectAllNodes = (node, parentId = null, depth = 0) => {
-      // Skip nodes with zero metric value (except for wall_time/cpu which may use duration fallback)
-      const metricValue = getSelfMetricValue(node, selectedMetric)
-      
-      if (depth > 0 && metricValue === 0 && selectedMetric !== 'wall_time' && selectedMetric !== 'cpu') {
-        if (node.children && node.children.length > 0) {
-          node.children.forEach(child => {
-            collectAllNodes(child, parentId, depth + 1)
-          })
-        }
-        return
-      }
-      
-      const id = node.id || `node_${nodeIdCounter++}`
-      
-      const functionType = node.function_type ?? -1
-      const isInternal = functionType === 1
-      const isMethod = functionType === 2
-      const isUser = functionType === 0 || functionType === -1
-      
-      // Only filter by function type at individual node level, not by percentage
-      // Percentage filtering will be applied to groups after grouping
-      // Percentage filtering happens after grouping, so at node level the only
-      // criterion is the function-type toggles. (This used to read
-      // `(depth === 0 || true) && …`, which is just `…`.)
-      const shouldInclude =
-        (isInternal && showInternalFunctions) ||
-        (isMethod && showMethods) ||
-        (isUser && showUserFunctions)
-      
-      if (!nodeDataMap.has(id)) {
-        nodeDataMap.set(id, { node, parentId, depth, shouldInclude })
-      }
-      
-      if (node.children && node.children.length > 0) {
-        node.children.forEach(child => {
-          collectAllNodes(child, id, depth + 1)
-        })
-      }
-    }
-
-    normalizedTree.forEach(root => {
-      collectAllNodes(root, null, 0)
-    })
-
-    // PASS 2: Group nodes by class
-    const classGroups = groupNodesByClass(normalizedCallTree, nodeDataMap)
-    
-    // Calculate total metric value from all groups (before filtering)
-    let totalGroupMetricValue = 0
-    classGroups.forEach((group, classKey) => {
-      let groupMetricValue
-      switch (selectedMetric) {
-        case 'wall_time':
-          groupMetricValue = group.totalWallTime ?? group.totalDuration
-          break
-        case 'io_wait':
-          groupMetricValue = group.totalIoWaitTime ?? 0
-          break
-        case 'cpu':
-          groupMetricValue = group.totalCpuTime ?? group.totalDuration
-          break
-        case 'memory':
-          groupMetricValue = Math.abs(group.totalMemoryDelta)
-          break
-        case 'network':
-          groupMetricValue = group.totalNetworkBytes ?? 0
-          break
-        default:
-          groupMetricValue = group.totalDuration
-      }
-      totalGroupMetricValue += groupMetricValue
-    })
-    
-    // Filter groups by percentage threshold (applied to groups, not individual nodes)
-    const filteredClassGroups = new Map()
-    classGroups.forEach((group, classKey) => {
-      let groupMetricValue
-      switch (selectedMetric) {
-        case 'wall_time':
-          groupMetricValue = group.totalWallTime ?? group.totalDuration
-          break
-        case 'io_wait':
-          groupMetricValue = group.totalIoWaitTime ?? 0
-          break
-        case 'cpu':
-          groupMetricValue = group.totalCpuTime ?? group.totalDuration
-          break
-        case 'memory':
-          groupMetricValue = Math.abs(group.totalMemoryDelta)
-          break
-        case 'network':
-          groupMetricValue = group.totalNetworkBytes ?? 0
-          break
-        default:
-          groupMetricValue = group.totalDuration
-      }
-      
-      const groupPercentage = totalGroupMetricValue > 0 ? (groupMetricValue / totalGroupMetricValue) * 100 : 0
-      // Check if this is a root group - could be 'Root', 'synthetic_root', or match root node function names
-      const isSyntheticRoot = classKey === 'Root' || 
-                              classKey === 'synthetic_root' ||
-                              (normalizedCallTree.length > 1 && normalizedCallTree.some(root => {
-                                const rootGroupKey = root.class || (root.file ? extractFileName(root.file) : root.function)
-                                return rootGroupKey === classKey
-                              }))
-      
-      // Include root nodes always, and other groups if they meet the percentage threshold
-      // Also include groups that are direct children of included groups (to maintain graph connectivity)
-      if (isSyntheticRoot || groupPercentage >= minPercentage) {
-        filteredClassGroups.set(classKey, group)
-      }
-    })
-    
-    // If we have very few groups (especially if only root), include top groups regardless of threshold
-    // This helps when the root dominates the total metric value or when threshold is too high
-    const rootKeys = Array.from(filteredClassGroups.keys()).filter(key => 
-      key === 'Root' || key === 'synthetic_root' || 
-      (normalizedCallTree.length > 1 && normalizedCallTree.some(root => {
-        const rootGroupKey = root.class || (root.file ? extractFileName(root.file) : root.function)
-        return rootGroupKey === key
-      }))
-    )
-    const hasOnlyRoot = filteredClassGroups.size === rootKeys.length && rootKeys.length > 0
-    const hasTooFewGroups = filteredClassGroups.size <= 2 // If we have 2 or fewer groups, show more
-    
-    if (hasOnlyRoot || hasTooFewGroups) {
-      // Find the top groups by metric value and include them even if below threshold
-      const sortedGroups = Array.from(classGroups.entries())
-        .map(([key, group]) => {
-          let groupMetricValue
-          switch (selectedMetric) {
-            case 'wall_time':
-              groupMetricValue = group.totalWallTime ?? group.totalDuration
-              break
-            case 'io_wait':
-              groupMetricValue = group.totalIoWaitTime ?? 0
-              break
-            case 'cpu':
-              groupMetricValue = group.totalCpuTime ?? group.totalDuration
-              break
-            case 'memory':
-              groupMetricValue = Math.abs(group.totalMemoryDelta)
-              break
-            case 'network':
-              groupMetricValue = group.totalNetworkBytes ?? 0
-              break
-            default:
-              groupMetricValue = group.totalDuration
-          }
-          const groupPercentage = totalGroupMetricValue > 0 ? (groupMetricValue / totalGroupMetricValue) * 100 : 0
-          return { key, group, metricValue: groupMetricValue, percentage: groupPercentage }
-        })
-        .filter(({ key, percentage }) => {
-          // Exclude root groups and groups with zero metric
-          const isRoot = key === 'Root' || key === 'synthetic_root' ||
-            (normalizedCallTree.length > 1 && normalizedCallTree.some(root => {
-              const rootGroupKey = root.class || (root.file ? extractFileName(root.file) : root.function)
-              return rootGroupKey === key
-            }))
-          return !isRoot && percentage > 0
-        })
-        .sort((a, b) => b.metricValue - a.metricValue)
-      
-      // Include top groups - always show at least top 5-10 groups when only root is visible
-      // This ensures the graph is useful even when root dominates
-      const minGroupsToShow = Math.min(10, sortedGroups.length)
-      const groupsToInclude = sortedGroups.slice(0, minGroupsToShow)
-      
-      // Always include these groups regardless of percentage threshold
-      groupsToInclude.forEach(({ key, group }) => {
-        if (!filteredClassGroups.has(key)) {
-          filteredClassGroups.set(key, group)
-        }
-      })
-    }
-    
-    // Calculate total metric value from filtered groups only (for accurate percentages)
-    let includedTotalMetricValue = 0
-    filteredClassGroups.forEach((group, classKey) => {
-      let groupMetricValue
-      switch (selectedMetric) {
-        case 'wall_time':
-          groupMetricValue = group.totalWallTime ?? group.totalDuration
-          break
-        case 'io_wait':
-          groupMetricValue = group.totalIoWaitTime ?? 0
-          break
-        case 'cpu':
-          groupMetricValue = group.totalCpuTime ?? group.totalDuration
-          break
-        case 'memory':
-          groupMetricValue = Math.abs(group.totalMemoryDelta)
-          break
-        case 'network':
-          groupMetricValue = group.totalNetworkBytes ?? 0
-          break
-        default:
-          groupMetricValue = group.totalDuration
-      }
-      // Sum up all filtered group values to get the total of included nodes
-      includedTotalMetricValue += groupMetricValue
-    })
-    
-    // PASS 3: Build graph nodes and edges
-    const nodes = []
-    const edges = []
-    const nodeMap = new Map()
-    const classGroupMap = new Map()
-
-    // Build nodes for filtered class groups
-    filteredClassGroups.forEach((group, classKey) => {
-      let groupMetricValue
-      switch (selectedMetric) {
-        case 'wall_time':
-          groupMetricValue = group.totalWallTime ?? group.totalDuration
-          break
-        case 'io_wait':
-          groupMetricValue = group.totalIoWaitTime ?? 0
-          break
-        case 'cpu':
-          groupMetricValue = group.totalCpuTime ?? group.totalDuration
-          break
-        case 'memory':
-          groupMetricValue = Math.abs(group.totalMemoryDelta)
-          break
-        case 'network':
-          groupMetricValue = group.totalNetworkBytes ?? 0
-          break
-        default:
-          groupMetricValue = group.totalDuration
-      }
-      
-      // Use includedTotalMetricValue instead of totalMetricValue for accurate percentages
-      const percentage = includedTotalMetricValue > 0 ? (groupMetricValue / includedTotalMetricValue) * 100 : 0
-      const isSyntheticRoot = classKey === 'Root'
-      
-      if (!isSyntheticRoot && groupMetricValue === 0 && selectedMetric !== 'wall_time' && selectedMetric !== 'cpu') {
-        return
-      }
-      
-      if (!isSyntheticRoot && totalMetricValue === 0) {
-        return
-      }
-      
-      const dominantMethod = findDominantMethod(group)
-      
-      let displayName
-      if (group.className) {
-        displayName = group.className
-      } else if (group.fileName) {
-        displayName = group.fileName
-      } else {
-        displayName = classKey
-      }
-      
-      const shortDisplayName = displayName.length > 35 ? displayName.substring(0, 32) + '...' : displayName
-      const metricValueStr = formatMetricValue(groupMetricValue, selectedMetric)
-      const percentageStr = percentage.toFixed(1) + '%'
-      const rootCount = normalizedCallTree.length
-      
-      const methodsList = formatMethodsList(group, dominantMethod, 15)
-      
-      let label = isSyntheticRoot
-        ? `${displayName}\n${rootCount} root${rootCount > 1 ? 's' : ''}`
-        : `${shortDisplayName}\n${metricValueStr} (${percentageStr})`
-      
-      if (methodsList) {
-        label += '\n' + methodsList
-      }
-      
-      const allChildren = []
-      group.methods.forEach((methodData) => {
-        if (methodData.node.children) {
-          allChildren.push(...methodData.node.children)
-        }
-      })
-      const internalCalls = countInternalCalls(allChildren)
-      const internalCallsStr = formatInternalCalls(internalCalls, 15)
-      
-      if (internalCallsStr) {
-        label += '\n' + internalCallsStr
-      }
-
-      const tooltipParts = [
-        displayName,
-        isSyntheticRoot ? `Synthetic root node grouping ${rootCount} root node(s)` : '',
-        group.className ? `Class: ${group.className}` : '',
-        group.fileName ? `File: ${group.fileName}` : '',
-        `Functions/Methods: ${group.methods.size}`,
-        `Total Calls: ${Array.from(group.methods.values()).reduce((sum, m) => sum + m.callCount, 0)}`,
-        `Type: ${getFunctionTypeLabel(group.functionType)}`,
-        `${getMetricLabel(selectedMetric)}: ${metricValueStr} (${percentage.toFixed(2)}%)`,
-        `Total Duration: ${formatDuration(group.totalDuration * 1000)}`,
-        `Total Memory: ${formatMemory(group.totalMemoryDelta)}`,
-      ].filter(Boolean)
-      
-      if (group.totalCpuTime !== undefined) {
-        tooltipParts.push(`Total CPU: ${formatDuration(group.totalCpuTime * 1000)}`)
-      }
-      if (group.totalIoWaitTime !== undefined) {
-        tooltipParts.push(`Total IO Wait: ${formatDuration(group.totalIoWaitTime * 1000)}`)
-      }
-      if (group.totalWallTime !== undefined) {
-        tooltipParts.push(`Total Wall Time: ${formatDuration(group.totalWallTime * 1000)}`)
-      }
-      if (group.totalNetworkBytes !== undefined && group.totalNetworkBytes > 0) {
-        tooltipParts.push(`Total Network: ${formatBytes(group.totalNetworkBytes)}`)
-      }
-
-      if (dominantMethod) {
-        tooltipParts.push(`Dominant Method: ${dominantMethod.methodName} (${dominantMethod.callCount}x, ${formatDuration(dominantMethod.duration * 1000)})`)
-      }
-
-      // Total number of calls represented by this grouped node
-      const callCount = Array.from(group.methods.values()).reduce((sum, m) => sum + m.callCount, 0)
-
-      // Color by operation type (function=blue, sql=purple, http=orange, redis=red, cache=green)
-      const operationType = isSyntheticRoot ? 'function' : getGroupOperationType(group, classKey)
-      const color = isSyntheticRoot ? '#64748b' : OPERATION_TYPE_COLORS[operationType]
-
-      // Size nodes by self/exclusive time share (bigger = more self time), sqrt-scaled
-      // so area (not radius) tracks the metric. Sane min/max keeps the graph readable.
-      const NODE_MIN = 22
-      const NODE_MAX = 90
-      const nodeSize = isSyntheticRoot
-        ? 55
-        : Math.round(NODE_MIN + (NODE_MAX - NODE_MIN) * Math.sqrt(Math.min(percentage, 100) / 100))
-
-      const graphNode = {
-        id: classKey,
-        label,
-        title: tooltipParts.join('\n'),
-        color: {
-          background: color,
-          border: isSyntheticRoot ? '#475569' : color,
-          highlight: {
-            background: color,
-            border: '#f1f5f9',
-          },
-          hover: {
-            background: color,
-            border: '#f1f5f9',
-          },
-        },
-        font: {
-          size: 11,
-          face: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-          color: '#ffffff',
-        },
-        shape: 'box',
-        size: nodeSize,
-        borderWidth: 1,
-        borderWidthSelected: 3,
-        data: {
-          function: group.className || group.fileName || classKey,
-          class: group.className || undefined,
-          file: group.fileName || undefined,
-          duration: group.totalDuration,
-          self_time: groupMetricValue,
-          call_count: callCount,
-          operation_type: operationType,
-          memory_delta: group.totalMemoryDelta,
-          cpu_time: group.totalCpuTime,
-          io_wait_time: group.totalIoWaitTime,
-          wall_time: group.totalWallTime,
-          bytes_sent_delta: undefined,
-          bytes_received_delta: undefined,
-          depth: group.depth,
-          percentage,
-          function_type: group.functionType,
-        },
-      }
-
-      nodes.push(graphNode)
-      nodeMap.set(classKey, graphNode)
-      classGroupMap.set(classKey, group)
-    })
-
-    // Sort nodes by percentage (descending) - biggest percentage first
-    nodes.sort((a, b) => {
-      // Keep root nodes at the top
-      if (a.id === 'Root' || a.id === 'synthetic_root') return -1
-      if (b.id === 'Root' || b.id === 'synthetic_root') return 1
-      // Sort by percentage descending
-      return b.data.percentage - a.data.percentage
-    })
-
-    // Build edges
-    const classCallMap = new Map()
-    
-    const isRootKey = (key) => {
-      return key === 'Root' || key === 'synthetic_root'
-    }
-    
-    const buildClassCallMap = (node, lastValidParentKey = null) => {
-      let currentClassKey
-      if (node.class) {
-        currentClassKey = node.class
-      } else if (node.file) {
-        const extractedFileName = extractFileName(node.file)
-        currentClassKey = extractedFileName || node.function
-      } else {
-        currentClassKey = node.function
-      }
-      
-      const isCurrentInGroup = filteredClassGroups.has(currentClassKey)
-      
-      if (isCurrentInGroup && lastValidParentKey && filteredClassGroups.has(lastValidParentKey)) {
-        const parentGroup = filteredClassGroups.get(lastValidParentKey)
-        const currentGroup = filteredClassGroups.get(currentClassKey)
-        
-        if (parentGroup && currentGroup) {
-          const isValidEdge = 
-            isRootKey(lastValidParentKey) ||
-            (parentGroup.className && currentGroup.className) ||
-            (parentGroup.className && currentGroup.fileName) ||
-            (parentGroup.fileName && currentGroup.className) ||
-            (parentGroup.fileName && currentGroup.fileName)
-          
-          if (isValidEdge) {
-            if (!classCallMap.has(lastValidParentKey)) {
-              classCallMap.set(lastValidParentKey, new Map())
-            }
-            const childMap = classCallMap.get(lastValidParentKey)
-            childMap.set(currentClassKey, (childMap.get(currentClassKey) || 0) + 1)
-          }
-        }
-      }
-      
-      let newLastValidParentKey = lastValidParentKey
-      // Only update parent key if current group is in filtered groups
-      if (isCurrentInGroup) {
-        newLastValidParentKey = currentClassKey
-      } else if (lastValidParentKey && !filteredClassGroups.has(lastValidParentKey)) {
-        // If parent is not in filtered groups, don't pass it down
-        newLastValidParentKey = null
-      }
-      
-      if (node.children && node.children.length > 0) {
-        node.children.forEach(child => {
-          buildClassCallMap(child, newLastValidParentKey)
-        })
-      }
-    }
-    
-    normalizedTree.forEach(root => {
-      buildClassCallMap(root, root.id === 'synthetic_root' ? 'Root' : null)
-    })
-    
-    classCallMap.forEach((childMap, parentClassKey) => {
-      const parentGroup = classGroupMap.get(parentClassKey)
-      const isParentRoot = isRootKey(parentClassKey)
-      
-      if (!parentGroup || (!isParentRoot && ((!parentGroup.className && !parentGroup.fileName) || !nodeMap.has(parentClassKey)))) return
-      
-      childMap.forEach((callCount, childClassKey) => {
-        const childGroup = classGroupMap.get(childClassKey)
-        const isChildRoot = isRootKey(childClassKey)
-        
-        if (!childGroup || 
-            (!isChildRoot && ((!childGroup.className && !childGroup.fileName) || !nodeMap.has(childClassKey))) ||
-            (parentClassKey === childClassKey && !isParentRoot)) return
-        
-        const edgeExists = edges.some(e => e.from === parentClassKey && e.to === childClassKey)
-        if (edgeExists) return
-        
-        // Use self/exclusive metric value for percentage calculation (already calculated in group)
-        let childGroupMetricValue
-        switch (selectedMetric) {
-          case 'wall_time':
-            childGroupMetricValue = childGroup.totalWallTime ?? childGroup.totalDuration
-            break
-          case 'io_wait':
-            childGroupMetricValue = childGroup.totalIoWaitTime ?? 0
-            break
-          case 'cpu':
-            childGroupMetricValue = childGroup.totalCpuTime ?? childGroup.totalDuration
-            break
-          case 'memory':
-            childGroupMetricValue = Math.abs(childGroup.totalMemoryDelta)
-            break
-          case 'network':
-            childGroupMetricValue = childGroup.totalNetworkBytes ?? 0
-            break
-          default:
-            childGroupMetricValue = childGroup.totalDuration
-        }
-        // Percentage is relative to included nodes total (for accurate percentages)
-        const childPercentage = includedTotalMetricValue > 0 
-          ? (childGroupMetricValue / includedTotalMetricValue) * 100 
-          : 0
-        const edgeWidth = Math.max(1, Math.min(3, 1 + (childPercentage / 10)))
-        
-        const callCountLabel = callCount > 1 ? `${callCount}x` : ''
-          
-        edges.push({
-          from: parentClassKey,
-          to: childClassKey,
-          arrows: 'to',
-          color: '#64748b',
-          width: edgeWidth,
-          label: callCountLabel,
-          smooth: { enabled: true, type: 'cubicBezier', roundness: 0.4 },
-        })
-      })
-    })
-
-    // Calculate levels for hierarchical layout
-    const nodeLevels = new Map()
-    
-    const nodesWithIncomingEdges = new Set(edges.map(e => e.to))
-    const rootNodes = nodes.filter(n => 
-      n.id === 'Root' || n.id === 'synthetic_root' || !nodesWithIncomingEdges.has(n.id)
-    )
-    
-    if (rootNodes.length === 0 && nodes.length > 0) {
-      const minDepthNode = nodes.reduce((min, node) => 
-        (node.data.depth ?? 0) < (min.data.depth ?? 0) ? node : min
-      )
-      rootNodes.push(minDepthNode)
-    }
-    
-    rootNodes.forEach(root => {
-      nodeLevels.set(root.id, 0)
-    })
-    
-    const visited = new Set()
-    const queue = []
-    
-    rootNodes.forEach(root => {
-      queue.push({ nodeId: root.id, level: 0 })
-      visited.add(root.id)
-    })
-    
-    while (queue.length > 0) {
-      const { nodeId, level } = queue.shift()
-      const currentLevel = nodeLevels.get(nodeId) ?? level
-      
-      const childEdges = edges.filter(e => e.from === nodeId)
-      
-      childEdges.forEach(edge => {
-        const childNodeId = edge.to
-        const childLevel = currentLevel + 1
-        const existingLevel = nodeLevels.get(childNodeId)
-        
-        if (existingLevel === undefined || childLevel < existingLevel) {
-          nodeLevels.set(childNodeId, childLevel)
-          
-          if (!visited.has(childNodeId)) {
-            visited.add(childNodeId)
-            queue.push({ nodeId: childNodeId, level: childLevel })
-          }
-        }
-      })
-    }
-    
-    nodes.forEach(node => {
-      if (!nodeLevels.has(node.id)) {
-        const incomingEdges = edges.filter(e => e.to === node.id)
-        if (incomingEdges.length > 0) {
-          const parentLevels = incomingEdges.map(e => nodeLevels.get(e.from) ?? 999)
-          const minParentLevel = Math.min(...parentLevels)
-          nodeLevels.set(node.id, minParentLevel + 1)
-        } else {
-          nodeLevels.set(node.id, 999)
-        }
-      }
-    })
-    
-    nodes.forEach(node => {
-      const level = nodeLevels.get(node.id)
-      if (level !== undefined) {
-        node.level = level
-      } else {
-        const incomingEdges = edges.filter(e => e.to === node.id)
-        if (incomingEdges.length > 0) {
-          const parentLevels = incomingEdges.map(e => {
-            const parentNode = nodes.find(n => n.id === e.from)
-            return parentNode?.level ?? 0
-          })
-          const maxParentLevel = parentLevels.length > 0 ? Math.max(...parentLevels) : -1
-          node.level = maxParentLevel + 1
-        } else {
-          node.level = 0
-        }
-      }
-    })
-
-    return { nodes, edges, nodeDataMap }
-  }, [normalizedCallTree, totalMetricValue, minPercentage, showInternalFunctions, showMethods, showUserFunctions, selectedMetric])
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!networkRef.current) return
-      
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return
-      }
-
-      switch (e.key) {
-        case '+':
-        case '=':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            handleZoomIn()
-          }
-          break
-        case '-':
-        case '_':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            handleZoomOut()
-          }
-          break
-        case '0':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            handleFit()
-          }
-          break
-        case 'Escape':
-          setSelectedNode(null)
-          if (networkRef.current) {
-            networkRef.current.setSelection({ nodes: [] })
-          }
-          break
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+  const openPicker = useCallback((mode) => {
+    setPicker(mode)
+    setQuery('')
   }, [])
 
-  // Initialize network
-  useEffect(() => {
-    if (!containerRef.current || graphData.nodes.length === 0) {
+  const step = useCallback((dir) => {
+    const list = neighbours(graph, ranked, focus, dir, 1)
+    if (list.length > 0) refocus(list[0].sym)
+  }, [graph, ranked, focus, refocus])
+
+  // Scoped to this container, never window: ProfileComparison mounts two of
+  // these side by side and a window listener made one keypress move both.
+  const onKeyDown = useCallback((ev) => {
+    if (ev.key === 'Escape') {
+      if (picker) { setPicker(null); ev.stopPropagation() }
       return
     }
+    const tag = ev.target && ev.target.tagName
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+    if (ev.key === 'ArrowUp') { ev.preventDefault(); step('in') }
+    else if (ev.key === 'ArrowDown') { ev.preventDefault(); step('out') }
+    else if (ev.key === 'ArrowLeft' || ev.key === 'Backspace') { ev.preventDefault(); back() }
+  }, [picker, step, back])
 
-    if (networkRef.current) {
-      networkRef.current.destroy()
-      networkRef.current = null
-    }
+  const crumbs = useMemo(() => {
+    if (!showCrumbs) return []
+    const p = entryPath
+    if (p.length <= crumbCap) return p.map((s) => ({ sym: s }))
+    // The entry point and the focus are the two that must survive; the middle
+    // collapses into a "+N" the user can hover for the count.
+    const head = crumbCap >= 5 ? 2 : 1
+    const tail = crumbCap - head
+    return [
+      ...p.slice(0, head).map((s) => ({ sym: s })),
+      { gap: p.length - head - tail },
+      ...p.slice(p.length - tail).map((s) => ({ sym: s })),
+    ]
+  }, [entryPath, showCrumbs, crumbCap])
 
-    const data = {
-      nodes: graphData.nodes,
-      edges: graphData.edges,
-    }
-
-    const options = {
-      layout: viewMode === 'hierarchical' ? {
-        hierarchical: {
-          direction: 'UD',
-          sortMethod: 'directed', // Follow call direction top-down for a readable tree
-          levelSeparation: 180,
-          nodeSpacing: 180,
-          treeSpacing: 220,
-          blockShifting: true,
-          edgeMinimization: true,
-          parentCentralization: true,
-          shakeTowards: 'roots',
-        },
-      } : {
-        improvedLayout: true,
-      },
-      physics: viewMode === 'hierarchical' ? {
-        enabled: false,
-      } : viewMode === 'force' ? {
-        enabled: true,
-        stabilization: {
-          iterations: 200,
-          fit: true,
-        },
-        barnesHut: {
-          gravitationalConstant: -3000,
-          centralGravity: 0.3,
-          springLength: 200,
-          springConstant: 0.04,
-          damping: 0.09,
-        },
-      } : {
-        enabled: false,
-      },
-      nodes: {
-        borderWidth: 2,
-        shadow: {
-          enabled: false,
-        },
-        font: {
-          size: 12,
-          color: '#ffffff',
-          face: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-        },
-        shapeProperties: {
-          borderRadius: 4,
-        },
-        margin: 8,
-      },
-      edges: {
-        width: 2,
-        color: {
-          color: '#64748b',
-          highlight: '#3b82f6',
-          hover: '#3b82f6',
-        },
-        smooth: {
-          enabled: true,
-          type: 'cubicBezier',
-          roundness: 0.4,
-        },
-        arrows: {
-          to: {
-            enabled: true,
-            scaleFactor: 1.0,
-            type: 'arrow',
-          },
-        },
-        selectionWidth: 3,
-        font: {
-          size: 11,
-          color: '#d0d0d0',
-          face: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-          align: 'middle',
-        },
-        labelHighlightBold: false,
-      },
-      interaction: {
-        hover: true,
-        tooltipDelay: 150,
-        zoomView: true,
-        dragView: true,
-        selectConnectedEdges: false,
-      },
-    }
-
-    const network = new Network(containerRef.current, data, options)
-    networkRef.current = network
-
-    // Freeze physics once stabilization completes so the layout stays put
-    // (still fully zoom/pan-able) instead of endlessly jittering.
-    network.on('stabilizationIterationsDone', () => {
-      network.setOptions({ physics: { enabled: false } })
-      network.fit({ animation: { duration: 300 } })
-    })
-
-    network.on('click', (params) => {
-      if (params.nodes.length > 0) {
-        const nodeId = params.nodes[0]
-        const node = graphData.nodes.find((n) => n.id === nodeId)
-        if (node) {
-          setSelectedNode(node.data)
-          network.setSelection({ nodes: [nodeId] })
-          network.focus(nodeId, {
-            scale: 1.2,
-            animation: true,
-          })
-        }
-      } else {
-        setSelectedNode(null)
-        network.setSelection({ nodes: [] })
-      }
-    })
-
-    setTimeout(() => {
-      network.fit({ animation: { duration: 300 } })
-    }, 100)
-
-    if (viewMode === 'hierarchical') {
-      setTimeout(() => {
-        network.fit({ animation: { duration: 300 } })
-      }, 500)
-    }
-
-    return () => {
-      if (networkRef.current) {
-        networkRef.current.destroy()
-        networkRef.current = null
-      }
-    }
-  }, [graphData, viewMode, selectedNode])
-
-  // Zoom controls
-  const handleZoomIn = () => {
-    if (networkRef.current) {
-      const scale = networkRef.current.getScale()
-      networkRef.current.moveTo({ scale: scale * 1.2 })
-    }
+  function bandText(b) {
+    const noun = b.dir === 'in' ? 'Callers' : 'Callees'
+    if (b.level === 2) return `${noun} of ${noun.toLowerCase()} · ${fmtNum(b.placed)}`
+    const more = b.total > b.placed ? ` · +${fmtNum(b.total - b.placed)} more` : ''
+    return `${noun} · ${fmtNum(b.total)}${more}`
   }
 
-  const handleZoomOut = () => {
-    if (networkRef.current) {
-      const scale = networkRef.current.getScale()
-      networkRef.current.moveTo({ scale: scale * 0.8 })
+  function nodeTitle(sym, n) {
+    const parts = [graph.symKey[sym], typeLabel(TYPE_ORDER[graph.symOpType[sym]])]
+    if (!noData) {
+      parts.push(`self ${fmtMetric(metric, selfM[sym])}`)
+      parts.push(`total ${fmtMetric(metric, inclM[sym])}`)
     }
+    parts.push(`${fmtNum(graph.callCount[sym])} call${graph.callCount[sym] === 1 ? '' : 's'}`)
+    parts.push(`${fmtNum(ranked.inDeg[sym])} callers / ${fmtNum(ranked.outDeg[sym])} callees`)
+    if (graph.recursiveCalls[sym] > 0) parts.push(`${fmtNum(graph.recursiveCalls[sym])} recursive`)
+    if (graph.symIsWrapper[sym] === 1) parts.push('synthetic entry point')
+    if (graph.symDiff[sym] >= 0) parts.push(DIFF_LABELS[graph.symDiff[sym]].toLowerCase())
+    parts.push(n.isFocus ? 'in focus — click to choose another' : 'click to refocus')
+    return parts.join(' · ')
   }
 
-  const handleFit = () => {
-    if (networkRef.current) {
-      networkRef.current.fit({ animation: true })
+  function nodeLines(sym, n) {
+    const count = graph.callCount[sym]
+    const calls = fmtNum(count)
+    const callWord = `${calls} call${count === 1 ? '' : 's'}`
+    if (!n.isFocus) {
+      return [fitSub(noData ? callWord : `${fmtMetric(metric, selfM[sym])} · ${calls}×`, n.w)]
     }
+    if (noData) {
+      return [
+        fitSub(`${callWord} · #${ranked.rankOf[sym] + 1}`, n.w),
+        fitSub(`${fmtNum(ranked.inDeg[sym])} in · ${fmtNum(ranked.outDeg[sym])} out`, n.w),
+      ]
+    }
+    // Share denominator is Σ|self| (totals.selfAbs), never |Σ self| — signed
+    // metrics (memory, network) put the latter into the thousands of percent.
+    const share = totals.selfAbs[metric] > 0 ? (Math.abs(selfM[sym]) / totals.selfAbs[metric]) * 100 : null
+    return [
+      fitSub(`Self ${fmtMetric(metric, selfM[sym])}${share == null ? '' : ` · ${fmtPct(share)}`}`, n.w),
+      fitSub(`Total ${fmtMetric(metric, inclM[sym])} · ${calls}×`, n.w),
+    ]
   }
 
-  const handleReset = () => {
-    if (networkRef.current) {
-      networkRef.current.moveTo({ position: { x: 0, y: 0 }, scale: 1 })
-      setSelectedNode(null)
-      networkRef.current.setSelection({ nodes: [] })
+  // The drawing is a TREE: each box records only the edge that placed it, so a
+  // call between two boxes that are BOTH on screen is not drawn. Routing those
+  // would mean horizontal lines across a band, straight through other boxes —
+  // the same misattribution the single sub-row exists to prevent. So they are
+  // counted and disclosed rather than quietly omitted.
+  const undrawnEdges = useMemo(() => {
+    const drawn = new Set()
+    const shown = new Set()
+    for (let i = 0; i < layout.nodes.length; i++) drawn.add(layout.nodes[i].sym)
+    for (let i = 0; i < layout.edges.length; i++) shown.add(layout.edges[i].e)
+    let extra = 0
+    for (let e = 0; e < graph.E; e++) {
+      if (shown.has(e)) continue
+      if (drawn.has(graph.eFrom[e]) && drawn.has(graph.eTo[e])) extra++
     }
-  }
-
-  if (!normalizedCallTree || normalizedCallTree.length === 0) {
-    return (
-      <div className="call-graph-empty">
-        <div className="empty-icon">📊</div>
-        <h3>No Call Graph Data</h3>
-        <p>Call graph data is not available for this trace.</p>
-      </div>
-    )
-  }
+    return extra
+  }, [layout, graph])
 
   return (
-    <div className="call-graph-modern">
-      <TraceTabFilters
-        onFiltersChange={setDurationFilters}
-        availableFilters={['duration']}
-      />
-      <div className="metric-tabs">
-        {METRIC_TYPES.map((metric) => (
-          <button
-            key={metric}
-            className={`metric-tab ${selectedMetric === metric ? 'active' : ''}`}
-            onClick={() => setSelectedMetric(metric)}
-          >
-            {getMetricLabel(metric)}
-          </button>
-        ))}
-      </div>
-      
-      <div className="call-graph-header-modern">
-        <div className="header-left">
-          <h3>Call Graph - {getMetricLabel(selectedMetric)}</h3>
-          <span className="node-count">{graphData.nodes.length} nodes</span>
-        </div>
-        <div className="header-controls">
-          <div className="control-group">
-            <label>Min %</label>
-            <input
-              type="range"
-              min="0"
-              max="5"
-              step="0.1"
-              value={minPercentage}
-              onChange={(e) => setMinPercentage(parseFloat(e.target.value))}
-              className="slider"
-            />
-            <span className="slider-value">{minPercentage.toFixed(1)}%</span>
-          </div>
-          <div className="control-group">
-            <label>Layout</label>
-            <select
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value)}
-              className="layout-select"
-            >
-              <option value="hierarchical">Hierarchical</option>
-              <option value="force">Force-Directed</option>
+    <div className="opa-cg" style={{ width: W }} onKeyDown={onKeyDown}>
+      <div className="opa-cg-toolbar">
+        <button
+          type="button"
+          className="opa-cg-focusbtn"
+          aria-expanded={picker === 'all'}
+          title={`${focusName} — choose another function to focus`}
+          onClick={() => openPicker('all')}
+        >
+          <FiCrosshair size={12} aria-hidden="true" />
+          <span className="opa-cg-focusname">{middleEllipsis(focusName, 44)}</span>
+          <span className="opa-muted opa-tnum">#{ranked.rankOf[focus] + 1}</span>
+        </button>
+        {/* Hidden when the page drives the metric from the shared toolbar, so
+            the panel never shows two metric controls sitting side by side. */}
+        {!metricControlled && (
+          <label className="opa-prof-field opa-cg-metric">
+            Cost
+            <select className="opa-select" value={metric} onChange={(e) => onMetricChange(e.target.value)}>
+              {METRICS.map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
             </select>
-          </div>
-          <div className="control-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={showUserFunctions}
-                onChange={(e) => setShowUserFunctions(e.target.checked)}
-              />
-              User Functions
-            </label>
-          </div>
-          <div className="control-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={showInternalFunctions}
-                onChange={(e) => setShowInternalFunctions(e.target.checked)}
-              />
-              Internal Functions
-            </label>
-          </div>
-          <div className="control-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={showMethods}
-                onChange={(e) => setShowMethods(e.target.checked)}
-              />
-              Methods
-            </label>
-          </div>
+          </label>
+        )}
+        <div
+          className="opa-cg-depth"
+          title={layout.maxDepth < 2
+            ? 'Two hops needs a taller panel'
+            : 'How many call hops to draw around the focus'}
+        >
+          <SegmentedControl options={DEPTHS} value={layout.depth} onChange={setDepthChoice} />
         </div>
-        <div className="zoom-controls-modern">
-          <button onClick={handleZoomIn} className="zoom-btn" title="Zoom In (Ctrl/Cmd +)">+</button>
-          <button onClick={handleZoomOut} className="zoom-btn" title="Zoom Out (Ctrl/Cmd -)">−</button>
-          <button onClick={handleFit} className="zoom-btn" title="Fit (Ctrl/Cmd 0)">⊞</button>
-          <button onClick={handleReset} className="zoom-btn" title="Reset">⟲</button>
-        </div>
-      </div>
-
-      <div className="call-graph-container-modern">
-        <div className="call-stack-sidebar">
-          <div className="call-stack-header">
-            <h4>Call Stack</h4>
-          </div>
-          <div className="call-stack-content">
-            {callStackPathWithDepth.length === 0 ? (
-              <div className="call-stack-empty">
-                {selectedNode ? (
-                  <p>Call stack path not found</p>
-                ) : (
-                  <p>No call tree data available</p>
-                )}
-              </div>
-            ) : (
-              callStackPathWithDepth.map((item, index) => {
-                const { node, depth } = item
-                const signature = node.class ? `${node.class}::${node.function}` : node.function
-                const isActive = selectedNode && 
-                  selectedNode.function === node.function &&
-                  selectedNode.class === node.class &&
-                  (!selectedNode.file || selectedNode.file === node.file) &&
-                  (!selectedNode.line || selectedNode.line === node.line)
-                
-                const handleClick = () => {
-                  let nodeId = null
-                  nodeDataMap.forEach((data, id) => {
-                    const nodeSignature = data.node.class ? `${data.node.class}::${data.node.function}` : data.node.function
-                    if (nodeSignature === signature &&
-                        (!node.file || data.node.file === node.file) &&
-                        (!node.line || data.node.line === node.line)) {
-                      nodeId = id
-                    }
-                  })
-
-                  if (nodeId) {
-                    const matchingNode = graphData.nodes.find((n) => n.id === nodeId)
-                    
-                    if (matchingNode) {
-                      setSelectedNode(matchingNode.data)
-                      if (networkRef.current) {
-                        networkRef.current.setSelection({ nodes: [nodeId] })
-                        networkRef.current.focus(nodeId, {
-                          scale: 1.2,
-                          animation: true,
-                        })
-                      }
-                    } else {
-                      // Use self/exclusive metric value for percentage (relative, not absolute)
-                      const nodeMetricValue = getSelfMetricValue(node, selectedMetric)
-                      const percentage = totalMetricValue > 0 ? (nodeMetricValue / totalMetricValue) * 100 : 0
-                      const nodeData = {
-                        function: node.function,
-                        class: node.class,
-                        file: node.file,
-                        line: node.line,
-                        duration: node.duration || 0,
-                        memory_delta: node.memory_delta || 0,
-                        cpu_time: node.cpu_time,
-                        io_wait_time: node.io_wait_time,
-                        wall_time: node.wall_time,
-                        bytes_sent_delta: node.bytes_sent_delta,
-                        bytes_received_delta: node.bytes_received_delta,
-                        depth: nodeDataMap.get(nodeId)?.depth || 0,
-                        percentage,
-                        function_type: node.function_type,
-                      }
-                      setSelectedNode(nodeData)
-                    }
-                  }
-                }
-
-                return (
-                  <div
-                    key={`${signature}-${index}-${node.file || ''}-${node.line || ''}`}
-                    className={`call-stack-item ${isActive ? 'active' : ''}`}
-                    onClick={handleClick}
-                    title={signature}
-                    style={{ paddingLeft: `${(depth * 20) + 12}px` }}
-                  >
-                    <div className="call-stack-item-signature">
-                      <span className="call-stack-item-depth">{depth + 1}</span>
-                      {node.class && <span className="class-name">{node.class}::</span>}
-                      {node.function}
-                    </div>
-                    <div className="call-stack-item-meta">
-                      <span>{formatDuration((node.duration || 0) * 1000)}</span>
-                      {node.file && (
-                        <span>{node.file}{node.line ? `:${node.line}` : ''}</span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
-        </div>
-        <div ref={containerRef} className="call-graph-canvas" />
-
-        <div className="call-graph-legend-overlay" aria-label="Node type legend">
-          <div className="legend-title">Node Type</div>
-          <div className="legend-items">
-            {OPERATION_TYPE_ORDER.map((type) => (
-              <div key={type} className="legend-item">
-                <span
-                  className="legend-color"
-                  style={{ background: OPERATION_TYPE_COLORS[type] }}
-                />
-                <span className="legend-label">{OPERATION_TYPE_LABELS[type]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {selectedNode && (
-          <div className="node-details-modern">
-            <div className="details-header">
-              <h4>Function Details</h4>
-              <button onClick={() => setSelectedNode(null)} className="close-btn">×</button>
-            </div>
-            <div className="details-content">
-              <div className="detail-item">
-                <span className="detail-label">Function:</span>
-                <span className="detail-value">
-                  {selectedNode.class && <span className="class-name">{selectedNode.class}::</span>}
-                  {selectedNode.function}
-                </span>
-              </div>
-              {selectedNode.file && (
-                <div className="detail-item">
-                  <span className="detail-label">File:</span>
-                  <span className="detail-value">{selectedNode.file}{selectedNode.line ? `:${selectedNode.line}` : ''}</span>
-                </div>
-              )}
-              {selectedNode.operation_type && (
-                <div className="detail-item">
-                  <span className="detail-label">Type:</span>
-                  <span className="detail-value detail-type">
-                    <span
-                      className="detail-type-dot"
-                      style={{ background: OPERATION_TYPE_COLORS[selectedNode.operation_type] }}
-                    />
-                    {OPERATION_TYPE_LABELS[selectedNode.operation_type] || selectedNode.operation_type}
-                  </span>
-                </div>
-              )}
-              {selectedNode.call_count !== undefined && (
-                <div className="detail-item">
-                  <span className="detail-label">Call Count:</span>
-                  <span className="detail-value">{selectedNode.call_count}x</span>
-                </div>
-              )}
-              {selectedNode.self_time !== undefined && (
-                <div className="detail-item">
-                  <span className="detail-label">Self {getMetricLabel(selectedMetric)}:</span>
-                  <span className="detail-value">{formatMetricValue(selectedNode.self_time, selectedMetric)}</span>
-                </div>
-              )}
-              <div className="detail-item">
-                <span className="detail-label">Total Time:</span>
-                <span className="detail-value">{formatDuration(selectedNode.duration * 1000)}</span>
-              </div>
-              <div className="detail-item">
-                <span className="detail-label">Percentage:</span>
-                <span className="detail-value">{selectedNode.percentage.toFixed(2)}%</span>
-              </div>
-              <div className="detail-item">
-                <span className="detail-label">Memory Delta:</span>
-                <span className={`detail-value ${selectedNode.memory_delta >= 0 ? 'memory-positive' : 'memory-negative'}`}>
-                  {selectedNode.memory_delta >= 0 ? '+' : ''}{formatMemory(selectedNode.memory_delta)}
-                </span>
-              </div>
-              {selectedNode.cpu_time !== undefined && (
-                <div className="detail-item">
-                  <span className="detail-label">CPU Time:</span>
-                  <span className="detail-value">{formatDuration(selectedNode.cpu_time * 1000)}</span>
-                </div>
-              )}
-              {selectedNode.io_wait_time !== undefined && (
-                <div className="detail-item">
-                  <span className="detail-label">IO Wait:</span>
-                  <span className="detail-value">{formatDuration(selectedNode.io_wait_time * 1000)}</span>
-                </div>
-              )}
-              {selectedNode.wall_time !== undefined && (
-                <div className="detail-item">
-                  <span className="detail-label">Wall Time:</span>
-                  <span className="detail-value">{formatDuration(selectedNode.wall_time * 1000)}</span>
-                </div>
-              )}
-              {(selectedNode.bytes_sent_delta !== undefined || selectedNode.bytes_received_delta !== undefined) && (
-                <>
-                  <div className="detail-item">
-                    <span className="detail-label">Network Sent:</span>
-                    <span className="detail-value">{formatBytes(selectedNode.bytes_sent_delta || 0)}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Network Received:</span>
-                    <span className="detail-value">{formatBytes(selectedNode.bytes_received_delta || 0)}</span>
-                  </div>
-                </>
-              )}
-              <div className="detail-item">
-                <span className="detail-label">Depth:</span>
-                <span className="detail-value">{selectedNode.depth}</span>
-              </div>
-            </div>
-          </div>
+        {history.length > 0 && (
+          <button type="button" className="opa-btn ghost opa-cg-back" onClick={back}>Back</button>
         )}
       </div>
+
+      {noData && (
+        <div className="opa-prof-notice warn">
+          <FiAlertTriangle aria-hidden="true" />
+          <div>
+            <strong>{METRIC_LABELS[metric]}</strong> was not recorded in this trace (every value is 0), so boxes and
+            edges are sized by <strong>call count</strong> and values show “—”.
+          </div>
+          {withData.length > 0 && (
+            <div className="opa-prof-notice-actions">
+              {withData.map((m) => (
+                <button key={m} type="button" className="opa-prof-mini" onClick={() => onMetricChange(m)}>
+                  Size by {METRIC_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {totals.truncated && (
+        <div className="opa-prof-notice">
+          <FiInfo aria-hidden="true" />
+          <div>
+            Ingest stopped at the first <strong>{fmtNum(totals.calls)}</strong> of {fmtNum(totals.scanned)} calls;
+            this neighbourhood covers that prefix only.
+          </div>
+        </div>
+      )}
+
+      {showCrumbs && (
+        <div className="opa-cg-crumbs">
+          <span
+            className="opa-cg-crumbs-l"
+            title="One observed way execution reaches the focus. A symbol is an aggregate, so this is not the only path."
+          >
+            Entry path
+          </span>
+          {crumbs.map((c, i) => (
+            <React.Fragment key={c.gap ? `gap${i}` : `s${c.sym}`}>
+              {i > 0 && <span className="opa-prof-crumb-sep" aria-hidden="true">›</span>}
+              {c.gap ? (
+                <span className="opa-prof-crumb-sep" title={`${c.gap} more frames`}>+{c.gap}</span>
+              ) : c.sym === focus ? (
+                <span className="opa-prof-crumb is-focus" aria-current="true" title={graph.symKey[c.sym]}>
+                  {middleEllipsis(shortKey(graph.symKey[c.sym]), narrow ? 15 : CRUMB_CHARS)}
+                </span>
+              ) : (
+                <button type="button" className="opa-prof-crumb" title={graph.symKey[c.sym]} onClick={() => refocus(c.sym)}>
+                  {middleEllipsis(shortKey(graph.symKey[c.sym]), narrow ? 15 : CRUMB_CHARS)}
+                </button>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
+      <div
+        className="opa-cg-canvas"
+        tabIndex={0}
+        role="group"
+        aria-label={`Call graph around ${focusName}. Arrow up focuses the hottest caller, arrow down the hottest callee.`}
+      >
+        <svg
+          className="opa-cg-svg"
+          width={layout.width}
+          height={layout.height}
+          viewBox={`0 0 ${layout.width} ${layout.height}`}
+        >
+          {layout.edges.map((e, i) => (
+            <g key={`e${i}`} className={`opa-cg-edge${e.focusEdge ? ' is-focus' : ''}`}>
+              <path className="opa-cg-line" d={e.path} style={{ strokeWidth: e.stroke }} />
+              <path className="opa-cg-arrow" d={e.arrow} />
+              {e.label && (
+                <>
+                  <rect className="opa-cg-elabelbg" x={e.label.x} y={e.label.y - 8} width={e.label.w} height="16" rx="3" />
+                  <text className="opa-cg-elabel" x={e.label.x + e.label.w / 2} y={e.label.y + 3.5} textAnchor="middle">
+                    {e.label.text}
+                  </text>
+                </>
+              )}
+            </g>
+          ))}
+
+          {layout.bands.map((b, i) => {
+            if (b.dir === 'focus') return null
+            const label = bandText(b)
+            const ly = b.top - 5
+            return (
+              <React.Fragment key={`b${i}`}>
+                {/* Only level 1 knows its exact degree, so only level 1 offers
+                    the full list behind its label. */}
+                {b.exact ? (
+                  <g
+                    className="opa-cg-bandbtn"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${label} — open the full list`}
+                    onClick={() => openPicker(b.dir)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openPicker(b.dir) }
+                    }}
+                  >
+                    <text className="opa-cg-band" x={EGO.PAD_X} y={ly}>{label}</text>
+                  </g>
+                ) : (
+                  <text className="opa-cg-band" x={EGO.PAD_X} y={ly}>{label}</text>
+                )}
+                {b.placed === 0 && (
+                  <text className="opa-cg-bandempty" x={layout.width / 2} y={b.top + 23} textAnchor="middle">
+                    {b.dir === 'in'
+                      ? 'No caller in this trace — this is an entry point.'
+                      : 'No callee in this trace — leaf function.'}
+                  </text>
+                )}
+              </React.Fragment>
+            )
+          })}
+
+          {layout.nodes.map((n) => (
+            <EgoNode
+              key={`n${n.band}:${n.sym}`}
+              n={n}
+              label={boxLabel(n.key, n.labelChars)}
+              lines={nodeLines(n.sym, n)}
+              fill={tone(graph.symOpType[n.sym])}
+              diff={graph.symDiff[n.sym]}
+              share={maxInView > 0 ? valueOf(n.sym) / maxInView : 0}
+              title={nodeTitle(n.sym, n)}
+              onSelect={n.isFocus ? () => openPicker('all') : refocus}
+            />
+          ))}
+        </svg>
+      </div>
+
+      <div className="opa-cg-legend">
+        {typesInView.map((t) => (
+          <span key={t} className="opa-cg-key">
+            <i style={{ background: t === 'other' ? 'var(--neutral)' : typeFill(t) }} />
+            {t === 'other' ? 'Other' : typeLabel(t)}
+          </span>
+        ))}
+        {diffsInGraph.length > 0 && (
+          <span className="opa-cg-keygroup" title="Right edge of each box — from the A/B comparison">
+            {diffsInGraph.map((d) => (
+              <span key={d.code} className="opa-cg-key">
+                <i style={{ background: DIFF_TONE[d.code] }} />{d.label}
+              </span>
+            ))}
+          </span>
+        )}
+        {undrawnEdges > 0 && (
+          <span
+            className="opa-cg-key opa-muted"
+            title="Calls between two functions that are both drawn here. They are not shown because routing them across a band would run the line through other boxes."
+          >
+            +{fmtNum(undrawnEdges)} call{undrawnEdges === 1 ? '' : 's'} between shown functions not drawn
+          </span>
+        )}
+        {/* The narrow variant drops the keyboard hint rather than wrap the
+            legend onto a third line and eat the canvas it was sized against. */}
+        <span className="opa-cg-hint" title="Click any box to refocus the graph on it. Arrow up / arrow down jump to the hottest caller / callee.">
+          {fmtNum(layout.drawn)} of {fmtNum(graph.S)} functions
+          {narrow ? '' : ' · click a box to refocus · ↑ ↓ hottest caller/callee'}
+          {layout.maxDepth < 2 ? ' · 2 hops needs a taller panel' : ''}
+        </span>
+      </div>
+
+      {picker && (
+        <div className="opa-cg-picker" role="dialog" aria-label="Choose the focus function">
+          <div className="opa-cg-picker-bar">
+            <span className="opa-cg-picker-search">
+              <FiSearch aria-hidden="true" />
+              <input
+                className="opa-input"
+                type="search"
+                value={query}
+                placeholder="Filter functions..."
+                aria-label="Filter functions"
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </span>
+            <SegmentedControl options={PICKER_MODES} value={picker} onChange={openPicker} />
+            <button type="button" className="opa-cg-close" aria-label="Close the function list" onClick={() => setPicker(null)}>
+              <FiX size={14} />
+            </button>
+          </div>
+          <div className="opa-cg-picker-list">
+            {pickRows.length === 0 ? (
+              <div className="opa-cg-picker-empty">
+                {picker === 'in' ? 'No caller in this trace — this is an entry point.'
+                  : picker === 'out' ? 'No callee in this trace — leaf function.'
+                    : `No function matches “${query}”`}
+              </div>
+            ) : pickRows.map((r) => (
+              <button
+                key={r.sym}
+                type="button"
+                className={`opa-cg-prow${r.sym === focus ? ' is-current' : ''}`}
+                title={r.key}
+                onClick={() => refocus(r.sym)}
+              >
+                <span className="opa-cg-prank">#{r.rank}</span>
+                <span className="opa-prof-type" style={{ color: tone(graph.symOpType[r.sym]) }}>
+                  {typeLabel(TYPE_ORDER[graph.symOpType[r.sym]])}
+                </span>
+                <span className="opa-cg-pname">{middleEllipsis(r.key, 52)}</span>
+                <span className="opa-cg-pnum">
+                  {r.e >= 0
+                    ? (noData ? `${fmtNum(graph.eCount[r.e])}×` : fmtMetric(metric, graph.eW[metric][r.e]))
+                    : (noData ? '—' : fmtMetric(metric, selfM[r.sym]))}
+                </span>
+                <span className="opa-cg-pnum opa-muted">{fmtNum(graph.callCount[r.sym])}</span>
+              </button>
+            ))}
+          </div>
+          <div className="opa-cg-picker-foot">
+            {picker === 'all'
+              ? <><FiCrosshair aria-hidden="true" />Ranked by {noData ? 'call count' : METRIC_LABELS[metric].toLowerCase()}</>
+              : picker === 'in'
+                ? <><FiCornerLeftUp aria-hidden="true" />Callers, by the cost that flows through the call site</>
+                : <><FiCornerDownRight aria-hidden="true" />Callees, by the cost that flows through the call site</>}
+            <span className="opa-muted">
+              {pickRows.length < pickerTotal
+                ? `${fmtNum(pickRows.length)} of ${fmtNum(pickerTotal)} shown`
+                : `${fmtNum(pickRows.length)} shown`}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-export default CallGraph
+/**
+ * Ego call graph for one trace's call stack.
+ *
+ * Props are fixed at ({ callStack, width, height }) — four call sites depend on
+ * them. The metric selector is local because nothing passes one in; TraceDetail
+ * already owns a metric control, so passing it down would let this one go.
+ */
+// `metric`, `groupBy` and `minPct` are OPTIONAL: when the host page drives them
+// from the shared ProfileToolbar the graph follows it (and hides its own metric
+// control), otherwise it manages the metric itself and stays useful standalone.
+export default function CallGraph({
+  callStack,
+  width = 960,
+  height = 520,
+  metric: metricProp,
+  onMetricChange,
+  groupBy = 'method',
+  minPct = 0,
+}) {
+  const [ownMetric, setOwnMetric] = useState('duration')
+  const controlled = metricProp !== undefined
+  const metric = controlled ? metricProp : ownMetric
+  const setMetric = controlled ? (onMetricChange || (() => {})) : setOwnMetric
+  const model = useProfileModel(callStack, { metric, groupBy, minPct })
+  const W = Math.max(220, Math.floor(width) || 640)
+
+  if (!model.ready) {
+    return (
+      <div className="opa-cg is-blank" style={{ width: W }}>
+        <EmptyState title="No call stack" hint="This trace carries no call stack to build a graph from." />
+      </div>
+    )
+  }
+  if (model.graph.S === 0) {
+    return (
+      <div className="opa-cg is-blank" style={{ width: W }}>
+        <EmptyState title="No function survived aggregation" hint="Every call was filtered out before grouping." />
+      </div>
+    )
+  }
+  return (
+    <EgoGraph
+      model={model}
+      metric={metric}
+      onMetricChange={setMetric}
+      metricControlled={controlled}
+      width={width}
+      height={height}
+    />
+  )
+}
