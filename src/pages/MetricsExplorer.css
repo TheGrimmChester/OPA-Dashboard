@@ -1,0 +1,175 @@
+/* Metrics Explorer layout: a fixed catalogue rail beside a flexible chart column. */
+.opa-metrics-explorer {
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* The chart column must be allowed to shrink below its content width, or a wide
+   recharts SVG pushes the grid and the whole page scrolls sideways. */
+.opa-mx-main {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .opa-metrics-explorer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.opa-mx-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 0 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  color: var(--text-muted);
+}
+
+.opa-mx-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 2px;
+  font-size: var(--fs-12);
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+}
+
+.opa-mx-search input:focus {
+  outline: none;
+}
+
+.opa-mx-search:focus-within {
+  border-color: var(--border-strong);
+}
+
+.opa-mx-list {
+  max-height: 460px;
+  overflow-y: auto;
+  margin: 0 -4px;
+}
+
+.opa-mx-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  margin-bottom: 1px;
+  font-size: var(--fs-12);
+  font-family: var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.opa-mx-item:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.opa-mx-item.active {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+/* Metric names are long and the rail is narrow: truncate the name, never the
+   count, so the series count stays readable while scanning. */
+.opa-mx-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opa-mx-count {
+  flex: none;
+  font-size: var(--fs-10, 10px);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.opa-mx-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.opa-mx-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.opa-mx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: var(--fs-11, 11px);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  color: var(--text-secondary);
+}
+
+.opa-mx-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.opa-mx-chip.active {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.opa-mx-chip-n {
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+.opa-mx-res {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: var(--fs-11, 11px);
+  color: var(--text-muted);
+}
+
+.opa-mx-meta {
+  margin-bottom: 10px;
+  font-size: var(--fs-11, 11px);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* The aggregation control must be allowed to wrap in a narrow header rather than
+   overflow it — a clipped control silently hides the p95/p99 options. */
+.opa-mx-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}

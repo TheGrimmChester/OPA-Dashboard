@@ -19,14 +19,12 @@ import {
 // is still loading.
 const NO_CALLS = []
 
-// `memory` and `network` are ADDITIVE per-call deltas, not inclusive costs:
-// callGraphModel leaves self.memory signed on purpose (frees are real
-// information), so summing self across the tree cancels parents against their
-// own children and lands on ~0. Their trace total is the plain sum over calls.
-// duration/cpu/io are inclusive, so a child's cost is already inside its
-// parent's and Σ self is the right shape for them.
-const ADDITIVE_METRICS = new Set(['memory', 'network'])
-
+// Metric shapes differ, and conflating them produced wrong headline numbers.
+// callGraphModel derives self by subtracting the children and clamping at 0 for
+// duration/cpu/io/network — those are INCLUSIVE, so Σ self is their trace total.
+// Only `memory` is a SIGNED additive delta (frees are real information and are
+// deliberately not clamped), so Σ self cancels for it and the total has to come
+// from the positive selves instead. See deriveTotals.
 const ZERO_PER_METRIC = Object.freeze({
   duration: 0, cpu: 0, io: 0, memory: 0, network: 0,
 })
@@ -66,7 +64,6 @@ function normPct(minPct) {
 
 function deriveTotals(calls, graph, ranked) {
   const self = graph.totalSelfM
-  const additive = calls.totalVal
   const ready = calls.n > 0
 
   // Σ|self| per metric. Two jobs, both of which a signed sum gets wrong:
@@ -75,13 +72,22 @@ function deriveTotals(calls, graph, ranked) {
   //  - the honest "does this metric carry any data" test. A trace can allocate
   //    16MB and still have Σ self memory === 0.
   const selfAbs = {}
+  const selfPos = {}
   const hasData = {}
   for (const metric of METRICS) {
     const col = graph.selfM[metric]
-    let sum = 0
-    if (col) for (let i = 0; i < graph.S; i++) sum += Math.abs(col[i])
-    selfAbs[metric] = sum
-    hasData[metric] = sum > 0
+    let abs = 0
+    let pos = 0
+    if (col) {
+      for (let i = 0; i < graph.S; i++) {
+        const v = col[i]
+        abs += Math.abs(v)
+        if (v > 0) pos += v
+      }
+    }
+    selfAbs[metric] = abs
+    selfPos[metric] = pos
+    hasData[metric] = abs > 0
   }
 
   return {
@@ -93,9 +99,16 @@ function deriveTotals(calls, graph, ranked) {
     wall: self.duration,
     cpu: self.cpu,
     io: self.io,
-    // True sums over every call, since these do not nest.
-    memory: additive ? additive.memory : 0,
-    network: additive ? additive.network : 0,
+    // Memory is the one signed metric, so Σ self cancels parents against their
+    // own children. Σ of the POSITIVE selves is the total allocated and is
+    // correct whether or not a parent aggregates its children's bytes:
+    //   parent 0, children 8+8MB  -> selves -16,+8,+8 -> 16MB
+    //   parent 16MB, children 8+8 -> selves   0,+8,+8 -> 16MB
+    // (a plain sum over all calls gets the second case wrong, at 32MB).
+    memory: selfPos.memory,
+    // network is INCLUSIVE in this model (self subtracts children and clamps at
+    // 0), so Σ self is already the trace total — not a plain sum over calls.
+    network: self.network,
     selfAbs,
     hasData,
     calls: calls.n,

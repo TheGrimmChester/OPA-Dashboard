@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { buildProfileModel } from './useProfileModel'
 
-// Regression tests for the metric-semantics bugs found in review: memory and
-// network are signed ADDITIVE per-call deltas, so the inclusive identity
-// (total === sum of self) does not hold for them.
+// Regression tests for the metric-semantics bugs found in review. Metric shapes
+// differ: duration/cpu/io/network are INCLUSIVE in this model (self subtracts
+// the children and clamps at 0), while `memory` is a SIGNED additive delta that
+// is deliberately left unclamped, so the inclusive identity
+// (total === Σ self) does NOT hold for memory.
 
 const MB = 1024 * 1024
 
@@ -106,4 +108,77 @@ describe('degenerate input', () => {
     const { totals } = buildProfileModel(stack, { metric: 'duration' })
     expect(Number.isFinite(totals.wall)).toBe(true)
   }, 5000)
+})
+
+describe('edge weight is the cost through the call site, not a double count', () => {
+  it('labels P->C with C inclusive cost, not C plus its children', () => {
+    // P(100ms) -> C(60ms) -> G(30ms). duration is already inclusive, so the
+    // P->C call site cost is 60ms. Summing the subtree gave 90ms.
+    const stack = [
+      { call_id: 'p', function: 'P', duration_ms: 100 },
+      { call_id: 'c', function: 'C', duration_ms: 60, parent_id: 'p' },
+      { call_id: 'g', function: 'G', duration_ms: 30, parent_id: 'c' },
+    ]
+    const { graph } = buildProfileModel(stack, { metric: 'duration' })
+    const symOf = (name) => {
+      for (let s = 0; s < graph.S; s++) if (graph.symKey[s] === name) return s
+      return -1
+    }
+    const edgeBetween = (from, to) => {
+      for (let e = 0; e < graph.E; e++) {
+        if (graph.eFrom[e] === from && graph.eTo[e] === to) return e
+      }
+      return -1
+    }
+    const pc = edgeBetween(symOf('P'), symOf('C'))
+    const cg = edgeBetween(symOf('C'), symOf('G'))
+    expect(pc).toBeGreaterThanOrEqual(0)
+    expect(cg).toBeGreaterThanOrEqual(0)
+    expect(graph.eW.duration[pc]).toBe(60)
+    expect(graph.eW.duration[cg]).toBe(30)
+    // An edge weight can never exceed the callee's own inclusive cost.
+    expect(graph.eW.duration[pc]).toBeLessThanOrEqual(graph.inclM.duration[symOf('C')])
+  })
+
+  it('keeps the subtree sum for memory, which really is additive', () => {
+    const MB2 = 1024 * 1024
+    const stack = [
+      { call_id: 'p', function: 'P', duration_ms: 10, memory_delta: 0 },
+      { call_id: 'c', function: 'C', duration_ms: 8, memory_delta: MB2, parent_id: 'p' },
+      { call_id: 'g', function: 'G', duration_ms: 4, memory_delta: MB2, parent_id: 'c' },
+    ]
+    const { graph } = buildProfileModel(stack, { metric: 'memory' })
+    const symOf = (name) => {
+      for (let s = 0; s < graph.S; s++) if (graph.symKey[s] === name) return s
+      return -1
+    }
+    let pc = -1
+    for (let e = 0; e < graph.E; e++) {
+      if (graph.eFrom[e] === symOf('P') && graph.eTo[e] === symOf('C')) pc = e
+    }
+    // C allocated 1MB and its callee another 1MB: 2MB flowed through P->C.
+    expect(graph.eW.memory[pc]).toBe(2 * MB2)
+  })
+})
+
+describe('memory total survives either attribution regime', () => {
+  const MB3 = 1024 * 1024
+  it('is right when parents do NOT aggregate their children bytes', () => {
+    const { totals } = buildProfileModel([
+      { call_id: 'a', function: 'main', memory_delta: 0 },
+      { call_id: 'b', function: 'x', memory_delta: 8 * MB3, parent_id: 'a' },
+      { call_id: 'c', function: 'y', memory_delta: 8 * MB3, parent_id: 'a' },
+    ], { metric: 'memory' })
+    expect(totals.memory).toBe(16 * MB3)
+  })
+
+  it('is right when parents DO aggregate their children bytes', () => {
+    const { totals } = buildProfileModel([
+      { call_id: 'a', function: 'main', memory_delta: 16 * MB3 },
+      { call_id: 'b', function: 'x', memory_delta: 8 * MB3, parent_id: 'a' },
+      { call_id: 'c', function: 'y', memory_delta: 8 * MB3, parent_id: 'a' },
+    ], { metric: 'memory' })
+    // A plain sum over calls would report 32MB here.
+    expect(totals.memory).toBe(16 * MB3)
+  })
 })
