@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Wave 23 Cloud page: resources, cost, tag violations, scrapes, cloud integrations (`/cloud`).
 - Wave 22 Automation page: ConfigBundle plan/apply/import, promote, revisions (`/automation`).
 - Wave 21 Catalog page: entities, scorecards, teams, account groups (`/catalog`).
 - Wave 20 synthetics depth UI: check types, step waterfall, cert days, private location field, trace links.
