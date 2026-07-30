@@ -5,9 +5,17 @@ import { useApi } from '../hooks/useApi'
 import {
   Panel, DataTable, StatusPill, LanguageBadge,
 } from '../components/ui'
+import FacetSidebar from '../components/ui/FacetSidebar'
 import ExportButton from '../components/ExportButton'
 import { fmtMs, fmtNum, fmtAgo, latencyStatus } from '../theme/format'
 import './TraceExplorer.css'
+
+function facetDSL(facets) {
+  const parts = []
+  Object.entries(facets?.include || {}).forEach(([f, vals]) => vals.forEach((v) => parts.push(`${f}:"${String(v).replace(/(["\\])/g, '\\$1')}"`)))
+  Object.entries(facets?.exclude || {}).forEach(([f, vals]) => vals.forEach((v) => parts.push(`-${f}:"${String(v).replace(/(["\\])/g, '\\$1')}"`)))
+  return parts.join(' AND ')
+}
 
 const LIMIT = 100
 const BINS = 20
@@ -98,6 +106,11 @@ export default function TraceExplorer() {
   const status = params.get('status') || ''
   const filter = params.get('filter') || ''
   const [offset, setOffset] = useState(0)
+  const [facets, setFacets] = useState({ include: {}, exclude: {} })
+  const combinedFilter = useMemo(() => {
+    const f = facetDSL(facets)
+    return [filter, f].filter(Boolean).join(' AND ')
+  }, [filter, facets])
 
   const setParam = (key, val) => {
     const p = new URLSearchParams(params)
@@ -107,7 +120,7 @@ export default function TraceExplorer() {
     setOffset(0)
   }
   const clearFilters = () => { setSearchParams(new URLSearchParams(), { replace: true }); setOffset(0) }
-  const hasFilters = !!(service || status || filter)
+  const hasFilters = !!(service || status || filter || facetDSL(facets))
 
   // Editable draft of the raw DSL filter. Kept local so typing doesn't thrash
   // the URL on every keystroke; committed to ?filter on Enter/blur. Re-syncs
@@ -123,7 +136,7 @@ export default function TraceExplorer() {
   const q = useApi('/api/traces', {
     service: service || undefined,
     status: status || undefined,
-    filter: filter || undefined,
+    filter: combinedFilter || undefined,
     limit: LIMIT,
     offset,
     sort: 'duration_ms',
@@ -212,108 +225,111 @@ export default function TraceExplorer() {
             <option value="ok">OK</option>
             <option value="error">Error</option>
           </select>
-          <ExportButton filters={{ service, status, filter }} label="Export" />
+          <ExportButton filters={{ service, status, filter: combinedFilter }} label="Export" />
         </div>
       </div>
 
-      {/* Query bar — raw DSL filter. Every cross-page drill-down lands here by
-          setting ?filter=…, so this input shows (and lets you refine) exactly
-          what's being matched. Enter/blur commits to the URL → shareable.
-          DSL: field:value, AND/OR, quotes for spaces, http./sql./redis. prefixes,
-          duration_ms:>200, etc. */}
-      <div className="opa-row" style={{ gap: 'var(--sp-2)', alignItems: 'center' }}>
-        <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <FiSearch size={13} style={{ position: 'absolute', left: 10, color: 'var(--text-muted)', pointerEvents: 'none' }} />
-          <input
-            className="opa-input opa-mono"
-            style={{ width: '100%', paddingLeft: 30, fontSize: 'var(--fs-12)' }}
-            value={filterDraft}
-            onChange={(e) => setFilterDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') commitFilter() }}
-            onBlur={commitFilter}
-            spellCheck={false}
-            placeholder='Filter — e.g. url_path:"/health-check" AND duration_ms:>200'
-            aria-label="Filter query (DSL)"
-          />
-        </div>
-        {hasFilters && (
-          <button className="opa-btn ghost" onClick={clearFilters} title="Clear all filters">
-            <FiX size={13} /> Clear
-          </button>
-        )}
-      </div>
-
-      {/* Latency distribution */}
-      <Panel
-        title="Latency distribution" icon={<FiBarChart2 />}
-        loading={q.loading} error={q.error}
-        empty={!q.loading && durations.length === 0}
-        emptyText="No traces in range"
-        actions={hist.p95 != null && (
-          <span className="opa-muted opa-mono" style={{ fontSize: 'var(--fs-12)' }}>
-            <span style={{ color: 'var(--p95)' }}>p95 {fmtMs(hist.p95)}</span> · {fmtNum(durations.length)} traces
-          </span>
-        )}
-      >
-        <div className="tx-hist">
-          {hist.bars.map((b, i) => {
-            const mid = (b.from + b.to) / 2
-            return (
-              <div
-                key={i}
-                className="tx-hist-bar"
-                style={{ height: `${(b.count / maxCount) * 100}%`, background: `var(--${latencyStatus(mid)})` }}
-                title={`${fmtMs(b.from)}–${fmtMs(b.to)} · ${b.count} trace${b.count === 1 ? '' : 's'}`}
-              />
-            )
-          })}
-          {hist.p95 != null && (
-            <div className="tx-hist-p95" style={{ left: `${hist.p95Pct}%` }}>
-              <span className="tx-hist-p95-label">p95</span>
-            </div>
-          )}
-        </div>
-        <div className="tx-hist-axis">
-          <span>{fmtMs(hist.min)}</span>
-          <span>{fmtMs((hist.min + hist.max) / 2)}</span>
-          <span>{fmtMs(hist.max)}</span>
-        </div>
-      </Panel>
-
-      {/* Trace table */}
-      <Panel
-        title="Traces" icon={<FiGitBranch />} flush
-        loading={q.loading} error={q.error}
-        empty={!q.loading && traces.length === 0}
-        emptyText="No traces match these filters"
-        actions={(
-          <div className="opa-row" style={{ fontSize: 'var(--fs-12)' }}>
-            <span className="opa-muted opa-tnum">
-              {total ? `${pageStart}–${pageEnd} of ${fmtNum(total)}` : '0 traces'}
-            </span>
-            <button
-              className="opa-btn" disabled={!hasPrev}
-              onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
-              title="Previous page"
-            ><FiChevronLeft size={13} /></button>
-            <button
-              className="opa-btn" disabled={!hasNext}
-              onClick={() => setOffset((o) => o + LIMIT)}
-              title="Next page"
-            ><FiChevronRight size={13} /></button>
-          </div>
-        )}
-      >
-        <DataTable
-          columns={columns}
-          rows={traces}
-          rowKey={(r) => r.trace_id}
-          initialSort={{ key: 'duration_ms', dir: 'desc' }}
-          onRowClick={(r) => r.trace_id && navigate(`/traces/${encodeURIComponent(r.trace_id)}`)}
-          maxHeight="60vh"
-          emptyText="No traces match these filters"
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <FacetSidebar
+          value={facets}
+          onChange={(next) => { setFacets(next); setOffset(0) }}
+          fields={['service', 'environment', 'status', 'host']}
         />
-      </Panel>
+        <div className="opa-stack" style={{ flex: 1, minWidth: 0 }}>
+          {/* Query bar — raw DSL filter. Facets AND into the same request. */}
+          <div className="opa-row" style={{ gap: 'var(--sp-2)', alignItems: 'center' }}>
+            <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <FiSearch size={13} style={{ position: 'absolute', left: 10, color: 'var(--text-muted)', pointerEvents: 'none' }} />
+              <input
+                className="opa-input opa-mono"
+                style={{ width: '100%', paddingLeft: 30, fontSize: 'var(--fs-12)' }}
+                value={filterDraft}
+                onChange={(e) => setFilterDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') commitFilter() }}
+                onBlur={commitFilter}
+                spellCheck={false}
+                placeholder='Filter — e.g. url_path:"/health-check" AND duration_ms:>200'
+                aria-label="Filter query (DSL)"
+              />
+            </div>
+            {hasFilters && (
+              <button className="opa-btn ghost" onClick={() => { clearFilters(); setFacets({ include: {}, exclude: {} }) }} title="Clear all filters">
+                <FiX size={13} /> Clear
+              </button>
+            )}
+          </div>
+
+          <Panel
+            title="Latency distribution" icon={<FiBarChart2 />}
+            loading={q.loading} error={q.error}
+            empty={!q.loading && durations.length === 0}
+            emptyText="No traces in range"
+            actions={hist.p95 != null && (
+              <span className="opa-muted opa-mono" style={{ fontSize: 'var(--fs-12)' }}>
+                <span style={{ color: 'var(--p95)' }}>p95 {fmtMs(hist.p95)}</span> · {fmtNum(durations.length)} traces
+              </span>
+            )}
+          >
+            <div className="tx-hist">
+              {hist.bars.map((b, i) => {
+                const mid = (b.from + b.to) / 2
+                return (
+                  <div
+                    key={i}
+                    className="tx-hist-bar"
+                    style={{ height: `${(b.count / maxCount) * 100}%`, background: `var(--${latencyStatus(mid)})` }}
+                    title={`${fmtMs(b.from)}–${fmtMs(b.to)} · ${b.count} trace${b.count === 1 ? '' : 's'}`}
+                  />
+                )
+              })}
+              {hist.p95 != null && (
+                <div className="tx-hist-p95" style={{ left: `${hist.p95Pct}%` }}>
+                  <span className="tx-hist-p95-label">p95</span>
+                </div>
+              )}
+            </div>
+            <div className="tx-hist-axis">
+              <span>{fmtMs(hist.min)}</span>
+              <span>{fmtMs((hist.min + hist.max) / 2)}</span>
+              <span>{fmtMs(hist.max)}</span>
+            </div>
+          </Panel>
+
+          <Panel
+            title="Traces" icon={<FiGitBranch />} flush
+            loading={q.loading} error={q.error}
+            empty={!q.loading && traces.length === 0}
+            emptyText="No traces match these filters"
+            actions={(
+              <div className="opa-row" style={{ fontSize: 'var(--fs-12)' }}>
+                <span className="opa-muted opa-tnum">
+                  {total ? `${pageStart}–${pageEnd} of ${fmtNum(total)}` : '0 traces'}
+                </span>
+                <button
+                  className="opa-btn" disabled={!hasPrev}
+                  onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
+                  title="Previous page"
+                ><FiChevronLeft size={13} /></button>
+                <button
+                  className="opa-btn" disabled={!hasNext}
+                  onClick={() => setOffset((o) => o + LIMIT)}
+                  title="Next page"
+                ><FiChevronRight size={13} /></button>
+              </div>
+            )}
+          >
+            <DataTable
+              columns={columns}
+              rows={traces}
+              rowKey={(r) => r.trace_id}
+              initialSort={{ key: 'duration_ms', dir: 'desc' }}
+              onRowClick={(r) => r.trace_id && navigate(`/traces/${encodeURIComponent(r.trace_id)}`)}
+              maxHeight="60vh"
+              emptyText="No traces match these filters"
+            />
+          </Panel>
+        </div>
+      </div>
     </div>
   )
 }

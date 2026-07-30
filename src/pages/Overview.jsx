@@ -77,13 +77,13 @@ export default function Overview() {
       {/* Charts */}
       <div className="opa-grid cols-2">
         <Panel title="Throughput & errors" icon={<FiActivity />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart data={metrics} series={[
+          <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'throughput', name: 'Throughput', color: 'var(--accent)', type: 'bar' },
             { key: 'error_rate', name: 'Error %', color: 'var(--error)', type: 'line' },
           ]} valueFmt={(v) => fmtNum(v)} height={230} />
         </Panel>
         <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart data={metrics} series={[
+          <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'p50', name: 'p50', color: 'var(--p50)', type: 'line' },
             { key: 'p95', name: 'p95', color: 'var(--p95)', type: 'line' },
             { key: 'p99', name: 'p99', color: 'var(--p99)', type: 'line' },
