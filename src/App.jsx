@@ -54,6 +54,7 @@ const Catalog = lazy(() => import('./pages/Catalog'))
 const Automation = lazy(() => import('./pages/Automation'))
 const Cloud = lazy(() => import('./pages/Cloud'))
 const Network = lazy(() => import('./pages/Network'))
+const Federation = lazy(() => import('./pages/Federation'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -210,6 +211,10 @@ function App() {
             <Route
               path="/network"
               element={<Network />}
+            />
+            <Route
+              path="/federation"
+              element={<Federation />}
             />
             <Route
               path="/profiling"
