@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
   FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiGrid, FiTarget,
-  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2,
+  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout,
   FiChevronsLeft, FiChevronsRight, FiTerminal,
 } from 'react-icons/fi'
 
@@ -47,6 +47,7 @@ export const NAV_GROUPS = [
       { to: '/infrastructure', label: 'Hosts', icon: FiHardDrive },
       { to: '/metrics', label: 'Metrics Explorer', icon: FiBarChart2 },
       { to: '/query', label: 'Query', icon: FiTerminal },
+      { to: '/dashboards', label: 'Dashboards', icon: FiLayout },
     ],
   },
   {

@@ -8,6 +8,7 @@ import {
   Panel, KpiTile, DataTable, TimeSeriesChart, InlineBar, EntityHeader,
   Badge, HealthDot, LanguageBadge,
 } from '../components/ui'
+import RelatedContextRail from '../components/ui/RelatedContextRail'
 import {
   fmtMs, fmtNum, fmtPct, fmtBytes, tierColor, latencyStatus, errorRateStatus,
 } from '../theme/format'
@@ -131,6 +132,8 @@ export default function ServiceDetail() {
         }
       />
 
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div className="opa-stack" style={{ flex: 1, minWidth: 0 }}>
       {/* Golden signals */}
       <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile label="Throughput" icon={<FiActivity size={12} />} value={fmtNum(s.total_traces || 0)} unit="traces" status="neutral"
@@ -148,14 +151,14 @@ export default function ServiceDetail() {
       {/* Charts */}
       <div className="opa-grid cols-2">
         <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart data={metrics} series={[
+          <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'p50', name: 'p50', color: 'var(--p50)', type: 'line' },
             { key: 'p95', name: 'p95', color: 'var(--p95)', type: 'line' },
             { key: 'p99', name: 'p99', color: 'var(--p99)', type: 'line' },
           ]} valueFmt={fmtMs} yFmt={fmtMs} height={230} />
         </Panel>
         <Panel title="Throughput & errors" icon={<FiActivity />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart data={metrics} series={[
+          <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'throughput', name: 'Throughput', color: 'var(--accent)', type: 'bar' },
             { key: 'error_rate', name: 'Error %', color: 'var(--error)', type: 'line' },
           ]} valueFmt={(v) => fmtNum(v)} height={230} />
@@ -191,6 +194,11 @@ export default function ServiceDetail() {
           onRowClick={(r) => navigate('/traces?' + new URLSearchParams({ filter: `http.url:"${r.url}"` }).toString())}
         />
       </Panel>
+        </div>
+        <div style={{ width: 220, flexShrink: 0 }}>
+          <RelatedContextRail query={svc} title="Related context" />
+        </div>
+      </div>
     </div>
   )
 }
