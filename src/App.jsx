@@ -61,6 +61,7 @@ const Slos = lazy(() => import('./pages/Slos'))
 const Alerts = lazy(() => import('./pages/Alerts'))
 const Anomalies = lazy(() => import('./pages/Anomalies'))
 const Synthetics = lazy(() => import('./pages/Synthetics'))
+const QueryExplorer = lazy(() => import('./pages/QueryExplorer'))
 
 // Result of the one-time auth probe, cached for the lifetime of the page so
 // client-side navigations never re-probe. `true` = render the app (auth off or
@@ -250,6 +251,10 @@ function App() {
             <Route
               path="/metrics"
               element={<MetricsExplorer />}
+            />
+            <Route
+              path="/query"
+              element={<QueryExplorer />}
             />
             <Route
               path="/infrastructure"
