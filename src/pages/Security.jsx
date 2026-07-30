@@ -194,7 +194,7 @@ export default function Security() {
       {tab === 'iac' && (
         <Panel title="IaC / container findings" icon={<FiServer />} flush loading={iac.loading} error={iac.error}
           empty={!iac.loading && iacRows.length === 0}
-          emptyText="POST to /v1/security/iac (scripts/iac-scan-stub.mjs) — Dockerfile/TF heuristics">
+          emptyText="POST /v1/security/iac or /v1/security/containers — scripts/iac-scan-stub.mjs / container-scan-stub.mjs">
           <DataTable columns={iacCols} rows={iacRows} rowKey={(r, i) => `${r.kind}:${r.rule}:${r.file}:${i}`} maxHeight={480} />
         </Panel>
       )}
@@ -210,7 +210,8 @@ export default function Security() {
         <Panel title="Policies" icon={<FiSliders />} loading={policies.loading}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
             Local severity threshold is stored in <code>localStorage</code> (<code>{SEV_KEY}</code>).
-            Agent env: <code>OPA_SECURITY_MIN_SEVERITY</code>, scanner auth via <code>OPA_SECURITY_INGEST_TOKEN</code>.
+            Agent env: <code>OPA_SECURITY_MIN_SEVERITY</code>, scanner auth via <code>OPA_SECURITY_INGEST_TOKEN</code>
+            (optional <code>OPA_SECURITY_OIDC_REQUIRE=1</code>). PHP block: <code>opa.iast_block</code> (mysqli + PDO).
           </p>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
             <label>
@@ -232,8 +233,10 @@ export default function Security() {
       {tab === 'pr' && (
         <Panel title="PR check" icon={<FiCheckCircle />} loading={prCheck.loading} error={prCheck.error}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
-            Aggregates vulns + secrets + SAST + IaC for CI. Scanner ingest uses Bearer / <code>X-OPA-Security-Token</code>
-            when <code>OPA_SECURITY_INGEST_TOKEN</code> is set; humans obtain sessions via OIDC login.
+            Aggregates vulns + secrets + SAST + IaC/containers for CI.
+            CI: <code>/v1/security/pr-check</code> with Bearer / <code>X-OPA-Security-Token</code>
+            when <code>OPA_SECURITY_INGEST_TOKEN</code> is set; humans: OIDC/password session.
+            Honesty: pragmatic scanner gate — not a dedicated AppSec SSO product.
           </p>
           <pre className="opa-mono" style={{ fontSize: 12, background: 'var(--surface-2)', padding: 12 }}>
             {JSON.stringify(prCheck.data || {}, null, 2)}
