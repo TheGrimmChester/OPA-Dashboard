@@ -53,12 +53,18 @@ export default function BrowserRum() {
   const navigate = useNavigate()
   const rum = useApi('/api/rum/metrics')
   const detail = useApi('/api/rum/detail')
+  const slo = useApi('/api/rum/slo')
+  const facets = useApi('/api/rum/facets')
   const [tab, setTab] = useState('resources')
   // Selected browser session, expanded into a timeline panel below the table.
   const [session, setSession] = useState(null)
   const sessions = useApi('/api/rum/sessions', {}, { skip: tab !== 'sessions' })
   const sessionDetail = useApi(
     `/api/rum/sessions/${encodeURIComponent(session || '')}`,
+    {}, { skip: !session },
+  )
+  const replay = useApi(
+    `/api/rum/replay/${encodeURIComponent(session || '')}`,
     {}, { skip: !session },
   )
 
@@ -203,6 +209,38 @@ export default function BrowserRum() {
         </div>
       </Panel>
 
+      {/* Wave 12: CWV SLO budgets + facets */}
+      <div className="opa-grid cols-2">
+        <Panel title="CWV SLO budgets" icon={<FiZap />} loading={slo.loading} error={slo.error}
+          empty={!slo.loading && !slo.data?.slo} emptyText="No SLO data yet">
+          <div className="opa-grid cols-3">
+            {['lcp', 'inp', 'cls'].map((k) => {
+              const s = slo.data?.slo?.[k] || {}
+              return (
+                <div key={k}>
+                  <div className="opa-muted opa-mono" style={{ fontSize: 11 }}>{k.toUpperCase()} p75</div>
+                  <div className="opa-tnum" style={{ fontSize: 18 }}>
+                    {k === 'cls' ? (s.p75 == null ? '—' : Number(s.p75).toFixed(3)) : fmtMs(s.p75)}
+                  </div>
+                  <StatusPill tone={s.ok ? 'ok' : s.p75 ? 'error' : 'neutral'}>{s.rating || (s.ok ? 'ok' : '—')}</StatusPill>
+                </div>
+              )
+            })}
+          </div>
+        </Panel>
+        <Panel title="Facets" icon={<FiLayers />} loading={facets.loading} error={facets.error}
+          empty={!facets.loading && !(facets.data?.route || []).length} emptyText="No facet data yet">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {(facets.data?.route || []).slice(0, 12).map((r, i) => (
+              <Badge key={i}>{r.value || r.route || '—'} · {fmtNum(r.count)}</Badge>
+            ))}
+            {(facets.data?.geo_country || []).slice(0, 6).map((r, i) => (
+              <Badge key={`g${i}`}>{r.value || '—'} · {fmtNum(r.count)}</Badge>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
       {/* KPI tiles */}
       <div className="opa-grid cols-4">
         <KpiTile label="Page views" icon={<FiEye size={12} />} value={fmtNum(d.total_page_views || 0)}
@@ -260,6 +298,11 @@ export default function BrowserRum() {
           <DataTable columns={timelineCols} rows={timelineRows} rowKey={(r, i) => i}
             onRowClick={(r) => r.trace_id && navigate(`/traces/${encodeURIComponent(r.trace_id)}`)}
             maxHeight={420} />
+          {(replay.data?.chunks || []).length > 0 && (
+            <div style={{ padding: '8px 12px' }} className="opa-muted">
+              Session replay: {fmtNum(replay.data.chunks.length)} chunk(s) · {(replay.data.chunks.reduce((n, c) => n + (Number(c.bytes) || 0), 0))} bytes (masked)
+            </div>
+          )}
         </Panel>
       )}
     </div>
