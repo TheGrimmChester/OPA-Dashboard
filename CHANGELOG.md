@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Wave 20 synthetics depth UI: check types, step waterfall, cert days, private location field, trace links.
 - Wave 19 Security pillar: CVE reachability rankings and IAST sink detections (`/security`).
 - Wave 18 Serverless pillar: cold-start rate, billed duration, memory utilization (`/serverless`).
 - Wave 17 Databases pillar: instance health, DB-side statements with app fingerprint drill-through, unused indexes.
