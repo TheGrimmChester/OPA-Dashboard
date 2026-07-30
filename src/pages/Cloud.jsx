@@ -6,22 +6,23 @@ import {
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
+import { useI18n } from '../contexts/I18nContext'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 const TABS = [
-  { value: 'resources', label: 'Resources', icon: <FiServer size={13} /> },
-  { value: 'cost', label: 'Cost', icon: <FiDollarSign size={13} /> },
-  { value: 'tags', label: 'Tags', icon: <FiTag size={13} /> },
-  { value: 'scrapes', label: 'Scrapes', icon: <FiActivity size={13} /> },
+  { value: 'resources', labelKey: 'cloud.resources', icon: <FiServer size={13} /> },
+  { value: 'cost', labelKey: 'cloud.cost', icon: <FiDollarSign size={13} /> },
+  { value: 'tags', labelKey: 'cloud.tags', icon: <FiTag size={13} /> },
+  { value: 'scrapes', labelKey: 'cloud.scrapes', icon: <FiActivity size={13} /> },
 ]
 
-function Tabs({ tabs = [], value, onChange }) {
+function Tabs({ tabs = [], value, onChange, t }) {
   return (
     <div className="opa-tabs">
-      {tabs.map((t) => (
-        <button key={t.value} className={`opa-tab ${value === t.value ? 'active' : ''}`} onClick={() => onChange(t.value)}>
-          {t.icon}{t.label}
+      {tabs.map((tab) => (
+        <button key={tab.value} className={`opa-tab ${value === tab.value ? 'active' : ''}`} onClick={() => onChange(tab.value)}>
+          {tab.icon}{t(tab.labelKey)}
         </button>
       ))}
     </div>
@@ -30,6 +31,7 @@ function Tabs({ tabs = [], value, onChange }) {
 
 /** Wave 23: Cloud coverage — inventory, cost, tag governance. */
 export default function Cloud() {
+  const { t } = useI18n()
   const [tab, setTab] = useState('resources')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -122,8 +124,8 @@ export default function Cloud() {
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
-          <h1 className="opa-page-title">Cloud</h1>
-          <div className="opa-page-sub">Provider metrics · inventory · cost · tag governance</div>
+          <h1 className="opa-page-title">{t('cloud.title')}</h1>
+          <div className="opa-page-sub">{t('cloud.subtitle')}</div>
         </div>
         <button className="opa-btn" disabled={busy || !s.configured} onClick={scrapeNow} title={!s.configured ? 'Set OPA_CLOUD_MONITOR_CONFIG' : 'Trigger scrape on leader'}>
           <FiRefreshCw size={14} /> Scrape now
@@ -140,14 +142,14 @@ export default function Cloud() {
         <KpiTile label="Providers" icon={<FiCloud size={12} />} value={fmtNum(s.providers || 0)}
           status={s.configured ? 'ok' : 'warn'}
           footer={<span className="opa-muted" style={{ fontSize: 11 }}>{s.configured ? 'configured' : 'not configured'}</span>} />
-        <KpiTile label="Resources" icon={<FiServer size={12} />} value={fmtNum(s.resources || 0)} status="neutral" />
-        <KpiTile label="Cost 30d" icon={<FiDollarSign size={12} />} value={fmtNum(s.cost_30d || 0)} status="neutral" />
+        <KpiTile label={t('cloud.resources')} icon={<FiServer size={12} />} value={fmtNum(s.resources || 0)} status="neutral" />
+        <KpiTile label={t('cloud.cost') + ' 30d'} icon={<FiDollarSign size={12} />} value={fmtNum(s.cost_30d || 0)} status="neutral" />
         <KpiTile label="Tag gaps" icon={<FiTag size={12} />} value={fmtNum(s.tag_violations_7d || 0)}
           status={Number(s.tag_violations_7d) > 0 ? 'warn' : 'ok'}
           footer={<span className="opa-muted" style={{ fontSize: 11 }}>scrapes ok {fmtNum(s.scrapes_ok_24h || 0)} / fail {fmtNum(s.scrapes_fail_24h || 0)}</span>} />
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
+      <Tabs tabs={TABS} value={tab} onChange={setTab} t={t} />
 
       {tab === 'resources' && (
         <>

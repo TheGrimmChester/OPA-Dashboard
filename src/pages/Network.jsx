@@ -6,31 +6,33 @@ import {
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtNum, fmtAgo, fmtMs } from '../theme/format'
+import { useI18n } from '../contexts/I18nContext'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 const TABS = [
-  { value: 'flows', label: 'Flows', icon: <FiShare2 size={13} /> },
-  { value: 'dns', label: 'DNS', icon: <FiGlobe size={13} /> },
-  { value: 'tls', label: 'TLS', icon: <FiShield size={13} /> },
-  { value: 'discovered', label: 'Discovered', icon: <FiServer size={13} /> },
-  { value: 'profiles', label: 'Host CPU', icon: <FiCpu size={13} /> },
+  { value: 'flows', labelKey: 'net.flows', icon: <FiShare2 size={13} /> },
+  { value: 'dns', labelKey: 'net.dns', icon: <FiGlobe size={13} /> },
+  { value: 'tls', labelKey: 'net.tls', icon: <FiShield size={13} /> },
+  { value: 'discovered', labelKey: 'net.discovered', icon: <FiServer size={13} /> },
+  { value: 'profiles', labelKey: 'net.profiles', icon: <FiCpu size={13} /> },
 ]
 
-function Tabs({ tabs = [], value, onChange }) {
+function Tabs({ tabs = [], value, onChange, t }) {
   return (
     <div className="opa-tabs">
-      {tabs.map((t) => (
-        <button key={t.value} className={`opa-tab ${value === t.value ? 'active' : ''}`} onClick={() => onChange(t.value)}>
-          {t.icon}{t.label}
+      {tabs.map((tab) => (
+        <button key={tab.value} className={`opa-tab ${value === tab.value ? 'active' : ''}`} onClick={() => onChange(tab.value)}>
+          {tab.icon}{t(tab.labelKey)}
         </button>
       ))}
     </div>
   )
 }
 
-/** Wave 24: Network & kernel observability. */
+/** Wave 24: Network ingest contract & host profiles. */
 export default function Network() {
+  const { t } = useI18n()
   const [tab, setTab] = useState('flows')
   const [probe, setProbe] = useState('example.com')
   const [probeOut, setProbeOut] = useState(null)
@@ -128,8 +130,8 @@ export default function Network() {
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
-          <h1 className="opa-page-title">Network</h1>
-          <div className="opa-page-sub">Flows · DNS/TLS health · agentless discovery · host eBPF profiles</div>
+          <h1 className="opa-page-title">{t('net.title')}</h1>
+          <div className="opa-page-sub">{t('net.subtitle')}</div>
         </div>
       </div>
 
@@ -140,11 +142,11 @@ export default function Network() {
         <KpiTile label="Avg RTT" icon={<FiActivity size={12} />} value={Number(s.avg_rtt_us) > 0 ? `${fmtNum(s.avg_rtt_us)} µs` : '—'} status="neutral" />
         <KpiTile label="DNS fails" icon={<FiGlobe size={12} />} value={fmtNum(s.dns_fail_1h || 0)}
           status={Number(s.dns_fail_1h) > 0 ? 'warn' : 'ok'} />
-        <KpiTile label="Discovered" icon={<FiServer size={12} />} value={fmtNum(s.discovered_24h || 0)} status="neutral"
+        <KpiTile label={t('net.discovered')} icon={<FiServer size={12} />} value={fmtNum(s.discovered_24h || 0)} status="neutral"
           footer={<span className="opa-muted" style={{ fontSize: 11 }}>TLS fails {fmtNum(s.tls_fail_1h || 0)}</span>} />
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
+      <Tabs tabs={TABS} value={tab} onChange={setTab} t={t} />
 
       {tab === 'flows' && (
         <div className="opa-grid cols-2">
@@ -190,8 +192,8 @@ export default function Network() {
       )}
 
       {tab === 'profiles' && (
-        <Panel title="Host eBPF profiles" icon={<FiCpu />} flush loading={profiles.loading} error={profiles.error}
-          empty={!profiles.loading && profRows.length === 0} emptyText="POST /v1/ebpf/profiles from a kernel sampler">
+        <Panel title="Host profiles" icon={<FiCpu />} flush loading={profiles.loading} error={profiles.error}
+          empty={!profiles.loading && profRows.length === 0} emptyText="POST /v1/ebpf/profiles from an external host sampler">
           <DataTable columns={profCols} rows={profRows} rowKey={(r, i) => `${r.host}:${r.function}:${i}`} maxHeight={420} />
         </Panel>
       )}

@@ -36,6 +36,7 @@ export default function Diagnostics() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [service, setService] = useState('api')
+  const [heapSel, setHeapSel] = useState(null)
   const [releaseForm, setReleaseForm] = useState({
     service: 'api', release: '1.0.0', git_sha: 'abc1234', git_repo: 'https://github.com/example/app',
     author: 'dev', message: 'fix latency',
@@ -87,6 +88,37 @@ export default function Diagnostics() {
     { key: 'total_bytes', header: t('diag.heap'), num: true, render: (r) => fmtBytes(r.total_bytes) },
     { key: 'captured_at', header: t('diag.when'), num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.captured_at)}</span> },
   ]
+
+  const parseDominators = (snap) => {
+    let dom = snap?.dominators
+    if (!dom && snap?.dominators_json) {
+      try { dom = typeof snap.dominators_json === 'string' ? JSON.parse(snap.dominators_json) : snap.dominators_json }
+      catch (_) { dom = null }
+    }
+    return Array.isArray(dom) ? dom : []
+  }
+
+  const renderDomTree = (nodes, depth = 0) => {
+    if (!nodes?.length) return null
+    return (
+      <ul style={{ margin: 0, paddingLeft: depth === 0 ? 16 : 18, listStyle: 'disc' }}>
+        {nodes.map((n, i) => {
+          const name = n.name || n.class || n.type || n.function || `#${i}`
+          const retained = n.retained_bytes ?? n.retained ?? n.size ?? n.bytes
+          const kids = n.children || n.dominators || n.nodes
+          return (
+            <li key={`${depth}-${i}-${name}`} style={{ marginBottom: 4, fontSize: 12 }}>
+              <span className="opa-mono">{name}</span>
+              {retained != null && (
+                <span className="opa-muted"> · {t('diag.retained')} {fmtBytes(retained)}</span>
+              )}
+              {Array.isArray(kids) && kids.length > 0 && renderDomTree(kids, depth + 1)}
+            </li>
+          )
+        })}
+      </ul>
+    )
+  }
 
   const thrCols = [
     { key: 'service', header: t('diag.service'), render: (r) => <span className="opa-mono">{r.service}</span> },
@@ -158,10 +190,22 @@ export default function Diagnostics() {
       )}
 
       {tab === 'heap' && (
-        <Panel title={t('diag.heap')} icon={<FiHardDrive />} flush loading={heap.loading} error={heap.error}
-          empty={!heap.loading && snaps.length === 0} emptyText={t('diag.emptyHeap')}>
-          <DataTable columns={heapCols} rows={snaps} rowKey={(r) => r.id} maxHeight={420} />
-        </Panel>
+        <>
+          <Panel title={t('diag.heap')} icon={<FiHardDrive />} flush loading={heap.loading} error={heap.error}
+            empty={!heap.loading && snaps.length === 0} emptyText={t('diag.emptyHeap')}>
+            <DataTable columns={heapCols} rows={snaps} rowKey={(r) => r.id} maxHeight={280}
+              onRowClick={(r) => setHeapSel(r.id === heapSel ? null : r.id)} />
+          </Panel>
+          {heapSel && (() => {
+            const row = snaps.find((s) => s.id === heapSel) || {}
+            const doms = parseDominators(row)
+            return (
+              <Panel title={t('diag.dominators')}>
+                {doms.length ? renderDomTree(doms) : <div className="opa-muted" style={{ fontSize: 12 }}>No dominators on this snapshot</div>}
+              </Panel>
+            )
+          })()}
+        </>
       )}
 
       {tab === 'threads' && (
