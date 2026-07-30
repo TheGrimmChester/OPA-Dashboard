@@ -7,8 +7,31 @@ import { fmtAgo } from '../theme/format'
 
 /**
  * Wave 28 — SessionReplayPlayer
- * Renders a masked DOM event log (MutationObserver / click / input), NOT rrweb pixels.
+ * Renders a masked DOM event log (MutationObserver / click / input / nav / longtask / resource), NOT rrweb pixels.
  */
+const MARKER_TONE = {
+  click: 'ok',
+  input: 'warn',
+  navigation: 'ok',
+  longtask: 'error',
+  resource: 'neutral',
+  mutation: 'neutral',
+  snapshot: 'neutral',
+  ajax: 'ok',
+}
+
+function markerLabel(e) {
+  if (!e) return '—'
+  if (e.type === 'navigation') return e.url || e.title || 'navigate'
+  if (e.type === 'longtask') return `${e.name || 'longtask'} ${e.duration_ms != null ? `${Math.round(e.duration_ms)}ms` : ''}`
+  if (e.type === 'resource') {
+    const sz = e.transfer_size != null ? ` ${e.transfer_size}B` : ''
+    return `${e.name || e.url || 'resource'}${sz}`
+  }
+  if (e.type === 'ajax') return `${e.method || ''} ${e.url || e.target || ''} ${e.status || ''}`.trim()
+  return e.target || e.url || e.mutation || e.title || e.name || '—'
+}
+
 export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows }) {
   const navigate = useNavigate()
   const ajaxList = ajaxEvents || ajaxRows || []
@@ -24,24 +47,36 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
   )
 
   const events = timeline.data?.events || []
+  const byType = timeline.data?.by_type || {}
   const masked = timeline.data?.masked !== false
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [filter, setFilter] = useState('all')
   const timer = useRef(null)
 
   useEffect(() => {
     setIdx(0)
     setPlaying(false)
+    setFilter('all')
   }, [sessionId])
 
+  const filtered = useMemo(() => {
+    if (filter === 'all') return events
+    return events.filter((e) => e.type === filter)
+  }, [events, filter])
+
   useEffect(() => {
-    if (!playing || events.length === 0) {
+    setIdx(0)
+  }, [filter])
+
+  useEffect(() => {
+    if (!playing || filtered.length === 0) {
       if (timer.current) clearInterval(timer.current)
       return undefined
     }
     timer.current = setInterval(() => {
       setIdx((i) => {
-        if (i >= events.length - 1) {
+        if (i >= filtered.length - 1) {
           setPlaying(false)
           return i
         }
@@ -49,9 +84,9 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
       })
     }, 400)
     return () => clearInterval(timer.current)
-  }, [playing, events.length])
+  }, [playing, filtered.length])
 
-  const current = events[idx] || null
+  const current = filtered[idx] || null
   const t0 = events[0]?.t || 0
   const t1 = events[events.length - 1]?.t || t0
   const span = Math.max(1, t1 - t0)
@@ -74,10 +109,9 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
   }, [ajaxList, current])
 
   const reconstruction = useMemo(() => {
-    // Simple HTML/text reconstruction from masked event log (honesty: not pixel-perfect).
     const lines = []
-    for (let i = 0; i <= idx && i < events.length; i++) {
-      const e = events[i]
+    for (let i = 0; i <= idx && i < filtered.length; i++) {
+      const e = filtered[i]
       if (e.type === 'snapshot') {
         lines.push(`# ${e.title || 'page'} ${e.url || ''}`)
       } else if (e.type === 'click') {
@@ -86,16 +120,23 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
         lines.push(`input ${e.target || '?'} = ${e.value || '****'}`)
       } else if (e.type === 'mutation') {
         lines.push(`dom ${e.mutation || 'change'} ${e.target || ''} +${e.added || 0}/-${e.removed || 0}`)
+      } else if (e.type === 'navigation') {
+        lines.push(`nav → ${e.url || e.title || '?'}`)
+      } else if (e.type === 'longtask') {
+        lines.push(`longtask ${Math.round(e.duration_ms || 0)}ms ${e.name || ''}`)
+      } else if (e.type === 'resource') {
+        lines.push(`resource ${e.name || e.url || '?'} ${e.duration_ms != null ? Math.round(e.duration_ms) + 'ms' : ''}`)
       } else {
-        lines.push(`${e.type || 'event'} ${e.target || ''}`)
+        lines.push(`${e.type || 'event'} ${markerLabel(e)}`)
       }
     }
     return lines.slice(-40).join('\n')
-  }, [events, idx])
+  }, [filtered, idx])
 
   if (!sessionId) return null
 
   const chunkCount = (chunks.data?.chunks || []).length || timeline.data?.chunk_count || 0
+  const legendTypes = timeline.data?.marker_types || Object.keys(byType)
 
   return (
     <div className="replay-player" style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
@@ -111,13 +152,35 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
         </span>
       </div>
 
+      {Object.keys(byType).length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          <button type="button" className={`opa-btn ghost ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
+            all {events.length}
+          </button>
+          {legendTypes.map((t) => (
+            byType[t] ? (
+              <button
+                key={t}
+                type="button"
+                className={`opa-btn ghost ${filter === t ? 'active' : ''}`}
+                onClick={() => setFilter(t)}
+                title={`${byType[t]} ${t} markers`}
+              >
+                <StatusPill tone={MARKER_TONE[t] || 'neutral'}>{t}</StatusPill>
+                <span className="opa-mono" style={{ marginLeft: 4 }}>{byType[t]}</span>
+              </button>
+            ) : null
+          ))}
+        </div>
+      )}
+
       {timeline.loading && <div className="opa-muted">Loading replay timeline…</div>}
       {timeline.error && <div style={{ color: 'var(--error)' }}>{String(timeline.error)}</div>}
       {!timeline.loading && events.length === 0 && (
         <div className="opa-muted">No replay chunks for this session. Enable <code>data-replay=&quot;true&quot;</code> on opa-rum-js.</div>
       )}
 
-      {events.length > 0 && (
+      {filtered.length > 0 && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <button type="button" className="opa-btn ghost" onClick={() => setPlaying((p) => !p)} title={playing ? 'Pause' : 'Play'}>
@@ -126,7 +189,7 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
             <input
               type="range"
               min={0}
-              max={Math.max(0, events.length - 1)}
+              max={Math.max(0, filtered.length - 1)}
               value={idx}
               onChange={(e) => { setPlaying(false); setIdx(Number(e.target.value)) }}
               style={{ flex: 1 }}
@@ -163,9 +226,9 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
           </div>
 
           <div style={{ marginTop: 10, maxHeight: 180, overflow: 'auto' }}>
-            {events.map((e, i) => (
+            {filtered.map((e, i) => (
               <div
-                key={i}
+                key={`${e.t}-${e.type}-${i}`}
                 role="button"
                 tabIndex={0}
                 onClick={() => { setPlaying(false); setIdx(i) }}
@@ -177,9 +240,9 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
                 className="opa-mono"
               >
                 <span className="opa-muted" style={{ width: 64 }}>+{(e.t || 0) - t0}ms</span>
-                <StatusPill tone={e.type === 'click' ? 'ok' : e.type === 'input' ? 'warn' : 'neutral'}>{e.type}</StatusPill>
+                <StatusPill tone={MARKER_TONE[e.type] || 'neutral'}>{e.type}</StatusPill>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {e.target || e.url || e.mutation || e.title || '—'}
+                  {markerLabel(e)}
                 </span>
                 <span className="opa-muted">{e.t ? fmtAgo(new Date(e.t).toISOString()) : ''}</span>
               </div>

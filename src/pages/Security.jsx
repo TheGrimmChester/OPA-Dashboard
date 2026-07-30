@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react'
-import { FiShield, FiAlertTriangle, FiEye, FiEyeOff, FiCrosshair, FiKey, FiSliders } from 'react-icons/fi'
+import { FiShield, FiAlertTriangle, FiEye, FiEyeOff, FiCrosshair, FiKey, FiSliders, FiCode, FiServer, FiCheckCircle } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 
 const SEV_KEY = 'opa.security.min_severity'
 
-/** Wave 19 + Wave 30: Vulns / IAST / Secrets / Policies stub. */
+/** Wave 19 + Wave 30: Vulns / IAST / Secrets / SAST / IaC / Policies / PR-check. */
 export default function Security() {
   const [tab, setTab] = useState('vulns')
   const [minSev, setMinSev] = useState(() => localStorage.getItem(SEV_KEY) || 'high')
@@ -15,8 +15,11 @@ export default function Security() {
   const inventory = useApi('/api/vulns/inventory', { limit: 100 }, { noRange: true })
   const iastSum = useApi('/api/iast/summary', { hours: 24 }, { noRange: true })
   const iast = useApi('/api/iast/findings', { limit: 100 }, { noRange: true })
-  const secrets = useApi('/api/security/secrets', { limit: 100 }, { noRange: true, skip: tab !== 'secrets' && tab !== 'policies' })
+  const secrets = useApi('/api/security/secrets', { limit: 100 }, { noRange: true, skip: tab !== 'secrets' && tab !== 'policies' && tab !== 'pr' })
+  const sast = useApi('/api/security/sast', { limit: 100 }, { noRange: true, skip: tab !== 'sast' && tab !== 'pr' })
+  const iac = useApi('/api/security/iac', { limit: 100 }, { noRange: true, skip: tab !== 'iac' && tab !== 'pr' })
   const policies = useApi('/api/security/policies', {}, { noRange: true, skip: tab !== 'policies' })
+  const prCheck = useApi('/api/security/pr-check', {}, { noRange: true, skip: tab !== 'pr' })
 
   const s = summary.data || {}
   const is = iastSum.data || {}
@@ -24,6 +27,8 @@ export default function Security() {
   const pkgRows = inventory.data?.packages || []
   const iastRows = iast.data?.findings || []
   const secretRows = secrets.data?.findings || []
+  const sastRows = sast.data?.findings || []
+  const iacRows = iac.data?.findings || []
 
   const sevTone = (sev) => {
     const v = String(sev || '').toLowerCase()
@@ -68,6 +73,9 @@ export default function Security() {
 
   const iastCols = [
     { key: 'sink', header: 'Sink', render: (r) => <Badge>{r.sink}</Badge> },
+    { key: 'blocked', header: 'Blocked', render: (r) => (r.blocked === 1 || r.blocked === true || r.blocked === '1'
+      ? <StatusPill tone="error">blocked</StatusPill>
+      : <StatusPill tone="neutral">detect</StatusPill>) },
     { key: 'service', header: 'Service' },
     { key: 'route', header: 'Route', render: (r) => <span className="opa-mono">{r.route || '—'}</span> },
     { key: 'evidence', header: 'Evidence', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.evidence || '').slice(0, 120)}</span> },
@@ -85,12 +93,30 @@ export default function Security() {
     { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
   ]
 
+  const sastCols = [
+    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
+    { key: 'rule', header: 'Rule', render: (r) => <span className="opa-mono cell-strong">{r.rule || '—'}</span> },
+    { key: 'file', header: 'File', render: (r) => <span className="opa-mono">{r.file || '—'}:{r.line || 0}</span> },
+    { key: 'service', header: 'Service' },
+    { key: 'message', header: 'Message', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{String(r.message || '').slice(0, 120)}</span> },
+    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
+  ]
+
+  const iacCols = [
+    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
+    { key: 'kind', header: 'Kind', render: (r) => <Badge>{r.kind || 'iac'}</Badge> },
+    { key: 'rule', header: 'Rule', render: (r) => <span className="opa-mono cell-strong">{r.rule || '—'}</span> },
+    { key: 'file', header: 'File', render: (r) => <span className="opa-mono">{r.file || '—'}</span> },
+    { key: 'message', header: 'Message', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{String(r.message || '').slice(0, 120)}</span> },
+    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
+  ]
+
   return (
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Security</h1>
-          <div className="opa-page-sub">CVE reachability · IAST · secrets (detect only) · policy stubs</div>
+          <div className="opa-page-sub">CVE reachability · IAST · secrets · SAST-lite · IaC stub · PR check</div>
         </div>
       </div>
 
@@ -98,8 +124,11 @@ export default function Security() {
         <button type="button" className={`opa-tab ${tab === 'vulns' ? 'active' : ''}`} onClick={() => setTab('vulns')}>Vulnerabilities</button>
         <button type="button" className={`opa-tab ${tab === 'iast' ? 'active' : ''}`} onClick={() => setTab('iast')}>IAST</button>
         <button type="button" className={`opa-tab ${tab === 'secrets' ? 'active' : ''}`} onClick={() => setTab('secrets')}>Secrets</button>
+        <button type="button" className={`opa-tab ${tab === 'sast' ? 'active' : ''}`} onClick={() => setTab('sast')}>SAST</button>
+        <button type="button" className={`opa-tab ${tab === 'iac' ? 'active' : ''}`} onClick={() => setTab('iac')}>IaC</button>
         <button type="button" className={`opa-tab ${tab === 'inventory' ? 'active' : ''}`} onClick={() => setTab('inventory')}>Inventory</button>
         <button type="button" className={`opa-tab ${tab === 'policies' ? 'active' : ''}`} onClick={() => setTab('policies')}>Policies</button>
+        <button type="button" className={`opa-tab ${tab === 'pr' ? 'active' : ''}`} onClick={() => setTab('pr')}>PR check</button>
       </div>
 
       {tab === 'vulns' && (
@@ -129,7 +158,7 @@ export default function Security() {
             <KpiTile label="File / Deserialize" value={fmtNum((Number(is.file_sinks) || 0) + (Number(is.deserialize_sinks) || 0))} status="neutral" />
           </div>
           <Panel title="Runtime sink detections" icon={<FiCrosshair />} flush loading={iast.loading} error={iast.error}
-            empty={!iast.loading && iastRows.length === 0} emptyText="No IAST findings — enable OPA_IAST=1 / opa.iast on PHP">
+            empty={!iast.loading && iastRows.length === 0} emptyText="No IAST findings — enable OPA_IAST=1 / opa.iast on PHP (block is opt-in via opa.iast_block)">
             <DataTable columns={iastCols} rows={iastRows} rowKey={(r, i) => `${r.sink}:${r.scraped_at}:${i}`} maxHeight={480} />
           </Panel>
         </>
@@ -138,7 +167,7 @@ export default function Security() {
       {tab === 'secrets' && (
         <Panel title="Secret findings" icon={<FiKey />} flush loading={secrets.loading} error={secrets.error}
           empty={!secrets.loading && filteredSecrets.length === 0}
-          emptyText="POST findings to /v1/security/secrets"
+          emptyText="POST findings to /v1/security/secrets (scripts/secret-scan.mjs)"
           actions={
             <label className="opa-muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
               Min sev
@@ -154,6 +183,22 @@ export default function Security() {
         </Panel>
       )}
 
+      {tab === 'sast' && (
+        <Panel title="SAST-lite findings" icon={<FiCode />} flush loading={sast.loading} error={sast.error}
+          empty={!sast.loading && sastRows.length === 0}
+          emptyText="POST to /v1/security/sast (scripts/sast-lite.mjs) — pattern scan, not a full SAST engine">
+          <DataTable columns={sastCols} rows={sastRows} rowKey={(r, i) => `${r.rule}:${r.file}:${i}`} maxHeight={480} />
+        </Panel>
+      )}
+
+      {tab === 'iac' && (
+        <Panel title="IaC / container findings" icon={<FiServer />} flush loading={iac.loading} error={iac.error}
+          empty={!iac.loading && iacRows.length === 0}
+          emptyText="POST to /v1/security/iac (scripts/iac-scan-stub.mjs) — Dockerfile/TF heuristics">
+          <DataTable columns={iacCols} rows={iacRows} rowKey={(r, i) => `${r.kind}:${r.rule}:${r.file}:${i}`} maxHeight={480} />
+        </Panel>
+      )}
+
       {tab === 'inventory' && (
         <Panel title="Service dependencies" icon={<FiShield />} flush loading={inventory.loading} error={inventory.error}
           empty={!inventory.loading && pkgRows.length === 0} emptyText="No inventory yet">
@@ -162,10 +207,10 @@ export default function Security() {
       )}
 
       {tab === 'policies' && (
-        <Panel title="Policies (stub)" icon={<FiSliders />} loading={policies.loading}>
+        <Panel title="Policies" icon={<FiSliders />} loading={policies.loading}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
             Local severity threshold is stored in <code>localStorage</code> (<code>{SEV_KEY}</code>).
-            Agent env mirrors: <code>OPA_SECURITY_MIN_SEVERITY</code>. SAST / IaC / auto-fix deferred.
+            Agent env: <code>OPA_SECURITY_MIN_SEVERITY</code>, scanner auth via <code>OPA_SECURITY_INGEST_TOKEN</code>.
           </p>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
             <label>
@@ -181,6 +226,21 @@ export default function Security() {
           <pre className="opa-mono" style={{ fontSize: 12, background: 'var(--surface-2)', padding: 12 }}>
             {JSON.stringify(policies.data || { min_severity: minSev }, null, 2)}
           </pre>
+        </Panel>
+      )}
+
+      {tab === 'pr' && (
+        <Panel title="PR check" icon={<FiCheckCircle />} loading={prCheck.loading} error={prCheck.error}>
+          <p className="opa-muted" style={{ marginTop: 0 }}>
+            Aggregates vulns + secrets + SAST + IaC for CI. Scanner ingest uses Bearer / <code>X-OPA-Security-Token</code>
+            when <code>OPA_SECURITY_INGEST_TOKEN</code> is set; humans obtain sessions via OIDC login.
+          </p>
+          <pre className="opa-mono" style={{ fontSize: 12, background: 'var(--surface-2)', padding: 12 }}>
+            {JSON.stringify(prCheck.data || {}, null, 2)}
+          </pre>
+          <div className="opa-muted" style={{ fontSize: 12, marginTop: 8 }}>
+            Counts — secrets: {secretRows.length}, sast: {sastRows.length}, iac: {iacRows.length}
+          </div>
         </Panel>
       )}
     </div>
