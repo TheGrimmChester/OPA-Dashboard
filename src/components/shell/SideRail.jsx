@@ -30,6 +30,7 @@ export const NAV_GROUPS = [
       { to: '/anomalies', label: 'Anomalies', icon: FiZap },
       { to: '/synthetics', label: 'Synthetics', icon: FiRadio },
       { to: '/security', label: 'Security', icon: FiShield },
+      { to: '/diagnostics', label: 'Diagnostics', icon: FiActivity },
     ],
   },
   {

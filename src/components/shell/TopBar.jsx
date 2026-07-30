@@ -9,6 +9,7 @@ import UserMenu from './UserMenu'
 import SavedViews from './SavedViews'
 import ThemeToggle from './ThemeToggle'
 import FullscreenToggle from './FullscreenToggle'
+import { LocaleSwitcher } from '../../contexts/I18nContext'
 
 const LABELS = (() => {
   const m = { '': 'Overview', services: 'Services', traces: 'Traces', profiling: 'Profiling', errors: 'Errors', sql: 'Databases', http: 'External HTTP', 'service-map': 'Service Map', rum: 'Browser', performance: 'Performance', live: 'Live', system: 'System', users: 'Users & Roles', 'api-keys': 'API Keys', compare: 'Compare', query: 'Query', metrics: 'Metrics Explorer', dashboards: 'Dashboards' }
@@ -62,6 +63,7 @@ export default function TopBar() {
         <TenantSwitcher />
         <FullscreenToggle />
         <ThemeToggle />
+        <LocaleSwitcher />
         <UserMenu />
       </div>
     </header>
