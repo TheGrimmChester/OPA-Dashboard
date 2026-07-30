@@ -47,6 +47,7 @@ const ExternalHttp = lazy(() => import('./pages/ExternalHttp'))
 const HttpEndpointDetail = lazy(() => import('./pages/HttpEndpointDetail'))
 const PerformanceView = lazy(() => import('./pages/PerformanceView'))
 const LiveHub = lazy(() => import('./pages/LiveHub'))
+const PlatformOps = lazy(() => import('./pages/PlatformOps'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -163,7 +164,7 @@ function App() {
             />
             <Route
               path="/system"
-              element={<Stats autoRefresh={autoRefresh} />}
+              element={<PlatformOps />}
             />
             <Route
               path="/traces/:traceId"
