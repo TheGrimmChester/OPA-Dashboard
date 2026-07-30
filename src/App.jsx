@@ -55,6 +55,7 @@ const Automation = lazy(() => import('./pages/Automation'))
 const Cloud = lazy(() => import('./pages/Cloud'))
 const Network = lazy(() => import('./pages/Network'))
 const Federation = lazy(() => import('./pages/Federation'))
+const Collaborate = lazy(() => import('./pages/Collaborate'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -215,6 +216,10 @@ function App() {
             <Route
               path="/federation"
               element={<Federation />}
+            />
+            <Route
+              path="/collaborate"
+              element={<Collaborate />}
             />
             <Route
               path="/profiling"
