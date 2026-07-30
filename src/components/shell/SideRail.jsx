@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
   FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiGrid, FiTarget,
-  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield, FiBookOpen, FiCpu,
+  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield, FiBookOpen,
   FiChevronsLeft, FiChevronsRight, FiTerminal,
 } from 'react-icons/fi'
 
