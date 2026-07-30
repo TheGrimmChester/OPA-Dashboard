@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
   FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiGrid, FiTarget,
-  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud,
+  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield,
   FiChevronsLeft, FiChevronsRight, FiTerminal,
 } from 'react-icons/fi'
 
@@ -28,6 +28,7 @@ export const NAV_GROUPS = [
       { to: '/slos', label: 'SLOs', icon: FiTarget },
       { to: '/anomalies', label: 'Anomalies', icon: FiZap },
       { to: '/synthetics', label: 'Synthetics', icon: FiRadio },
+      { to: '/security', label: 'Security', icon: FiShield },
     ],
   },
   {
