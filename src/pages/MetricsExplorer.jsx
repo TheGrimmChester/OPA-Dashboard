@@ -308,6 +308,7 @@ export default function MetricsExplorer() {
             {chartData.length > 0 && (
               <>
                 <TimeSeriesChart
+                  brushZoom
                   data={chartData}
                   series={chartSeries}
                   height={280}

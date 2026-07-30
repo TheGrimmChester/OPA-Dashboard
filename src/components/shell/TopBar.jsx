@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { FiRefreshCw } from 'react-icons/fi'
+import { FiRefreshCw, FiX } from 'react-icons/fi'
 import { SegmentedControl } from '../ui/Controls'
 import { useTimeRange } from '../../contexts/TimeRangeContext'
 import { NAV_GROUPS } from './SideRail'
@@ -11,7 +11,7 @@ import ThemeToggle from './ThemeToggle'
 import FullscreenToggle from './FullscreenToggle'
 
 const LABELS = (() => {
-  const m = { '': 'Overview', services: 'Services', traces: 'Traces', profiling: 'Profiling', errors: 'Errors', sql: 'Databases', http: 'External HTTP', 'service-map': 'Service Map', rum: 'Browser', performance: 'Performance', live: 'Live', system: 'System', users: 'Users & Roles', 'api-keys': 'API Keys', compare: 'Compare', query: 'Query', metrics: 'Metrics Explorer' }
+  const m = { '': 'Overview', services: 'Services', traces: 'Traces', profiling: 'Profiling', errors: 'Errors', sql: 'Databases', http: 'External HTTP', 'service-map': 'Service Map', rum: 'Browser', performance: 'Performance', live: 'Live', system: 'System', users: 'Users & Roles', 'api-keys': 'API Keys', compare: 'Compare', query: 'Query', metrics: 'Metrics Explorer', dashboards: 'Dashboards' }
   NAV_GROUPS.forEach((g) => g.items.forEach((i) => { m[i.to.replace('/', '')] = i.label }))
   return m
 })()
@@ -25,7 +25,7 @@ function Breadcrumb() {
   parts.forEach((p, i) => {
     acc += '/' + p
     let label = LABELS[p] || decodeURIComponent(p)
-    if (label.length > 22) label = label.slice(0, 12) + '…' + label.slice(-6) // long ids (trace/fingerprint)
+    if (label.length > 22) label = label.slice(0, 12) + '…' + label.slice(-6)
     const last = i === parts.length - 1
     crumbs.push(
       last
@@ -36,13 +36,27 @@ function Breadcrumb() {
   return <>{crumbs}</>
 }
 
+function formatCustomLabel(fromMs, toMs) {
+  const fmt = (ms) => {
+    const d = new Date(ms)
+    return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')}`
+  }
+  return `${fmt(fromMs)}–${fmt(toMs)} UTC`
+}
+
 export default function TopBar() {
-  const { range, setRange, ranges, refresh } = useTimeRange()
+  const { range, setRange, ranges, refresh, isCustom, fromMs, toMs, clearCustom } = useTimeRange()
   return (
     <header className="opa-topbar">
       <div className="opa-breadcrumb"><Breadcrumb /></div>
       <div className="opa-topbar-right">
-        <SegmentedControl options={ranges.map((r) => ({ value: r.value, label: r.label }))} value={range} onChange={setRange} />
+        {isCustom ? (
+          <button type="button" className="opa-btn ghost" onClick={clearCustom} title="Clear brush zoom">
+            Zoomed {formatCustomLabel(fromMs, toMs)} <FiX size={12} style={{ marginLeft: 4 }} />
+          </button>
+        ) : (
+          <SegmentedControl options={ranges.map((r) => ({ value: r.value, label: r.label }))} value={range} onChange={setRange} />
+        )}
         <button className="opa-btn ghost" onClick={refresh} title="Refresh"><FiRefreshCw size={14} /></button>
         <SavedViews />
         <TenantSwitcher />
