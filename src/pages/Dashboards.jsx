@@ -48,7 +48,13 @@ function WidgetCard({ widget, variables }) {
       {widget.type === 'timeseries' && (
         <TimeSeriesChart
           brushZoom
-          data={rows.map((r) => ({ time: String(r.t || r.time || ''), value: Number(r.value ?? r.count ?? 0) }))}
+          data={rows.map((r) => {
+            const raw = String(r.t || r.time || '')
+            const timeMs = /^\d{4}-\d{2}-\d{2}/.test(raw)
+              ? Date.parse(raw.replace(' ', 'T') + (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? '' : 'Z'))
+              : Date.parse(raw)
+            return { time: raw, timeMs: Number.isFinite(timeMs) ? timeMs : 0, value: Number(r.value ?? r.count ?? 0) }
+          })}
           xKey="time"
           height={200}
           series={[{ key: 'value', name: widget.title || 'value', color: 'var(--accent)', type: 'area' }]}
