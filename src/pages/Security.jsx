@@ -68,9 +68,9 @@ export default function Security() {
       </div>
 
       <div className="opa-tabs">
-        <button type="button" className={tab === 'vulns' ? 'active' : ''} onClick={() => setTab('vulns')}>Vulnerabilities</button>
-        <button type="button" className={tab === 'iast' ? 'active' : ''} onClick={() => setTab('iast')}>IAST</button>
-        <button type="button" className={tab === 'inventory' ? 'active' : ''} onClick={() => setTab('inventory')}>Inventory</button>
+        <button type="button" className={`opa-tab ${tab === 'vulns' ? 'active' : ''}`} onClick={() => setTab('vulns')}>Vulnerabilities</button>
+        <button type="button" className={`opa-tab ${tab === 'iast' ? 'active' : ''}`} onClick={() => setTab('iast')}>IAST</button>
+        <button type="button" className={`opa-tab ${tab === 'inventory' ? 'active' : ''}`} onClick={() => setTab('inventory')}>Inventory</button>
       </div>
 
       {tab === 'vulns' && (
