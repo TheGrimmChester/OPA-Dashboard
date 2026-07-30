@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
   FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiGrid, FiTarget,
-  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield, FiBookOpen,
+  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield, FiBookOpen, FiCpu,
   FiChevronsLeft, FiChevronsRight, FiTerminal,
 } from 'react-icons/fi'
 
@@ -65,6 +65,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/users', label: 'Users & Roles', icon: FiUsers },
       { to: '/api-keys', label: 'API Keys', icon: FiKey },
+      { to: '/automation', label: 'Automation', icon: FiCpu },
     ],
   },
 ]
