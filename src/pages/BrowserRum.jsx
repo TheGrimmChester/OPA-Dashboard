@@ -6,6 +6,7 @@ import {
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, TimeSeriesChart, StatusPill, EmptyState, DataTable, Badge, InlineBar, SegmentedControl } from '../components/ui'
 import { fmtMs, fmtNum, fmtBytes, fmtAgo, fmtPct, latencyStatus, errorRateStatus, tierColor } from '../theme/format'
+import SessionReplayPlayer from '../components/SessionReplayPlayer'
 import './BrowserRum.css'
 
 const ell = { display: 'block', maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
@@ -303,6 +304,7 @@ export default function BrowserRum() {
               Session replay: {fmtNum(replay.data.chunks.length)} chunk(s) · {(replay.data.chunks.reduce((n, c) => n + (Number(c.bytes) || 0), 0))} bytes (masked)
             </div>
           )}
+          <SessionReplayPlayer sessionId={session} ajaxRows={sessionDetail.data?.ajax || []} />
         </Panel>
       )}
     </div>
