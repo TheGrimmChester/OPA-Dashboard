@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Wave 25 Federation page: region peers, residency policy, cross-border transfers (`/federation`).
 - Wave 24 Network page: flows, DNS/TLS health, agentless discovery, host profiles (`/network`).
 - Wave 23 Cloud page: resources, cost, tag violations, scrapes, cloud integrations (`/cloud`).
 - Wave 22 Automation page: ConfigBundle plan/apply/import, promote, revisions (`/automation`).
