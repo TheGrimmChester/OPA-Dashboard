@@ -50,6 +50,7 @@ const LiveHub = lazy(() => import('./pages/LiveHub'))
 const PlatformOps = lazy(() => import('./pages/PlatformOps'))
 const Serverless = lazy(() => import('./pages/Serverless'))
 const Security = lazy(() => import('./pages/Security'))
+const Catalog = lazy(() => import('./pages/Catalog'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -175,6 +176,10 @@ function App() {
             <Route
               path="/security"
               element={<Security />}
+            />
+            <Route
+              path="/catalog"
+              element={<Catalog />}
             />
             <Route
               path="/traces/:traceId"
