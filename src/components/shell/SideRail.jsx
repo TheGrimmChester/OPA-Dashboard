@@ -38,6 +38,7 @@ export const NAV_GROUPS = [
       { to: '/sql', label: 'Databases', icon: FiDatabase },
       { to: '/http', label: 'External HTTP', icon: FiGlobe },
       { to: '/service-map', label: 'Service Map', icon: FiShare2 },
+      { to: '/network', label: 'Network', icon: FiGlobe },
       { to: '/rum', label: 'Browser (RUM)', icon: FiMonitor },
       { to: '/performance', label: 'Performance', icon: FiTrendingUp },
       { to: '/compare', label: 'Compare', icon: FiColumns },
