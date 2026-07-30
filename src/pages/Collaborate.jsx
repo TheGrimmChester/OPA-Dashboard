@@ -1,27 +1,28 @@
 import React, { useState } from 'react'
 import axios from 'axios'
 import {
-  FiBookOpen, FiGlobe, FiMessageSquare, FiFileText, FiPlus,
+  FiBookOpen, FiGlobe, FiMessageSquare, FiFileText, FiPlus, FiPlay,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
+import { useI18n } from '../contexts/I18nContext'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 const TABS = [
-  { value: 'notebooks', label: 'Notebooks', icon: <FiBookOpen size={13} /> },
-  { value: 'status', label: 'Status pages', icon: <FiGlobe size={13} /> },
-  { value: 'comments', label: 'Comments', icon: <FiMessageSquare size={13} /> },
-  { value: 'reports', label: 'Reports', icon: <FiFileText size={13} /> },
+  { value: 'notebooks', labelKey: 'collab.notebooks', icon: <FiBookOpen size={13} /> },
+  { value: 'status', labelKey: 'collab.status', icon: <FiGlobe size={13} /> },
+  { value: 'comments', labelKey: 'collab.comments', icon: <FiMessageSquare size={13} /> },
+  { value: 'reports', labelKey: 'collab.reports', icon: <FiFileText size={13} /> },
 ]
 
-function Tabs({ tabs = [], value, onChange }) {
+function Tabs({ tabs = [], value, onChange, t }) {
   return (
     <div className="opa-tabs">
-      {tabs.map((t) => (
-        <button key={t.value} className={`opa-tab ${value === t.value ? 'active' : ''}`} onClick={() => onChange(t.value)}>
-          {t.icon}{t.label}
+      {tabs.map((tab) => (
+        <button key={tab.value} className={`opa-tab ${value === tab.value ? 'active' : ''}`} onClick={() => onChange(tab.value)}>
+          {tab.icon}{t(tab.labelKey)}
         </button>
       ))}
     </div>
@@ -30,6 +31,7 @@ function Tabs({ tabs = [], value, onChange }) {
 
 /** Wave 26: Collaboration & stakeholder surfaces. */
 export default function Collaborate() {
+  const { t } = useI18n()
   const [tab, setTab] = useState('notebooks')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -38,6 +40,8 @@ export default function Collaborate() {
   const [pageTitle, setPageTitle] = useState('Production status')
   const [comment, setComment] = useState({ anchor_type: 'trace', anchor_id: '', body: '', deep_link: window.location.href })
   const [reportName, setReportName] = useState('Weekly exec summary')
+  const [viewer, setViewer] = useState(null)
+  const [execOut, setExecOut] = useState(null)
 
   const notebooks = useApi('/api/notebooks', {}, { noRange: true })
   const pages = useApi('/api/status/pages', {}, { noRange: true })
@@ -66,6 +70,30 @@ export default function Collaborate() {
       notebooks.reload?.()
     } catch (e) {
       setMsg({ error: e.response?.data || e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openNotebook = async (id) => {
+    setBusy(true); setExecOut(null)
+    try {
+      const { data } = await axios.get(`${API}/api/notebooks/${id}`)
+      setViewer(data)
+    } catch (e) {
+      setMsg({ error: e.response?.data || e.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const runNotebook = async (id) => {
+    setBusy(true); setExecOut(null)
+    try {
+      const { data } = await axios.post(`${API}/api/notebooks/${id}/execute`, {})
+      setExecOut(data)
+    } catch (e) {
+      setExecOut({ error: e.response?.data || e.message })
     } finally {
       setBusy(false)
     }
@@ -138,6 +166,12 @@ export default function Collaborate() {
     { key: 'title', header: 'Title', render: (r) => <span className="cell-strong">{r.title}</span> },
     { key: 'created_by', header: 'Author', render: (r) => r.created_by || '—' },
     { key: 'updated_at', header: 'Updated', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.updated_at)}</span> },
+    { key: 'actions', header: '', render: (r) => (
+      <span style={{ display: 'inline-flex', gap: 6 }}>
+        <button className="opa-btn" disabled={busy} onClick={() => openNotebook(r.id)}>{t('collab.open')}</button>
+        <button className="opa-btn" disabled={busy} onClick={() => runNotebook(r.id)} title={t('collab.runTql')}><FiPlay size={14} /></button>
+      </span>
+    ) },
   ]
 
   const pageCols = [
@@ -169,23 +203,25 @@ export default function Collaborate() {
     { key: 'created_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span> },
   ]
 
+  const cells = Array.isArray(viewer?.cells) ? viewer.cells : []
+
   return (
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
-          <h1 className="opa-page-title">Collaborate</h1>
-          <div className="opa-page-sub">Notebooks · status pages · comments · executive reports</div>
+          <h1 className="opa-page-title">{t('collab.title')}</h1>
+          <div className="opa-page-sub">{t('collab.subtitle')}</div>
         </div>
       </div>
 
       <div className="opa-grid cols-4">
-        <KpiTile label="Notebooks" icon={<FiBookOpen size={12} />} value={fmtNum(nbs.length)} status="neutral" />
-        <KpiTile label="Status pages" icon={<FiGlobe size={12} />} value={fmtNum(pageRows.length)} status="neutral" />
-        <KpiTile label="Comments" icon={<FiMessageSquare size={12} />} value={fmtNum(cmtRows.length)} status="neutral" />
-        <KpiTile label="Report runs" icon={<FiFileText size={12} />} value={fmtNum(runRows.length)} status="neutral" />
+        <KpiTile label={t('collab.notebooks')} icon={<FiBookOpen size={12} />} value={fmtNum(nbs.length)} status="neutral" />
+        <KpiTile label={t('collab.status')} icon={<FiGlobe size={12} />} value={fmtNum(pageRows.length)} status="neutral" />
+        <KpiTile label={t('collab.comments')} icon={<FiMessageSquare size={12} />} value={fmtNum(cmtRows.length)} status="neutral" />
+        <KpiTile label={t('collab.reports')} icon={<FiFileText size={12} />} value={fmtNum(runRows.length)} status="neutral" />
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
+      <Tabs tabs={TABS} value={tab} onChange={setTab} t={t} />
 
       {msg && (
         <Panel title="Result">
@@ -201,10 +237,33 @@ export default function Collaborate() {
               <button className="opa-btn" disabled={busy} onClick={createNotebook}><FiPlus size={14} /> Create</button>
             </div>
           </Panel>
-          <Panel title="Notebooks" icon={<FiBookOpen />} flush loading={notebooks.loading} error={notebooks.error}
+          <Panel title={t('collab.notebooks')} icon={<FiBookOpen />} flush loading={notebooks.loading} error={notebooks.error}
             empty={!notebooks.loading && nbs.length === 0} emptyText="No notebooks yet">
             <DataTable columns={nbCols} rows={nbs} rowKey={(r) => r.id} maxHeight={360} />
           </Panel>
+          {viewer && (
+            <Panel title={`${viewer.title || viewer.id}`}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <button className="opa-btn" disabled={busy} onClick={() => runNotebook(viewer.id)}>
+                  <FiPlay size={14} /> {t('collab.runTql')}
+                </button>
+                <button className="opa-btn" onClick={() => { setViewer(null); setExecOut(null) }}>Close</button>
+              </div>
+              {cells.map((c, i) => (
+                <div key={i} style={{ marginBottom: 12, padding: 10, border: '1px solid var(--opa-border, #2a3348)', borderRadius: 6 }}>
+                  <Badge>{c.type || 'cell'}</Badge>
+                  {c.type === 'tql' ? (
+                    <pre className="opa-mono" style={{ margin: '8px 0 0', fontSize: 12 }}>{c.query || c.q || ''}</pre>
+                  ) : (
+                    <pre style={{ margin: '8px 0 0', fontSize: 12, whiteSpace: 'pre-wrap' }}>{c.body || JSON.stringify(c, null, 2)}</pre>
+                  )}
+                </div>
+              ))}
+              {execOut && (
+                <pre className="opa-mono" style={{ marginTop: 12, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(execOut, null, 2)}</pre>
+              )}
+            </Panel>
+          )}
         </>
       )}
 
