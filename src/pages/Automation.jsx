@@ -152,10 +152,10 @@ export default function Automation() {
       </div>
 
       <div className="opa-tabs">
-        <button type="button" className={tab === 'plan' ? 'active' : ''} onClick={() => setTab('plan')}>Plan / Apply</button>
-        <button type="button" className={tab === 'promote' ? 'active' : ''} onClick={() => setTab('promote')}>Promote</button>
-        <button type="button" className={tab === 'revisions' ? 'active' : ''} onClick={() => setTab('revisions')}>Revisions</button>
-        <button type="button" className={tab === 'resources' ? 'active' : ''} onClick={() => setTab('resources')}>Resources</button>
+        <button type="button" className={`opa-tab ${tab === 'plan' ? 'active' : ''}`} onClick={() => setTab('plan')}>Plan / Apply</button>
+        <button type="button" className={`opa-tab ${tab === 'promote' ? 'active' : ''}`} onClick={() => setTab('promote')}>Promote</button>
+        <button type="button" className={`opa-tab ${tab === 'revisions' ? 'active' : ''}`} onClick={() => setTab('revisions')}>Revisions</button>
+        <button type="button" className={`opa-tab ${tab === 'resources' ? 'active' : ''}`} onClick={() => setTab('resources')}>Resources</button>
       </div>
 
       {tab === 'plan' && (

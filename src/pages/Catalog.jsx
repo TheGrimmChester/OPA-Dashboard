@@ -157,10 +157,10 @@ export default function Catalog() {
       </div>
 
       <div className="opa-tabs">
-        <button type="button" className={tab === 'entities' ? 'active' : ''} onClick={() => setTab('entities')}>Entities</button>
-        <button type="button" className={tab === 'scorecards' ? 'active' : ''} onClick={() => setTab('scorecards')}>Scorecards</button>
-        <button type="button" className={tab === 'teams' ? 'active' : ''} onClick={() => setTab('teams')}>Teams</button>
-        <button type="button" className={tab === 'groups' ? 'active' : ''} onClick={() => setTab('groups')}>Groups</button>
+        <button type="button" className={`opa-tab ${tab === 'entities' ? 'active' : ''}`} onClick={() => setTab('entities')}>Entities</button>
+        <button type="button" className={`opa-tab ${tab === 'scorecards' ? 'active' : ''}`} onClick={() => setTab('scorecards')}>Scorecards</button>
+        <button type="button" className={`opa-tab ${tab === 'teams' ? 'active' : ''}`} onClick={() => setTab('teams')}>Teams</button>
+        <button type="button" className={`opa-tab ${tab === 'groups' ? 'active' : ''}`} onClick={() => setTab('groups')}>Groups</button>
       </div>
 
       {tab === 'entities' && (
