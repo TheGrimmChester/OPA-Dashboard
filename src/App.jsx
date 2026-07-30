@@ -58,6 +58,7 @@ const Network = lazy(() => import('./pages/Network'))
 const Federation = lazy(() => import('./pages/Federation'))
 const Collaborate = lazy(() => import('./pages/Collaborate'))
 const Diagnostics = lazy(() => import('./pages/Diagnostics'))
+const PerfLab = lazy(() => import('./pages/PerfLab'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -210,6 +211,10 @@ function App() {
             <Route
               path="/performance"
               element={<PerformanceView />}
+            />
+            <Route
+              path="/perf-lab"
+              element={<PerfLab />}
             />
             {/* App-level HTTP bandwidth stays on Performance; Wave 24 network obs is /network. */}
             <Route
