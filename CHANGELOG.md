@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Wave 27 Diagnostics page + i18n scaffold (en/fr) with locale switcher (`/diagnostics`).
 - Wave 26 Collaborate page: notebooks, status pages, comments, executive reports (`/collaborate`).
 - Wave 25 Federation page: region peers, residency policy, cross-border transfers (`/federation`).
 - Wave 24 Network page: flows, DNS/TLS health, agentless discovery, host profiles (`/network`).
