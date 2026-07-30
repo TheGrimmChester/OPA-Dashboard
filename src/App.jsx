@@ -51,6 +51,7 @@ const PlatformOps = lazy(() => import('./pages/PlatformOps'))
 const Serverless = lazy(() => import('./pages/Serverless'))
 const Security = lazy(() => import('./pages/Security'))
 const Catalog = lazy(() => import('./pages/Catalog'))
+const Automation = lazy(() => import('./pages/Automation'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -180,6 +181,10 @@ function App() {
             <Route
               path="/catalog"
               element={<Catalog />}
+            />
+            <Route
+              path="/automation"
+              element={<Automation />}
             />
             <Route
               path="/traces/:traceId"
