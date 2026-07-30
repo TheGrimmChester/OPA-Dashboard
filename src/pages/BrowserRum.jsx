@@ -59,7 +59,14 @@ export default function BrowserRum() {
   const [tab, setTab] = useState('resources')
   // Selected browser session, expanded into a timeline panel below the table.
   const [session, setSession] = useState(null)
+  const [mobileSession, setMobileSession] = useState('')
   const sessions = useApi('/api/rum/sessions', {}, { skip: tab !== 'sessions' })
+  const mobileSessions = useApi('/api/rum/mobile/sessions', {}, { skip: tab !== 'mobile', noRange: true })
+  const mobileCrashes = useApi(
+    '/api/mobile/crashes',
+    mobileSession ? { session_id: mobileSession } : {},
+    { skip: tab !== 'mobile', noRange: true },
+  )
   const sessionDetail = useApi(
     `/api/rum/sessions/${encodeURIComponent(session || '')}`,
     {}, { skip: !session },
@@ -144,6 +151,27 @@ export default function BrowserRum() {
     { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_seen)}</span>, sortValue: (r) => Date.parse(r.last_seen) || 0 },
   ]
 
+  const mobileSessionRows = mobileSessions.data?.sessions || []
+  const mobileCrashRows = mobileCrashes.data?.crashes || mobileCrashes.data?.rows || (Array.isArray(mobileCrashes.data) ? mobileCrashes.data : [])
+  const mobileSessionCols = [
+    { key: 'session_id', header: 'Session', render: (r) => <span className="opa-mono cell-strong">{String(r.session_id || '').slice(0, 16)}</span> },
+    { key: 'platform', header: 'Platform', render: (r) => <Badge>{r.platform || '—'}</Badge> },
+    { key: 'crashes', header: 'Crashes', num: true, sortValue: (r) => Number(r.crashes), render: (r) => <span style={{ color: 'var(--error)' }}>{fmtNum(r.crashes)}</span> },
+    { key: 'app_version', header: 'App', render: (r) => <span className="opa-muted">{r.app_version || '—'}</span> },
+    { key: 'device_model', header: 'Device', render: (r) => <span className="opa-muted">{r.device_model || '—'}</span> },
+    { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_seen)}</span> },
+  ]
+  const mobileCrashCols = [
+    { key: 'exception_name', header: 'Exception', render: (r) => <span className="cell-strong">{r.exception_name || r.crash_type || '—'}</span> },
+    { key: 'exception_message', header: 'Message', render: (r) => <span className="opa-muted" style={ell}>{r.exception_message || '—'}</span> },
+    { key: 'platform', header: 'Platform', render: (r) => <Badge>{r.platform || '—'}</Badge> },
+    { key: 'session_id', header: 'Session', render: (r) => <span className="opa-mono">{String(r.session_id || '').slice(0, 14)}</span> },
+    { key: 'trace_id', header: 'Trace', render: (r) => (r.trace_id
+      ? <button type="button" className="opa-btn ghost" onClick={(e) => { e.stopPropagation(); navigate(`/traces/${encodeURIComponent(r.trace_id)}`) }}>{String(r.trace_id).slice(0, 12)}</button>
+      : <span className="opa-muted">—</span>) },
+    { key: 'occurred_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.occurred_at)}</span> },
+  ]
+
   // Merge the session's page views, AJAX calls and JS errors into one
   // chronological stream — what the user actually did, in order.
   const timelineRows = (() => {
@@ -180,10 +208,17 @@ export default function BrowserRum() {
 
   const activeCols = tab === 'resources' ? resourceCols
     : tab === 'ajax' ? ajaxCols
-      : tab === 'sessions' ? sessionCols : pvCols
+      : tab === 'sessions' ? sessionCols
+        : tab === 'mobile' ? mobileSessionCols
+          : pvCols
   const activeRows = tab === 'resources' ? resources
     : tab === 'ajax' ? ajax
-      : tab === 'sessions' ? sessionRows : pageViews
+      : tab === 'sessions' ? sessionRows
+        : tab === 'mobile' ? mobileSessionRows
+          : pageViews
+  const tableLoading = tab === 'sessions' ? sessions.loading
+    : tab === 'mobile' ? mobileSessions.loading
+      : detail.loading
 
   const timeline = (d.timeline || []).map((t) => ({
     time: (t.time || '').slice(5, 16),
@@ -196,7 +231,7 @@ export default function BrowserRum() {
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Browser</h1>
-          <div className="opa-page-sub">Real user monitoring · Core Web Vitals (p75)</div>
+          <div className="opa-page-sub">Real user monitoring · Core Web Vitals (p75) · mobile crash bridge</div>
         </div>
       </div>
 
@@ -267,25 +302,39 @@ export default function BrowserRum() {
 
       {/* Resource timing / AJAX / recent page views (from /api/rum/detail) */}
       <Panel title="Resource & session detail" icon={<FiLayers />} flush
-        loading={detail.loading} error={detail.error}
+        loading={tableLoading} error={tab === 'mobile' ? mobileSessions.error : detail.error}
         actions={
-          <SegmentedControl value={tab} onChange={(v) => { setTab(v); setSession(null) }} options={[
+          <SegmentedControl value={tab} onChange={(v) => { setTab(v); setSession(null); setMobileSession('') }} options={[
             { value: 'resources', label: `Resources ${resources.length}` },
             { value: 'ajax', label: `AJAX ${ajax.length}` },
             { value: 'pages', label: `Page views ${pageViews.length}` },
             { value: 'sessions', label: `Sessions ${sessionRows.length}` },
+            { value: 'mobile', label: `Mobile ${mobileSessionRows.length}` },
           ]} />
         }>
-        {activeRows.length === 0 && !detail.loading && !sessions.loading
-          ? <EmptyState icon={<FiGlobe />} title="No RUM detail in range"
-              hint="Add the opa-rum.js snippet (<script src=&quot;/opa-rum.js&quot; …>) to your app to start capturing resource timing, AJAX calls and page views." />
+        {activeRows.length === 0 && !tableLoading
+          ? <EmptyState icon={<FiGlobe />} title={tab === 'mobile' ? 'No mobile crash sessions' : 'No RUM detail in range'}
+              hint={tab === 'mobile'
+                ? 'POST mobile crashes with session_id to /api/mobile/crashes — link appears here.'
+                : 'Add the opa-rum.js snippet (<script src=&quot;/opa-rum.js&quot; …>) to your app to start capturing resource timing, AJAX calls and page views.'} />
           : <DataTable columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
               onRowClick={tab === 'ajax' ? drillAjax
                 : tab === 'sessions' ? (r) => setSession(r.session_id === session ? null : r.session_id)
-                  : undefined}
-              initialSort={tab === 'sessions' ? { key: 'last_seen', dir: 'desc' } : { key: 'count', dir: 'desc' }}
+                  : tab === 'mobile' ? (r) => setMobileSession(r.session_id === mobileSession ? '' : r.session_id)
+                    : undefined}
+              initialSort={tab === 'sessions' || tab === 'mobile' ? { key: 'last_seen', dir: 'desc' } : { key: 'count', dir: 'desc' }}
               maxHeight={420} />}
       </Panel>
+
+      {tab === 'mobile' && mobileSession && (
+        <Panel title={`Mobile crashes · session ${String(mobileSession).slice(0, 16)}`} icon={<FiAlertTriangle />} flush
+          loading={mobileCrashes.loading} error={mobileCrashes.error}
+          empty={!mobileCrashes.loading && mobileCrashRows.length === 0}
+          emptyText="No crash detail rows for this session_id"
+          actions={<button type="button" className="opa-btn ghost" onClick={() => setMobileSession('')}>Clear</button>}>
+          <DataTable columns={mobileCrashCols} rows={mobileCrashRows} rowKey={(r, i) => i} maxHeight={360} />
+        </Panel>
+      )}
 
       {/* Session timeline — page views, AJAX and errors in the order they happened. */}
       {session && (
