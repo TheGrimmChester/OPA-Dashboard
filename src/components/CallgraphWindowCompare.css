@@ -1,0 +1,30 @@
+.cg-diff { display: flex; flex-direction: column; gap: var(--sp-3); }
+.cg-diff-meta { font-size: var(--fs-11); font-family: var(--font-mono); }
+.cg-diff-worse { color: var(--status-danger); }
+.cg-diff-better { color: var(--status-ok); }
+.cg-diff-bar-track {
+  height: 6px;
+  background: var(--bg-sunken);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 80px;
+}
+.cg-diff-bar { height: 100%; border-radius: 3px; }
+.cg-diff-bar.worse { background: var(--status-danger); }
+.cg-diff-bar.better { background: var(--status-ok); }
+.cg-diff-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: color-mix(in srgb, var(--status-warn) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 40%, transparent);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: var(--fs-12);
+}
+.cg-diff-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--sp-2);
+}
