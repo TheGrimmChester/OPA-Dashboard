@@ -48,10 +48,17 @@ function fmtMetric(v) {
   return v.toExponential(1)
 }
 
+// Unit "1" is UCUM for dimensionless — both 0–1 ratios (utilization) and
+// unbounded gauges (load average) use it. Only names that are actually ratios
+// should render as percentages; the rest stay plain numbers.
+function isRatioMetric(name) {
+  return typeof name === 'string' && /\.(utilization|hit_rate)$/.test(name)
+}
+
 // Format values by the metric's declared unit, so a byte counter reads as "2.1 GiB"
 // rather than 2254857830. Units come from the collector and follow the same
 // UCUM-style convention as the metric names.
-function unitFormatter(unit) {
+function unitFormatter(unit, name) {
   switch (unit) {
     case 'By':
       return fmtBytes
@@ -60,6 +67,7 @@ function unitFormatter(unit) {
     case 'ms':
       return fmtMs
     case '1':
+      if (!isRatioMetric(name)) return fmtMetric
       // A ratio. Shown as a percentage, because that is how utilization is read.
       // fmtPct expects an already-scaled percentage, hence the ×100.
       return (v) => (v == null ? '—' : fmtPct(v * 100, 1))
@@ -69,21 +77,27 @@ function unitFormatter(unit) {
 }
 
 // Units arrive in the UCUM-style form the metric conventions use, which is right
-// on the wire and unreadable on screen: "1" means a dimensionless ratio and "By"
-// means bytes, neither of which is obvious. Curly-brace forms like "{packet}" are
-// annotations, so the braces are just noise.
+// on the wire and unreadable on screen: "By" means bytes, neither of which is
+// obvious. Curly-brace forms like "{packet}" are annotations, so the braces are
+// just noise. Unit "1" only labels as "ratio" when the metric name is a ratio;
+// otherwise it is omitted so load average is not mislabeled.
 const UNIT_LABELS = {
   By: 'bytes',
   s: 'seconds',
   ms: 'milliseconds',
-  1: 'ratio',
 }
 
-function unitLabel(unit) {
+function unitLabel(unit, name) {
   if (!unit) return ''
+  if (unit === '1') return isRatioMetric(name) ? 'ratio' : ''
   if (UNIT_LABELS[unit]) return UNIT_LABELS[unit]
   const annotated = unit.match(/^\{(.+)\}$/)
   return annotated ? annotated[1] : unit
+}
+
+function unitSuffix(unit, name) {
+  const label = unitLabel(unit, name)
+  return label ? ` · ${label}` : ''
 }
 
 // Beyond this many lines a legend is noise rather than navigation.
@@ -119,13 +133,13 @@ export default function MetricsExplorer() {
   // axis is only ~44px wide, so a suffixed tick like "60.0k s" wraps onto two
   // lines and reads as two separate numbers. The unit is stated in the panel
   // header, so repeating it per tick buys nothing.
-  const fmtValue = unitFormatter(selected?.unit)
+  const fmtValue = unitFormatter(selected?.unit, selected?.name)
   // Recharts wraps a tick on whitespace when it does not fit the axis, and the
   // shared chart fixes the y-axis at 44px — so "620 MB" renders as "620" above
   // "MB", which reads as two unrelated numbers. Axis ticks therefore drop the
   // space; the tooltip keeps the readable spaced form.
   const fmtAxis = selected?.unit === 'By' ? (v) => fmtBytes(v).replace(/\s+/g, '')
-    : selected?.unit === '1' ? (v) => fmtPct(v * 100, 0)
+    : selected?.unit === '1' && isRatioMetric(selected?.name) ? (v) => fmtPct(v * 100, 0)
       : fmtMetric
 
   const labels = useApi('/api/metrics/labels', { metric }, { noRange: true, skip: !metric })
@@ -207,7 +221,7 @@ export default function MetricsExplorer() {
               key={m.name}
               className={`opa-mx-item${m.name === metric ? ' active' : ''}`}
               onClick={() => selectMetric(m.name)}
-              title={`${m.name} · ${m.series_count} series · ${m.type}${m.unit ? ` · ${unitLabel(m.unit)}` : ''}`}
+              title={`${m.name} · ${m.series_count} series · ${m.type}${unitSuffix(m.unit, m.name)}`}
             >
               <span className="opa-mx-name">{m.name}</span>
               <span className="opa-mx-count">{m.series_count}</span>
@@ -248,7 +262,7 @@ export default function MetricsExplorer() {
             {selected && (
               <div className="opa-mx-meta">
                 {selected.type}
-                {selected.unit ? ` · ${unitLabel(selected.unit)}` : ''}
+                {unitSuffix(selected.unit, selected.name)}
                 {` · ${selected.series_count} series`}
               </div>
             )}
