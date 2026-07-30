@@ -311,6 +311,13 @@ function CheckDetail({ check, onClose }) {
     if (latest?.steps_json) steps = JSON.parse(latest.steps_json)
   } catch (_) { steps = [] }
 
+  let artefacts = null
+  try {
+    if (latest?.artefacts) artefacts = typeof latest.artefacts === 'string' ? JSON.parse(latest.artefacts) : latest.artefacts
+  } catch (_) { artefacts = null }
+  const screenshotB64 = artefacts?.screenshot_b64 || latest?.screenshot_b64 || ''
+  const domSnap = artefacts?.dom || artefacts?.dom_snapshot || ''
+
   const failCols = [
     { key: 'ts', header: 'When', width: 130, render: (r) => <span className="opa-muted">{fmtAgo(r.ts)}</span>, sortValue: (r) => Date.parse(r.ts) || 0 },
     { key: 'status_code', header: 'Status', width: 80, align: 'center', render: (r) => <StatusPill tone={r.status_code >= 200 && r.status_code < 400 ? 'warn' : 'error'}>{r.status_code || '—'}</StatusPill> },
@@ -366,6 +373,25 @@ function CheckDetail({ check, onClose }) {
       {steps.length > 0 && (
         <Panel title="Latest step waterfall" icon={<FiClock />} flush>
           <DataTable columns={stepCols} rows={steps} rowKey={(r, i) => i} maxHeight={280} />
+        </Panel>
+      )}
+
+      {(screenshotB64 || domSnap) && (
+        <Panel title="Browser artefacts" icon={<FiShield />} flush>
+          {screenshotB64 && (
+            <div style={{ padding: '8px 12px' }}>
+              <img
+                alt="Synthetic failure screenshot"
+                src={screenshotB64.startsWith('data:') ? screenshotB64 : `data:image/png;base64,${screenshotB64}`}
+                style={{ maxWidth: '100%', maxHeight: 360, border: '1px solid var(--border)' }}
+              />
+            </div>
+          )}
+          {domSnap && (
+            <pre className="opa-mono" style={{ fontSize: 11, maxHeight: 200, overflow: 'auto', padding: 12, margin: 0 }}>
+              {String(domSnap).slice(0, 4000)}
+            </pre>
+          )}
         </Panel>
       )}
 
