@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Wave 17 Databases pillar: instance health, DB-side statements with app fingerprint drill-through, unused indexes.
 - Wave 16 community files and System/platform docs links.
 - Wave 15 PlatformOps `/system` page.
 - Wave 14 dashboards builder and exploration UX.
