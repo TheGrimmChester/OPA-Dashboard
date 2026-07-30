@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Brush, ReferenceLine,
 } from 'recharts'
@@ -20,6 +20,24 @@ function OpaTooltip({ active, payload, label, valueFmt }) {
   )
 }
 
+/** Prefer numeric epoch ms; fall back to ClickHouse/ISO strings. Display labels like "07-30 17:00" are not parseable. */
+export function parseChartTime(row, xKey = 'time') {
+  if (!row) return NaN
+  if (Number.isFinite(row.timeMs)) return Number(row.timeMs)
+  if (typeof row.t === 'number' && Number.isFinite(row.t)) return row.t
+  const raw = row[xKey]
+  if (raw == null || raw === '') return NaN
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  const s = String(raw).trim()
+  // Axis display labels ("MM-DD HH:MM") omit the year — refuse rather than guess.
+  if (/^\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s) && !/^\d{4}-/.test(s)) return NaN
+  // Agent/CH times are UTC without a zone suffix — force Z so brush matches TopBar UTC.
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) {
+    return Date.parse(s.replace(' ', 'T') + 'Z')
+  }
+  return Date.parse(s)
+}
+
 /**
  * Wave 14-3: optional brush-to-zoom writes an absolute window into TimeRangeContext.
  * annotations: [{ occurred_at|t, title, kind }]
@@ -29,20 +47,30 @@ export default function TimeSeriesChart({
   brushZoom = false, annotations = [],
 }) {
   const tr = useTimeRange()
+  // Recharts Brush onDragEnd reads controlled props; track the latest onChange indices instead.
+  const brushRef = useRef(null)
 
-  const onBrush = (range) => {
+  const applyBrushZoom = (range) => {
     if (!brushZoom || !tr?.setAbsoluteRange || !range || range.startIndex == null || range.endIndex == null) return
+    if (range.startIndex === range.endIndex) return
     const a = data[range.startIndex]
     const b = data[range.endIndex]
     if (!a || !b) return
-    const parse = (row) => {
-      const raw = row[xKey]
-      const ms = Date.parse(raw) || Date.parse(String(raw).replace(' ', 'T') + 'Z')
-      return ms
+    const fromMs = parseChartTime(a, xKey)
+    const toMs = parseChartTime(b, xKey)
+    if (Number.isFinite(fromMs) && Number.isFinite(toMs) && toMs > fromMs) {
+      tr.setAbsoluteRange(fromMs, toMs)
     }
-    const fromMs = parse(a)
-    const toMs = parse(b)
-    if (fromMs && toMs && toMs > fromMs) tr.setAbsoluteRange(fromMs, toMs)
+  }
+
+  const onBrushChange = (range) => {
+    if (!range) return
+    brushRef.current = range
+  }
+
+  const onBrushEnd = () => {
+    // Brush onDragEnd reports controlled props (defaults), not the dragged window.
+    applyBrushZoom(brushRef.current)
   }
 
   return (
@@ -67,7 +95,15 @@ export default function TimeSeriesChart({
           )
         })}
         {brushZoom && data.length > 2 && (
-          <Brush dataKey={xKey} height={22} stroke="var(--accent)" fill="var(--surface-2)" travellerWidth={8} onChange={onBrush} />
+          <Brush
+            dataKey={xKey}
+            height={22}
+            stroke="var(--accent)"
+            fill="var(--surface-2)"
+            travellerWidth={8}
+            onChange={onBrushChange}
+            onDragEnd={onBrushEnd}
+          />
         )}
       </ComposedChart>
     </ResponsiveContainer>

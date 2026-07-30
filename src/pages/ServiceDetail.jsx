@@ -34,14 +34,21 @@ export default function ServiceDetail() {
   const httpCalls = http.data?.http_calls || []
   const totalCalls = http.data?.total_calls ?? httpCalls.length
 
-  const metrics = (perf.data?.metrics || []).map((m) => ({
-    time: (m.time || '').slice(5, 16),
-    throughput: m.throughput,
-    error_rate: m.error_rate,
-    p50: m.p50_duration,
-    p95: m.p95_duration,
-    p99: m.p99_duration,
-  }))
+  const metrics = (perf.data?.metrics || []).map((m) => {
+    const raw = m.time || ''
+    const timeMs = /^\d{4}-\d{2}-\d{2}/.test(raw)
+      ? Date.parse(raw.replace(' ', 'T') + (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? '' : 'Z'))
+      : 0
+    return {
+      time: raw.slice(5, 16),
+      timeMs: Number.isFinite(timeMs) ? timeMs : 0,
+      throughput: m.throughput,
+      error_rate: m.error_rate,
+      p50: m.p50_duration,
+      p95: m.p95_duration,
+      p99: m.p99_duration,
+    }
+  })
   const spark = (k) => metrics.map((m) => m[k])
   const firstLast = (k) => {
     const a = metrics.filter((m) => m[k] != null)

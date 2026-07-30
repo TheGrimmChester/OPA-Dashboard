@@ -172,7 +172,15 @@ export default function MetricsExplorer() {
         type: 'line',
       })
       ;(s.points || []).forEach((pt) => {
-        const row = byTs.get(pt.ts) || { time: pt.ts }
+        const raw = pt.ts
+        let timeMs = 0
+        if (typeof raw === 'number') timeMs = raw
+        else if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+          timeMs = Date.parse(raw.replace(' ', 'T') + (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? '' : 'Z'))
+        } else if (typeof raw === 'string') {
+          timeMs = Date.parse(raw)
+        }
+        const row = byTs.get(pt.ts) || { time: pt.ts, timeMs: Number.isFinite(timeMs) ? timeMs : 0 }
         row[key] = pt.value
         byTs.set(pt.ts, row)
       })
