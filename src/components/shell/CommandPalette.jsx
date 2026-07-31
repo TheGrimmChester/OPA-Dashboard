@@ -4,6 +4,7 @@ import axios from 'axios'
 import { FiSearch, FiSun, FiRefreshCw, FiCornerDownLeft, FiServer, FiActivity, FiHardDrive, FiMonitor } from 'react-icons/fi'
 import { NAV_GROUPS } from './SideRail'
 import { useTimeRange } from '../../contexts/TimeRangeContext'
+import { useI18n } from '../../contexts/I18nContext'
 import { applyTheme } from './ThemeToggle'
 import './CommandPalette.css'
 
@@ -47,17 +48,18 @@ export default function CommandPalette() {
   const [entities, setEntities] = useState([])
   const navigate = useNavigate()
   const { refresh } = useTimeRange()
+  const { t } = useI18n()
   const inputRef = useRef(null)
   const listRef = useRef(null)
 
   const allSections = useMemo(() => {
     const routeSections = NAV_GROUPS.map((g) => ({
-      label: g.label,
+      label: t(g.labelKey),
       items: g.items.map((it) => ({
         kind: 'route',
         id: `route:${it.to}`,
         to: it.to,
-        label: it.label,
+        label: t(it.labelKey),
         icon: it.icon,
         hint: it.to,
       })),
@@ -70,7 +72,7 @@ export default function CommandPalette() {
       ],
     }
     return [...routeSections, actions]
-  }, [refresh])
+  }, [refresh, t])
 
   // Wave 14-4: entity search via /api/search
   useEffect(() => {
