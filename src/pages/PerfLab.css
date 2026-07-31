@@ -1,0 +1,314 @@
+/* Perf Lab studio — dense observability chrome, one composition per viewport. */
+
+.perf-studio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.perf-studio-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--surface-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+
+.perf-studio-hero-main {
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.perf-studio-kicker {
+  font-size: var(--fs-11);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-1);
+}
+
+.perf-studio-hero .opa-page-title {
+  margin: 0 0 var(--sp-1);
+}
+
+.perf-studio-hero .opa-page-sub {
+  margin: 0;
+  max-width: 52ch;
+}
+
+.perf-studio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.perf-studio-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.perf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+}
+
+.perf-chip strong {
+  color: var(--text-primary);
+  font-weight: var(--fw-medium);
+}
+
+.perf-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  background: var(--surface-1);
+  font-size: var(--fs-13);
+}
+
+.perf-banner.ok {
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--border-default));
+  background: var(--ok-dim);
+}
+
+.perf-banner.error {
+  border-color: color-mix(in srgb, var(--error) 45%, var(--border-default));
+  background: var(--error-dim);
+}
+
+.perf-banner.warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border-default));
+  background: var(--warn-dim);
+}
+
+.perf-banner-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.perf-banner-title {
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.perf-banner-detail {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.perf-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-3);
+}
+
+.perf-field-grid.wide {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.perf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.perf-field label {
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.perf-field .opa-input,
+.perf-field .opa-select,
+.perf-field select,
+.perf-field textarea {
+  width: 100%;
+}
+
+.perf-field.span-2 {
+  grid-column: span 2;
+}
+
+.perf-field.span-3 {
+  grid-column: span 3;
+}
+
+@media (max-width: 720px) {
+  .perf-field.span-2,
+  .perf-field.span-3 {
+    grid-column: span 1;
+  }
+}
+
+.perf-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.perf-step {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.perf-step-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.perf-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-primary);
+  font-size: var(--fs-11);
+  font-family: var(--font-mono);
+  font-weight: var(--fw-semibold);
+}
+
+.perf-step-body {
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.perf-step-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  padding-top: var(--sp-2);
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.perf-hint {
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+}
+
+.perf-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
+  gap: var(--sp-4);
+}
+
+@media (max-width: 980px) {
+  .perf-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.perf-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.perf-preset {
+  border: 1px solid var(--border-default);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: var(--fs-12);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  text-align: left;
+}
+
+.perf-preset:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
+.perf-preset.active {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--accent-subtle);
+}
+
+.perf-preset strong {
+  display: block;
+  color: var(--text-primary);
+  font-weight: var(--fw-medium);
+  margin-bottom: 2px;
+}
+
+.perf-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+
+@media (max-width: 720px) {
+  .perf-compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.perf-empty-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.perf-empty-cta .title {
+  color: var(--text-primary);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-medium);
+}
+
+.perf-gate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-13);
+}
+
+.perf-gate-row:last-child {
+  border-bottom: none;
+}
