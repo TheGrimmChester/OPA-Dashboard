@@ -32,6 +32,10 @@ export default function TraceWaterfall({
   collapseNoise,
   onToggleCollapse,
   truncatedMeta,
+  /** Span ids started by waterfall replay playhead (progressive highlight). */
+  highlightIds,
+  /** Absolute playhead offset in ms from traceStart for the scrubber line. */
+  playheadMs,
 }) {
   const [expandedGroupIds, setExpandedGroupIds] = useState(() => new Set())
   const parentRef = useRef(null)
@@ -71,6 +75,13 @@ export default function TraceWaterfall({
   }, [])
 
   const maxH = Math.max(300, Math.min(680, viewportHeight || 480))
+  const highlightSet = useMemo(() => {
+    if (!highlightIds || !highlightIds.length) return null
+    return new Set(highlightIds)
+  }, [highlightIds])
+  const playheadPct = playheadMs != null && totalMs > 0
+    ? Math.min(100, Math.max(0, (Number(playheadMs) / totalMs) * 100))
+    : null
 
   return (
     <div className="tw-wrap">
@@ -112,6 +123,13 @@ export default function TraceWaterfall({
         data-testid="trace-waterfall-scroller"
       >
         <div className="tw-virt" style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+          {playheadPct != null && (
+            <div
+              className="tw-playhead"
+              style={{ left: `calc(240px + 10px + (100% - 240px - 10px - 74px - 10px) * ${playheadPct / 100})` }}
+              aria-hidden
+            />
+          )}
           {virtualizer.getVirtualItems().map((vRow) => {
             const item = displayRows[vRow.index]
             if (!item) return null
@@ -172,10 +190,12 @@ export default function TraceWaterfall({
             const tier = spanTier(s)
             const col = tierColor(tier)
             const isSel = selectedSpanId && s.span_id === selectedSpanId
+            const isHi = highlightSet ? highlightSet.has(s.span_id) : false
+            const isDim = highlightSet ? !isHi : false
             return (
               <div
                 key={item.key}
-                className={`tw-row ${isSel ? 'is-selected' : ''}`}
+                className={`tw-row ${isSel ? 'is-selected' : ''} ${isHi ? 'is-replay-active' : ''} ${isDim ? 'is-replay-dim' : ''}`}
                 role="button"
                 tabIndex={0}
                 aria-pressed={!!isSel}

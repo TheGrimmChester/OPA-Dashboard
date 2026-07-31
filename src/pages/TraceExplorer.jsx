@@ -34,6 +34,8 @@ const URI_PARAMS = [
   { param: 'scheme', field: 'tags.http_request.scheme', substring: false },
   { param: 'query_string', field: 'tags.http_request.query_string', substring: true },
   { param: 'load_run_id', field: 'tags.load_run_id', substring: false },
+  { param: 'session_id', field: 'tags.session_id', substring: false },
+  { param: 'check_id', field: 'tags.check_id', substring: false },
 ]
 
 // Values are double-quoted for the DSL lexer; escaping keeps a stray quote from

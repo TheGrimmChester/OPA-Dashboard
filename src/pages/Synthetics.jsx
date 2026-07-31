@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   FiRadio, FiPlus, FiCheck, FiX, FiEdit2, FiTrash2, FiActivity, FiAlertTriangle, FiClock, FiShield,
@@ -9,6 +9,7 @@ import {
   Panel, KpiTile, DataTable, StatusPill, HealthDot, TimeSeriesChart, Badge,
 } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus } from '../theme/format'
+import { tracesHref, traceHref } from '../utils/entityLinks'
 import './Synthetics.css'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -28,19 +29,34 @@ function checkTone(c) {
 }
 
 export default function Synthetics() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const checksQ = useApi('/api/synthetics', {}, { noRange: true })
   const locsQ = useApi('/api/synthetics/locations', {}, { noRange: true })
   const [form, setForm] = useState(EMPTY_FORM)
   const [editingId, setEditingId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(searchParams.get('check') || null)
 
   const checks = checksQ.data?.checks || []
   const locations = locsQ.data?.locations || []
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
   const reload = checksQ.reload || (() => {})
+
+  // Deep-link from Trace replay: /synthetics?check=…
+  useEffect(() => {
+    const check = searchParams.get('check')
+    if (check && check !== selected) setSelected(check)
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const p = new URLSearchParams(searchParams)
+    if (selected) p.set('check', selected)
+    else p.delete('check')
+    const next = p.toString()
+    if (next !== searchParams.toString()) setSearchParams(p, { replace: true })
+  }, [selected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetForm = useCallback(() => {
     setForm(EMPTY_FORM)
@@ -325,7 +341,7 @@ function CheckDetail({ check, onClose }) {
     {
       key: 'trace_id', header: 'Trace', width: 120,
       render: (r) => (r.trace_id
-        ? <Link className="opa-mono" to={`/traces/${encodeURIComponent(r.trace_id)}`}>{String(r.trace_id).slice(0, 12)}…</Link>
+        ? <Link className="opa-mono" to={traceHref(r.trace_id)}>{String(r.trace_id).slice(0, 12)}…</Link>
         : <span className="opa-muted">—</span>),
     },
     { key: 'cert_days_left', header: 'Days left', width: 90, num: true, render: (r) => (r.cert_days_left ? fmtNum(r.cert_days_left) : '—') },
@@ -349,12 +365,21 @@ function CheckDetail({ check, onClose }) {
         loading={q.loading} error={q.error}
         empty={!q.loading && series.length === 0}
         emptyText="No probe results yet"
-        actions={<button className="opa-btn ghost" onClick={onClose}>Close</button>}
+        actions={(
+          <div className="opa-row" style={{ gap: 8 }}>
+            {check.id && (
+              <Link className="opa-btn ghost" to={tracesHref({ check_id: check.id })}>
+                Correlated traces
+              </Link>
+            )}
+            <button className="opa-btn ghost" onClick={onClose}>Close</button>
+          </div>
+        )}
       >
         {latest?.trace_id && (
           <div style={{ padding: '0 var(--sp-3) var(--sp-2)' }}>
             Latest trace:{' '}
-            <Link className="opa-mono" to={`/traces/${encodeURIComponent(latest.trace_id)}`}>{latest.trace_id}</Link>
+            <Link className="opa-mono" to={traceHref(latest.trace_id)}>{latest.trace_id}</Link>
             {latest.cert_days_left != null && Number(latest.cert_days_left) !== 0 && (
               <span className="opa-muted"> · cert/domain days left: {latest.cert_days_left}</span>
             )}

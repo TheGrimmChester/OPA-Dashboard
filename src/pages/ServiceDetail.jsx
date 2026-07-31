@@ -1,5 +1,5 @@
 import React from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   FiActivity, FiClock, FiZap, FiAlertTriangle, FiTrendingUp, FiGlobe, FiList,
 } from 'react-icons/fi'
@@ -12,6 +12,7 @@ import RelatedContextRail from '../components/ui/RelatedContextRail'
 import {
   fmtMs, fmtNum, fmtPct, fmtBytes, tierColor, latencyStatus, errorRateStatus,
 } from '../theme/format'
+import { logsHref, tracesHref } from '../utils/entityLinks'
 import './ServiceDetail.css'
 
 export default function ServiceDetail() {
@@ -137,6 +138,13 @@ export default function ServiceDetail() {
             {fmtNum(s.total_traces || 0)} traces · {fmtNum(s.total_spans || 0)} spans
           </span>
         }
+        actions={(
+          <div className="opa-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <Link className="opa-btn ghost" to={tracesHref({ service: svc })}>Traces</Link>
+            <Link className="opa-btn ghost" to={tracesHref({ service: svc, status: 'error' })}>Errors</Link>
+            <Link className="opa-btn ghost" to={logsHref({ service: svc })}>Logs</Link>
+          </div>
+        )}
       />
 
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
@@ -179,14 +187,14 @@ export default function ServiceDetail() {
           columns={epColumns} rows={endpoints} rowKey={(r, i) => r.name || i}
           initialSort={{ key: 'count', dir: 'desc' }}
           onRowClick={(r) => {
-            // Outbound endpoint (has a host) -> match by http.url; inbound -> match by
-            // url_path when present, else by span name. Always scoped to this service.
-            const filter = r.url_host
-              ? `http.url:"${r.name}"`
-              : r.url_path
-                ? `url_path:"${r.url_path}"`
-                : `name:"${r.name}"`
-            navigate('/traces?' + new URLSearchParams({ service: svc, filter }).toString())
+            navigate(tracesHref({
+              service: svc,
+              filter: r.url_host
+                ? `http.url:"${r.name}"`
+                : r.url_path
+                  ? `url_path:"${r.url_path}"`
+                  : `name:"${r.name}"`,
+            }))
           }}
         />
       </Panel>
@@ -198,7 +206,7 @@ export default function ServiceDetail() {
         <DataTable
           columns={httpColumns} rows={httpCalls} rowKey={(r, i) => `${r.method || ''}-${r.url || i}`}
           initialSort={{ key: 'call_count', dir: 'desc' }}
-          onRowClick={(r) => navigate('/traces?' + new URLSearchParams({ filter: `http.url:"${r.url}"` }).toString())}
+          onRowClick={(r) => navigate(tracesHref({ filter: `http.url:"${r.url}"` }))}
         />
       </Panel>
         </div>
