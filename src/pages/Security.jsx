@@ -3,7 +3,7 @@ import axios from 'axios'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   FiShield, FiAlertTriangle, FiEye, FiEyeOff, FiCrosshair, FiKey, FiSliders,
-  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw,
+  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiTrash2, FiEdit2,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
@@ -101,6 +101,8 @@ export default function Security() {
   const scmJobs = useApi('/api/scm/jobs', { limit: 50 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
   const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' })
   const [patForm, setPatForm] = useState({ token: '', login: '', repos: '' })
+  const [editForm, setEditForm] = useState({ login: '', display_name: '', token: '' })
+  const [editingConnector, setEditingConnector] = useState(false)
   const [cursorKey, setCursorKey] = useState('')
   const [watchedRows, setWatchedRows] = useState([])
   const [availableRepos, setAvailableRepos] = useState([])
@@ -352,6 +354,8 @@ export default function Security() {
 
   const selectConnector = (id) => {
     setActiveConnector(id)
+    setEditingConnector(false)
+    setEditForm({ login: '', display_name: '', token: '' })
     setTab('watch')
     setActiveRunId('')
     const p = new URLSearchParams(searchParams)
@@ -360,6 +364,71 @@ export default function Security() {
     if (id) p.set('connector', id)
     else p.delete('connector')
     setSearchParams(p, { replace: true })
+  }
+
+  const beginEditConnector = (c) => {
+    if (!c?.id) return
+    selectConnector(c.id)
+    setEditingConnector(true)
+    let display = c.display_name || ''
+    if (!display && c.meta_json) {
+      try {
+        display = JSON.parse(c.meta_json)?.display_name || ''
+      } catch { /* ignore */ }
+    }
+    setEditForm({
+      login: c.account_login || '',
+      display_name: display || '',
+      token: '',
+    })
+  }
+
+  const saveConnectorEdit = async () => {
+    if (!activeConnector) {
+      flash('warn', 'Select a connector first')
+      return
+    }
+    setBusy(true)
+    try {
+      const body = {
+        account_login: editForm.login,
+        display_name: editForm.display_name,
+      }
+      if (editForm.token.trim()) body.token = editForm.token.trim()
+      const { data } = await axios.patch(
+        `${API}/api/connectors/${encodeURIComponent(activeConnector)}`,
+        body,
+      )
+      flash('ok', 'Connector updated', data.connector?.account_login || activeConnector)
+      setEditForm((f) => ({ ...f, token: '' }))
+      setEditingConnector(false)
+      connectors.reload?.()
+      setWatchRefresh((n) => n + 1)
+    } catch (e) {
+      flash('error', 'Connector update failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const deleteConnector = async (id) => {
+    const cid = id || activeConnector
+    if (!cid) return
+    if (!window.confirm(`Delete connector ${cid}? Watched repos for it will be disabled.`)) return
+    setBusy(true)
+    try {
+      await axios.delete(`${API}/api/connectors/${encodeURIComponent(cid)}`)
+      flash('ok', 'Connector deleted', cid)
+      if (activeConnector === cid) {
+        selectConnector('')
+      }
+      connectors.reload?.()
+      setWatchRefresh((n) => n + 1)
+    } catch (e) {
+      flash('error', 'Delete failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const toggleRepoPick = (fullName) => {
@@ -644,6 +713,9 @@ export default function Security() {
   const connectorMissing = !!activeConnector && !connectors.loading && !activeConnectorRow
   const connectorNeedsReconnect = !!activeConnector && (
     reposMeta.error === 'connector_not_in_memory'
+    || reposMeta.error === 'connector_token_unavailable'
+    || reposMeta.error === 'connector_token_missing'
+    || reposMeta.error === 'connector_not_found'
     || (activeConnectorRow && activeConnectorRow.has_token === false)
   )
 
@@ -999,37 +1071,88 @@ export default function Security() {
                 <div className="opa-muted">No connectors yet — connect a PAT or install the GitHub App.</div>
               )}
               {connectorList.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`opa-btn ${activeConnector === c.id ? 'primary' : 'ghost'}`}
-                  style={{ marginRight: 8, marginBottom: 8 }}
-                  onClick={() => selectConnector(c.id)}
-                  title={c.has_token ? 'Live credentials in Agent memory' : 'No live token — reconnect PAT to list repos'}
-                >
-                  {c.kind} · {c.account_login || c.installation_id || c.id.slice(0, 12)}
-                  {c.has_token ? '' : ' · reconnect'}
-                </button>
+                <div key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 8, marginBottom: 8 }}>
+                  <button
+                    type="button"
+                    className={`opa-btn ${activeConnector === c.id ? 'primary' : 'ghost'}`}
+                    onClick={() => selectConnector(c.id)}
+                    title={c.has_token ? 'Credentials available (memory or decrypted from ClickHouse)' : 'No decryptable token — Replace token or Connect PAT'}
+                  >
+                    {c.display_name || c.kind} · {c.account_login || c.installation_id || c.id.slice(0, 12)}
+                    {c.has_token ? '' : ' · no token'}
+                  </button>
+                  <button
+                    type="button"
+                    className="opa-btn ghost"
+                    title="Edit connector"
+                    disabled={busy}
+                    onClick={() => beginEditConnector(c)}
+                    aria-label={`Edit ${c.id}`}
+                  >
+                    <FiEdit2 size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="opa-btn ghost"
+                    title="Delete connector"
+                    disabled={busy}
+                    onClick={() => deleteConnector(c.id)}
+                    aria-label={`Delete ${c.id}`}
+                  >
+                    <FiTrash2 size={12} />
+                  </button>
+                </div>
               ))}
             </div>
+            {editingConnector && activeConnector && (
+              <div style={{
+                marginTop: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 6, fontSize: 13,
+              }}>
+                <div className="cell-strong" style={{ marginBottom: 8 }}>Edit connector</div>
+                <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginBottom: 8 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                    Login label
+                    <input value={editForm.login} onChange={(e) => setEditForm((f) => ({ ...f, login: e.target.value }))} placeholder="github-user" />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                    Display name
+                    <input value={editForm.display_name} onChange={(e) => setEditForm((f) => ({ ...f, display_name: e.target.value }))} placeholder="optional" />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                    Replace PAT (optional)
+                    <input type="password" className="opa-mono" value={editForm.token} onChange={(e) => setEditForm((f) => ({ ...f, token: e.target.value }))} placeholder="ghp_… leave blank to keep" />
+                  </label>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="opa-btn primary" disabled={busy} onClick={saveConnectorEdit}>Save</button>
+                  <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => setEditingConnector(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
             {(connectorMissing || connectorNeedsReconnect) && (
               <div className="opa-banner" role="status" style={{
                 marginTop: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 6, fontSize: 13,
               }}>
                 <div className="cell-strong" style={{ marginBottom: 4 }}>
-                  {connectorMissing ? 'Connector not found on Agent' : 'Reconnect required'}
+                  {connectorMissing ? 'Connector not found on Agent' : 'Token missing'}
                 </div>
                 <div className="opa-muted" style={{ marginBottom: 8 }}>
                   Deep-linked connector <code className="opa-mono">{activeConnector}</code>
-                  {connectorMissing
-                    ? ' is not in Agent memory or ClickHouse (often after recreate).'
-                    : ' — credentials are in-process only and are not restored from ClickHouse after Agent restart.'}
-                  {' '}Paste a PAT above and click <strong>Connect PAT</strong>, or use <strong>Connect GitHub App</strong>.
+                  {connectorMissing || reposMeta.error === 'connector_not_found'
+                    ? ' is not in Agent memory or ClickHouse.'
+                    : reposMeta.error === 'connector_token_unavailable'
+                      ? ' — stored token is not recoverable (legacy hash or decrypt failed). Use Edit → Replace token; new tokens are encrypted and survive Agent restarts.'
+                      : ' — no decryptable PAT. Use Edit → Replace token, or Connect PAT.'}
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
                     <FiRefreshCw size={12} /> Retry
                   </button>
+                  {activeConnectorRow && (
+                    <button type="button" className="opa-btn ghost" onClick={() => beginEditConnector(activeConnectorRow)}>
+                      <FiEdit2 size={12} /> Replace token
+                    </button>
+                  )}
                   <button type="button" className="opa-btn ghost" onClick={() => selectConnector('')}>Clear connector</button>
                 </div>
               </div>
@@ -1052,11 +1175,11 @@ export default function Security() {
               <div className="opa-muted" style={{ marginBottom: 8, fontSize: 13 }}>
                 Could not list repos: <span className="opa-mono">{String(reposMeta.error)}</span>
                 {reposMeta.note ? <> — {reposMeta.note}</> : null}
-                {reposMeta.error === 'connector_not_in_memory'
-                  ? <> Reconnect with PAT / GitHub App above (tokens are not reloaded after Agent restart).</>
+                {reposMeta.error === 'connector_not_in_memory' || reposMeta.error === 'connector_token_unavailable' || reposMeta.error === 'connector_not_found' || reposMeta.error === 'connector_token_missing'
+                  ? <> Use Edit → Replace token, or Connect PAT (Agent needs stable JWT_SECRET / OPA_CONNECTOR_SECRET).</>
                   : String(reposMeta.error).includes('401') || String(reposMeta.error).includes('403')
-                    ? <> Check PAT scopes / org SSO, then Connect PAT again.</>
-                    : <> Use checkboxes after reconnect, or type extra org/name above and Save.</>}
+                    ? <> Check PAT scopes / org SSO, then Replace token or Connect PAT again.</>
+                    : <> Use checkboxes after listing, or type extra org/name above and Save.</>}
               </div>
             )}
             {activeConnector && reposMeta.mock && !reposMeta.error && (
