@@ -12,8 +12,8 @@ const TABS = ['Design', 'Datasets', 'JMX', 'Run', 'Results', 'Compare']
 const emptyStep = () => ({ type: 'http', name: 'Request', method: 'GET', url: `${API || 'http://127.0.0.1:8080'}/api/health`, body: '', think_ms: 50 })
 
 /**
- * Wave 31 — Visual JMX builder + Apache JMeter runs.
- * Users design steps in plain forms; Agent generates jmx_xml (no JMeter expertise required).
+ * Wave 31 — Visual JMX builder + Docker JMeter runs.
+ * Users design steps in plain forms; Agent generates jmx_xml and dispatches ephemeral JMeter containers.
  */
 export default function PerfLab() {
   const scenarios = useApi('/api/perf/scenarios', {}, { noRange: true })
@@ -25,6 +25,7 @@ export default function PerfLab() {
   const [fanout, setFanout] = useState(false)
   const [profile, setProfile] = useState('')
   const [engine, setEngine] = useState('jmeter')
+  const [workers, setWorkers] = useState(1)
   const [dispatch, setDispatch] = useState(true)
   const [compareA, setCompareA] = useState('')
   const [compareB, setCompareB] = useState('')
@@ -222,6 +223,7 @@ export default function PerfLab() {
         profile: profile || undefined,
         engine,
         dispatch,
+        workers: engine === 'jmeter' ? Number(workers) || 1 : undefined,
       })
       setMsg(data)
       const rid = data.load_run_id || data.id
@@ -280,7 +282,7 @@ export default function PerfLab() {
         <div>
           <h1 className="opa-page-title">Perf lab</h1>
           <div className="opa-page-sub">
-            Visual scenario builder → Apache JMeter · load_run_id ↔ traces
+            Visual scenario builder → Docker JMeter containers · load_run_id ↔ traces
             <span className="opa-muted"> (admin required to save/dispatch/validate when auth is on; fan-out ≠ multi-region cloud)</span>
           </div>
         </div>
@@ -310,7 +312,7 @@ export default function PerfLab() {
               <input className="opa-input" type="number" step="0.01" value={form.sla.error_rate_max} onChange={(e) => setForm({ ...form, sla: { ...form.sla, error_rate_max: Number(e.target.value) } })} style={{ width: 100 }} title="Max error rate" />
             </div>
             <div className="opa-muted" style={{ fontSize: 12 }}>
-              Add HTTP steps, extractors (capture tokens), and asserts. We generate JMeter JMX for you.
+              Add HTTP steps, extractors (capture tokens), and asserts. We generate JMX and run it in Docker JMeter containers.
             </div>
             {form.steps.map((step, i) => (
               <div key={i} style={{ border: '1px solid var(--opa-border, #333)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -404,14 +406,17 @@ export default function PerfLab() {
             <label>
               Engine{' '}
               <select value={engine} onChange={(e) => setEngine(e.target.value)}>
-                <option value="jmeter">Apache JMeter</option>
-                <option value="node">Node fallback</option>
+                <option value="jmeter">Docker JMeter</option>
+                <option value="node">Node fallback (dev-only)</option>
               </select>
             </label>
             <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <input type="checkbox" checked={fanout} onChange={(e) => setFanout(e.target.checked)} />
               Fan-out to federation peers
             </label>
+            <span className="opa-muted" style={{ fontSize: 12 }}>
+              Dispatch uses ephemeral JMeter containers (not host jmeter). Node requires agent OPA_PERF_ALLOW_NODE_FALLBACK=1.
+            </span>
             <label>
               Profile{' '}
               <select value={profile} onChange={(e) => setProfile(e.target.value)}>
@@ -421,6 +426,12 @@ export default function PerfLab() {
                 <option value="ramp">ramp</option>
               </select>
             </label>
+            {engine === 'jmeter' && (
+              <label>
+                Workers{' '}
+                <input className="opa-input" type="number" min={1} max={16} value={workers} onChange={(e) => setWorkers(Number(e.target.value) || 1)} style={{ width: 70 }} title="JMeter containers" />
+              </label>
+            )}
             <button type="button" className="opa-btn" disabled={busy} onClick={() => startRun()}><FiPlay size={12} /> Start run</button>
             <button type="button" className="opa-btn ghost" disabled={busy || !selectedId} onClick={validateScenario}>Validate</button>
           </div>
