@@ -1,0 +1,79 @@
+/* PR Jobs tab — summary strip + filter toolbar */
+
+.opa-jobs-summary {
+  padding: 8px 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.opa-jobs-count-chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 4px;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.opa-jobs-count-chip:hover {
+  background: var(--surface-2, var(--bg-sunken));
+}
+
+.opa-jobs-count-chip.active {
+  border-color: var(--border-default, #d1d5db);
+  background: var(--surface-2, var(--bg-sunken));
+}
+
+.opa-jobs-filters {
+  padding: 8px 12px;
+  display: flex;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.opa-jobs-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.opa-jobs-filter .opa-select {
+  min-width: 120px;
+}
+
+.opa-jobs-filter-search {
+  flex: 1 1 180px;
+  max-width: 280px;
+}
+
+.opa-jobs-filter-search .opa-input {
+  width: 100%;
+  min-width: 160px;
+}
+
+.opa-jobs-filter-count {
+  align-self: center;
+  font-size: 11px;
+}
+
+.opa-jobs-empty-filter {
+  padding: 20px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}

@@ -48,6 +48,9 @@ describe('entityLinks', () => {
     expect(securityRunHref('srun-1')).toBe('/security?run=srun-1&tab=scans')
     expect(scmJobHref('job-1')).toBe('/security/jobs/job-1')
     expect(securityJobsHref()).toBe('/security?tab=jobs')
+    expect(securityJobsHref({ status: 'running', q: 'smoke' })).toBe(
+      '/security?tab=jobs&status=running&q=smoke',
+    )
     expect(syntheticsHref('chk-1')).toBe('/synthetics?check=chk-1')
     expect(traceReplayHref('abc', 'waterfall')).toBe('/traces/abc?replay=waterfall')
     expect(truncateId('abcdefghijklmnop', 8)).toBe('abcdefgh…')
