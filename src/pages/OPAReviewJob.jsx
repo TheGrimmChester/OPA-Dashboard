@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { Link, useParams } from 'react-router-dom'
-import { FiChevronLeft, FiGitPullRequest, FiRefreshCw, FiShield } from 'react-icons/fi'
+import { FiChevronLeft, FiGitPullRequest, FiRefreshCw, FiShield, FiX } from 'react-icons/fi'
 import { apiUrl } from '../utils/apiBase'
 import { Panel, EntityHeader, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
@@ -106,6 +106,8 @@ export default function OPAReviewJob() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [findingSev, setFindingSev] = useState('')
+  const [findingQ, setFindingQ] = useState('')
 
   const load = useCallback(async () => {
     if (!jobId) return
@@ -136,6 +138,27 @@ export default function OPAReviewJob() {
     if (Array.isArray(job.findings)) return job.findings
     return Array.isArray(job.summary?.ai?.findings) ? job.summary.ai.findings : []
   }, [job])
+
+  const filteredFindings = useMemo(() => {
+    const q = findingQ.trim().toLowerCase()
+    return findings.filter((f) => {
+      const sev = String(f?.severity || '').toLowerCase()
+      if (findingSev === 'blocker|critical') {
+        if (sev !== 'blocker' && sev !== 'critical') return false
+      } else if (findingSev && sev !== findingSev) {
+        return false
+      }
+      if (q) {
+        const hay = [f?.file, f?.line, f?.rule, f?.problem, f?.message, f?.finding_key]
+          .map((x) => String(x ?? '').toLowerCase())
+          .join(' ')
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [findings, findingSev, findingQ])
+
+  const findingFiltersActive = !!(findingSev || findingQ.trim())
 
   const autoFixes = useMemo(() => {
     if (!job) return []
@@ -301,10 +324,69 @@ export default function OPAReviewJob() {
         error={error}
         empty={!loading && !error && findings.length === 0}
         emptyText="No findings on this job"
-        actions={findings.length ? <span className="opa-muted" style={{ fontSize: 12 }}>{findings.length} finding{findings.length === 1 ? '' : 's'}</span> : null}
+        actions={findings.length ? (
+          <span className="opa-muted" style={{ fontSize: 12 }}>
+            {findingFiltersActive
+              ? `${filteredFindings.length} of ${findings.length}`
+              : `${findings.length} finding${findings.length === 1 ? '' : 's'}`}
+          </span>
+        ) : null}
       >
+        {findings.length > 0 ? (
+          <div className="opa-review-findings-filters">
+            <label className="opa-review-filter">
+              <span className="opa-muted">Severity</span>
+              <select
+                className="opa-select"
+                value={findingSev}
+                onChange={(e) => setFindingSev(e.target.value)}
+                aria-label="Filter findings by severity"
+              >
+                <option value="">All</option>
+                <option value="blocker|critical">blocker / critical</option>
+                <option value="high">high</option>
+                <option value="medium">medium</option>
+                <option value="low">low</option>
+                <option value="info">info</option>
+              </select>
+            </label>
+            <label className="opa-review-filter opa-review-filter-search">
+              <span className="opa-muted">Search</span>
+              <input
+                className="opa-input"
+                type="search"
+                value={findingQ}
+                onChange={(e) => setFindingQ(e.target.value)}
+                placeholder="File, rule, message…"
+                aria-label="Search findings"
+                spellCheck={false}
+              />
+            </label>
+            {findingFiltersActive ? (
+              <button
+                type="button"
+                className="opa-btn ghost"
+                onClick={() => { setFindingSev(''); setFindingQ('') }}
+              >
+                <FiX size={12} /> Clear
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {findings.length > 0 && filteredFindings.length === 0 ? (
+          <div className="opa-review-findings-empty opa-muted">
+            No findings match these filters.
+            <button
+              type="button"
+              className="opa-btn ghost"
+              onClick={() => { setFindingSev(''); setFindingQ('') }}
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : (
         <ul className="opa-review-findings">
-          {findings.map((f, i) => {
+          {filteredFindings.map((f, i) => {
             const key = findingKey(f, i)
             const sev = String(f.severity || '').toLowerCase() || 'info'
             const loc = `${f.file || '—'}${f.line ? `:${f.line}` : ''}`
@@ -338,6 +420,7 @@ export default function OPAReviewJob() {
             )
           })}
         </ul>
+        )}
       </Panel>
 
       <Panel

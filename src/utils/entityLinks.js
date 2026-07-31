@@ -99,8 +99,8 @@ export function scmJobHref(jobId) {
   return `/security/jobs/${encodeURIComponent(jobId)}`
 }
 
-export function securityJobsHref() {
-  return withParams('/security', { tab: 'jobs' })
+export function securityJobsHref({ status, severity, repo, q } = {}) {
+  return withParams('/security', { tab: 'jobs', status, severity, repo, q })
 }
 
 export function traceReplayHref(traceId, mode = 'waterfall') {
