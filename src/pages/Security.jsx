@@ -82,6 +82,10 @@ export default function Security() {
   const [patForm, setPatForm] = useState({ token: '', login: '', repos: '' })
   const [cursorKey, setCursorKey] = useState('')
   const [watchedRows, setWatchedRows] = useState([])
+  const [watchPolicy, setWatchPolicy] = useState({
+    checks: { secrets: true, sast: true, iac: true, sbom: true, ai_review: true },
+    ai_blocking: false,
+  })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
 
   useEffect(() => {
@@ -251,6 +255,7 @@ export default function Security() {
       flash('warn', 'Enter repo full names (org/name)')
       return
     }
+    const checks = Object.entries(watchPolicy.checks).filter(([, on]) => on).map(([id]) => id)
     setBusy(true)
     try {
       const { data } = await axios.put(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/watched`, {
@@ -258,9 +263,9 @@ export default function Security() {
           repo_full_name,
           enabled: true,
           profile: form.profile || 'auto',
-          checks: ['secrets', 'sast', 'iac', 'ai_review'],
+          checks: checks.length ? checks : ['secrets', 'sast', 'iac', 'sbom', 'ai_review'],
           min_severity: minSev,
-          ai_blocking: false,
+          ai_blocking: !!watchPolicy.ai_blocking,
         })),
       })
       setWatchedRows(data.watched || [])
@@ -767,6 +772,29 @@ export default function Security() {
                 <input className="opa-mono" value={patForm.repos} onChange={(e) => setPatForm((f) => ({ ...f, repos: e.target.value }))} placeholder="acme/api acme/web" />
               </label>
             </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
+              {['secrets', 'sast', 'iac', 'sbom', 'ai_review'].map((id) => (
+                <label key={id} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!watchPolicy.checks[id]}
+                    onChange={(e) => setWatchPolicy((p) => ({
+                      ...p,
+                      checks: { ...p.checks, [id]: e.target.checked },
+                    }))}
+                  />
+                  {id === 'ai_review' ? 'AI Review' : id.toUpperCase()}
+                </label>
+              ))}
+              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={!!watchPolicy.ai_blocking}
+                  onChange={(e) => setWatchPolicy((p) => ({ ...p, ai_blocking: e.target.checked }))}
+                />
+                AI blocking
+              </label>
+            </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="opa-btn primary" disabled={busy || !patForm.token} onClick={connectPAT}>Connect PAT</button>
               <button type="button" className="opa-btn ghost" disabled={busy || !activeConnector} onClick={saveWatched}>Save watched repos</button>
@@ -851,6 +879,18 @@ export default function Security() {
                 render: (r) => (r.security_run_id
                   ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
                   : '—'),
+              },
+              {
+                key: 'check_run_ids', header: 'Checks',
+                render: (r) => {
+                  const ids = r.check_run_ids || {}
+                  const chips = []
+                  if (ids.appsec) chips.push(`Gate:${ids.appsec}`)
+                  if (ids.ai) chips.push(`AI:${ids.ai}`)
+                  return chips.length
+                    ? <span className="opa-muted" style={{ fontSize: 11 }}>{chips.join(' · ')}</span>
+                    : '—'
+                },
               },
               {
                 key: 'actions', header: '',
