@@ -62,9 +62,23 @@ describe('buildWaterfallDisplayRows', () => {
     expect(collapsedCount).toBe(0)
   })
 
-  it('keeps short runs expanded', () => {
-    const rows = mkRun(5)
-    const { displayRows } = buildWaterfallDisplayRows(rows, { collapseNoise: true })
-    expect(displayRows).toHaveLength(5)
+  it('on large traces collapses consecutive same-name even when parents differ', () => {
+    const rows = Array.from({ length: 520 }, (_, i) => ({
+      span_id: `fib-${i}`,
+      name: 'fib',
+      parent_id: `p-${Math.floor(i / 2)}`,
+      _depth: (i % 8) + 1,
+      start_ts: i * 1000,
+      duration_ms: 0.05,
+      service: 'app',
+    }))
+    const { displayRows, collapsedCount } = buildWaterfallDisplayRows(rows, {
+      collapseNoise: true,
+      expandedGroupIds: new Set(),
+    })
+    expect(displayRows).toHaveLength(1)
+    expect(displayRows[0].kind).toBe('group')
+    expect(displayRows[0].count).toBe(520)
+    expect(collapsedCount).toBe(519)
   })
 })

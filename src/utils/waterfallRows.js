@@ -36,8 +36,10 @@ function parentKey(span) {
 
 /**
  * Build display rows for the waterfall. When `collapseNoise` is on, consecutive
- * same-name / same-depth / same-parent runs of length >= minGroupSize become a
- * single group row (expandable via `expandedGroupIds`).
+ * same-name runs of length >= minGroupSize become a single group row
+ * (expandable via `expandedGroupIds`). On large traces (total > 500) we match
+ * on name only so nested self-recursion (fib→fib) collapses; on smaller traces
+ * we also require matching depth + parent to avoid over-grouping.
  *
  * @returns {{ displayRows: object[], totalSpans: number, visibleSpans: number, collapsedCount: number }}
  */
@@ -60,6 +62,7 @@ export function buildWaterfallDisplayRows(rows, {
     }
   }
 
+  const looseNameOnly = totalSpans > 500
   const displayRows = []
   let visibleSpans = 0
   let collapsedCount = 0
@@ -70,17 +73,15 @@ export function buildWaterfallDisplayRows(rows, {
     const depth = head?._depth || 0
     const pk = parentKey(head)
     let j = i + 1
-    while (
-      j < rows.length
-      && (rows[j]?.name || '') === name
-      && (rows[j]?._depth || 0) === depth
-      && parentKey(rows[j]) === pk
-    ) {
+    while (j < rows.length && (rows[j]?.name || '') === name) {
+      if (!looseNameOnly) {
+        if ((rows[j]?._depth || 0) !== depth || parentKey(rows[j]) !== pk) break
+      }
       j += 1
     }
     const run = rows.slice(i, j)
     if (run.length >= minGroupSize) {
-      const groupId = `grp:${pk}:${name}:${depth}:${i}`
+      const groupId = `grp:${looseNameOnly ? '' : pk}:${name}:${looseNameOnly ? 'any' : depth}:${i}`
       if (expandedGroupIds instanceof Set && expandedGroupIds.has(groupId)) {
         for (const span of run) {
           displayRows.push({ kind: 'span', key: span.span_id || `s-${span.start_ts}`, span })
