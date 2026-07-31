@@ -101,10 +101,19 @@ export default function BrowserRum() {
   const slo = useApi('/api/rum/slo')
   const facets = useApi('/api/rum/facets')
   const attribution = useApi('/api/rum/vitals/attribution')
-  const initialTab = searchParams.get('tab') || 'resources'
-  const [tab, setTab] = useState(['resources', 'ajax', 'pages', 'sessions', 'mobile'].includes(initialTab) ? initialTab : 'resources')
   // Selected browser session — URL ?session= keeps deep links / global search shareable.
+  // Init tab from session presence so ?session= deep-links open the sessions tab
+  // before the URL-sync effect runs (avoids React tab fighting URL tab=sessions).
   const [session, setSession] = useState(searchParams.get('session') || null)
+  const [tab, setTab] = useState(() => {
+    const raw = searchParams.get('tab')
+    const valid = ['resources', 'ajax', 'pages', 'sessions', 'mobile']
+    let initial = valid.includes(raw) ? raw : 'resources'
+    if (searchParams.get('session') && initial !== 'sessions' && initial !== 'mobile') {
+      initial = 'sessions'
+    }
+    return initial
+  })
   const [mobileSession, setMobileSession] = useState('')
   const sessions = useApi('/api/rum/sessions', {}, { skip: tab !== 'sessions' })
   const mobileSessions = useApi('/api/rum/mobile/sessions', {}, { skip: tab !== 'mobile', noRange: true })
@@ -122,16 +131,13 @@ export default function BrowserRum() {
     {}, { skip: !session },
   )
 
+  // Sync URL from React state (session + tab), not the reverse.
   useEffect(() => {
     const p = new URLSearchParams(searchParams)
-    if (session) {
-      p.set('session', session)
-      if (tab !== 'sessions' && tab !== 'mobile') p.set('tab', 'sessions')
-    } else {
-      p.delete('session')
-    }
+    if (session) p.set('session', session)
+    else p.delete('session')
     if (tab && tab !== 'resources') p.set('tab', tab)
-    else if (!session) p.delete('tab')
+    else p.delete('tab')
     const next = p.toString()
     if (next !== searchParams.toString()) setSearchParams(p, { replace: true })
   }, [session, tab]) // eslint-disable-line react-hooks/exhaustive-deps

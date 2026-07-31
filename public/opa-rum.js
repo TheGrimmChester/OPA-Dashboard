@@ -648,9 +648,8 @@
                     value: maskText(el && el.value)
                 });
             }, true);
-            window.addEventListener('popstate', function () {
-                pushReplay({ t: Date.now(), type: 'navigation', url: location.href, title: maskText(document.title || '') });
-            });
+            // Navigation→replay is owned by onRouteChange (instrumentHistory
+            // already listens for popstate); do not double-record here.
             // Long tasks + resource summaries into the same replay timeline (masked URLs).
             try {
                 if (typeof PerformanceObserver !== 'undefined') {
