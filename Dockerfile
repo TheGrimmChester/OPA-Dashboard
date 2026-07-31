@@ -11,6 +11,13 @@ COPY . .
 # Default false => original UI. Build with --build-arg VITE_VIZ_V2=true to enable.
 ARG VITE_VIZ_V2=false
 ENV VITE_VIZ_V2=$VITE_VIZ_V2
+# Multi-service API bases (empty = same-origin nginx path proxy in smoke).
+ARG VITE_API_URL=
+ARG VITE_ORCHESTRATOR_URL=
+ARG VITE_PERF_LAB_URL=
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_ORCHESTRATOR_URL=$VITE_ORCHESTRATOR_URL
+ENV VITE_PERF_LAB_URL=$VITE_PERF_LAB_URL
 RUN npm run build
 
 # Runtime stage
