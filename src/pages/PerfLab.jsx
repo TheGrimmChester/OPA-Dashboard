@@ -108,7 +108,9 @@ export default function PerfLab() {
 
   const [form, setForm] = useState({
     name: 'my-load-test',
-    target_url: `${API || 'http://127.0.0.1:8080'}/api/health`,
+    // Default to the compose-network instrumented demo so Open traces / load_run_id
+    // correlation works (example.com never reports APM spans).
+    target_url: 'http://node-app:3000/hello',
     method: 'GET',
     vus: 10,
     duration_seconds: 60,
@@ -974,7 +976,7 @@ export default function PerfLab() {
                 </div>
               </div>
               <p className="perf-hint">
-                Dispatch uses ephemeral JMeter containers. Workers split VUs across parallel containers sharing one load_run_id.
+                Dispatch uses ephemeral JMeter containers on the compose network. Point target_url at an instrumented service (default http://node-app:3000/hello) so Open traces finds tags.load_run_id.
                 Node requires OPA_PERF_ALLOW_NODE_FALLBACK=1.
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
