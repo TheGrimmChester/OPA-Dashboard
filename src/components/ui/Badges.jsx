@@ -5,9 +5,9 @@ export function Badge({ children, title }) {
   return <span className="opa-badge" title={title}>{children}</span>
 }
 
-// Status pill: tone in ok|warn|error|neutral.
-export function StatusPill({ tone = 'neutral', children }) {
-  return <span className={`opa-pill ${tone}`}>{children}</span>
+// Status pill: tone in ok|warn|error|neutral|info|alert.
+export function StatusPill({ tone = 'neutral', children, title }) {
+  return <span className={`opa-pill ${tone}`} title={title}>{children}</span>
 }
 
 // Colored health dot; tone in ok|warn|error|neutral, optional pulse.
