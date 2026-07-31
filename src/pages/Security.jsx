@@ -971,6 +971,19 @@ export default function Security() {
     }
   }
 
+  const scmJobStatusHint = (status) => {
+    switch (String(status || '').toLowerCase()) {
+      case 'running': return 'Actively processing'
+      case 'queued': return 'Next to run — slot reserved / ready'
+      case 'waiting': return 'Backlog — waiting for a free slot or prior stack item'
+      case 'completed': return 'Finished successfully'
+      case 'cancelled': return 'Cancelled before or during run'
+      case 'failed':
+      case 'error': return 'Finished with an error'
+      default: return ''
+    }
+  }
+
   const scmJobStatusRank = (status) => {
     switch (String(status || '').toLowerCase()) {
       case 'running': return 0
@@ -1985,7 +1998,7 @@ export default function Security() {
             <span className="opa-muted">{fmtNum(scmJobTotal)} total</span>
             {['running', 'queued', 'waiting', 'completed', 'cancelled', 'failed', 'error'].map((st) => (
               scmJobCounts[st] ? (
-                <span key={st} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                <span key={st} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }} title={scmJobStatusHint(st)}>
                   <StatusPill tone={scmJobStatusTone(st)}>{st}</StatusPill>
                   <span className="opa-mono">{scmJobCounts[st]}</span>
                 </span>
@@ -2035,9 +2048,11 @@ export default function Security() {
               {
                 key: 'status', header: 'Status',
                 render: (r) => (
-                  <StatusPill tone={scmJobStatusTone(r.status)}>
-                    {r.status}
-                  </StatusPill>
+                  <span title={scmJobStatusHint(r.status)}>
+                    <StatusPill tone={scmJobStatusTone(r.status)}>
+                      {r.status}
+                    </StatusPill>
+                  </span>
                 ),
               },
               {
