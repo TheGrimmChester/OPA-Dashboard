@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  FiGlobe, FiClock, FiAlertTriangle, FiEye, FiZap, FiActivity, FiLayers,
+  FiGlobe, FiClock, FiAlertTriangle, FiEye, FiZap, FiActivity, FiLayers, FiInfo,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, TimeSeriesChart, StatusPill, EmptyState, DataTable, Badge, InlineBar, SegmentedControl, EntityChip } from '../components/ui'
@@ -18,35 +18,77 @@ const ratingTone = (rating) =>
 const ratingLabel = (rating) =>
   rating === 'good' ? 'Good' : rating === 'poor' ? 'Poor' : rating === 'needs-improvement' ? 'Needs work' : '—'
 
-// The vitals we render, in New Relic order. CLS is unitless (3 decimals); the rest are ms.
-const VITALS = [
-  { key: 'lcp', label: 'LCP', name: 'Largest Contentful Paint' },
-  { key: 'inp', label: 'INP', name: 'Interaction to Next Paint' },
-  { key: 'cls', label: 'CLS', name: 'Cumulative Layout Shift' },
-  { key: 'fcp', label: 'FCP', name: 'First Contentful Paint' },
-  { key: 'ttfb', label: 'TTFB', name: 'Time to First Byte' },
-  { key: 'fid', label: 'FID', name: 'First Input Delay' },
+// Primary CWV (CrUX) + supporting field metrics. FID is legacy (prefer INP).
+const CORE_VITALS = [
+  { key: 'lcp', label: 'LCP', name: 'Largest Contentful Paint', good: '≤ 2.5s', poor: '> 4s' },
+  { key: 'inp', label: 'INP', name: 'Interaction to Next Paint', good: '≤ 200ms', poor: '> 500ms' },
+  { key: 'cls', label: 'CLS', name: 'Cumulative Layout Shift', good: '≤ 0.1', poor: '> 0.25' },
+]
+const SUPPORT_VITALS = [
+  { key: 'fcp', label: 'FCP', name: 'First Contentful Paint', good: '≤ 1.8s', poor: '> 3s' },
+  { key: 'ttfb', label: 'TTFB', name: 'Time to First Byte', good: '≤ 800ms', poor: '> 1.8s' },
+  { key: 'fid', label: 'FID', name: 'First Input Delay (legacy)', good: '≤ 100ms', poor: '> 300ms', legacy: true },
 ]
 
-function CoreWebVitalCard({ label, name, vital }) {
+function fmtVital(p75, isCls) {
+  if (p75 == null || p75 === '') return '—'
+  return isCls ? Number(p75).toFixed(3) : fmtMs(p75)
+}
+
+function HistBar({ histogram }) {
+  if (!histogram) return null
+  const g = Math.max(0, Number(histogram.good) || 0)
+  const n = Math.max(0, Number(histogram.needs_improvement) || 0)
+  const p = Math.max(0, Number(histogram.poor) || 0)
+  const sum = g + n + p
+  if (sum <= 0) return null
+  return (
+    <div className="cwv-hist" title={`Good ${fmtPct(g * 100, 0)} · Needs work ${fmtPct(n * 100, 0)} · Poor ${fmtPct(p * 100, 0)}`}>
+      <span className="cwv-hist-good" style={{ flex: g }} />
+      <span className="cwv-hist-ni" style={{ flex: n }} />
+      <span className="cwv-hist-poor" style={{ flex: p }} />
+    </div>
+  )
+}
+
+function CoreWebVitalCard({ meta, vital, prominent }) {
   const v = vital || {}
   const rating = v.rating
   const tone = ratingTone(rating)
-  const p75 = v.p75
-  const isCls = label === 'CLS'
-  const display = p75 == null
-    ? '—'
-    : isCls
-      ? Number(p75).toFixed(3)
-      : fmtMs(p75)
+  const isCls = meta.key === 'cls'
+  const samples = Number(v.samples) || 0
   return (
-    <div className={`cwv-card cwv-${tone}`}>
+    <div className={`cwv-card cwv-${tone}${prominent ? ' cwv-core' : ''}${meta.legacy ? ' cwv-legacy' : ''}`}>
       <div className="cwv-head">
-        <span className="cwv-label opa-mono">{label}</span>
+        <span className="cwv-label opa-mono">{meta.label}</span>
         <StatusPill tone={tone}>{ratingLabel(rating)}</StatusPill>
       </div>
-      <div className="cwv-value opa-tnum">{display}</div>
-      <div className="cwv-name opa-muted">{name}</div>
+      <div className="cwv-value opa-tnum">{fmtVital(v.p75, isCls)}</div>
+      <div className="cwv-name opa-muted">{meta.name}</div>
+      <HistBar histogram={v.histogram} />
+      <div className="cwv-meta opa-muted">
+        <span>p75 · field</span>
+        <span>{samples ? `${fmtNum(samples)} samples` : 'no samples'}</span>
+      </div>
+      <div className="cwv-budget opa-muted">
+        <span className="cwv-budget-good">Good {meta.good}</span>
+        <span className="cwv-budget-poor">Poor {meta.poor}</span>
+      </div>
+    </div>
+  )
+}
+
+function AttrTable({ rows, valueKey = 'p75', valueFmt }) {
+  if (!rows?.length) return <div className="opa-muted" style={{ fontSize: 12, padding: '4px 0' }}>No attribution yet — beacon ships element selectors when available.</div>
+  return (
+    <div className="cwv-attr-list">
+      {rows.slice(0, 8).map((r, i) => (
+        <div key={i} className="cwv-attr-row">
+          <span className="opa-mono cwv-attr-el" title={r.element}>{r.element || '—'}</span>
+          <span className="opa-tnum opa-muted">{fmtNum(r.count)}</span>
+          <span className="opa-tnum">{valueFmt ? valueFmt(r[valueKey]) : fmtMs(r[valueKey])}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -58,6 +100,7 @@ export default function BrowserRum() {
   const detail = useApi('/api/rum/detail')
   const slo = useApi('/api/rum/slo')
   const facets = useApi('/api/rum/facets')
+  const attribution = useApi('/api/rum/vitals/attribution')
   const initialTab = searchParams.get('tab') || 'resources'
   const [tab, setTab] = useState(['resources', 'ajax', 'pages', 'sessions', 'mobile'].includes(initialTab) ? initialTab : 'resources')
   // Selected browser session — URL ?session= keeps deep links / global search shareable.
@@ -120,6 +163,11 @@ export default function BrowserRum() {
   const pageViews = dd.page_views || []
   const maxRes = Math.max(1, ...resources.map((r) => Number(r.count) || 0))
   const maxAjax = Math.max(1, ...ajax.map((a) => Number(a.count) || 0))
+  const attr = attribution.data || {}
+  const hasAnyCwv = CORE_VITALS.concat(SUPPORT_VITALS).some((m) => {
+    const v = cwv[m.key]
+    return v && (v.p75 != null || Number(v.samples) > 0)
+  })
 
   const resourceCols = [
     { key: 'name', header: 'Resource', render: (r) => <span className="opa-mono" style={{ ...ell, color: tierColor(r.type) }}>{r.name || '—'}</span> },
@@ -244,6 +292,15 @@ export default function BrowserRum() {
     { key: 'at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.at)}</span>, sortValue: (r) => Date.parse(r.at) || 0 },
   ]
 
+  const routeRows = attr.by_route || []
+  const routeCols = [
+    { key: 'route', header: 'Route', render: (r) => <span className="opa-mono" style={ell}>{r.route || '/'}</span> },
+    { key: 'views', header: 'Views', num: true, sortValue: (r) => Number(r.views), render: (r) => fmtNum(r.views) },
+    { key: 'lcp_p75', header: 'LCP p75', num: true, sortValue: (r) => Number(r.lcp_p75) || 0, render: (r) => (Number(r.lcp_n) ? fmtMs(r.lcp_p75) : '—') },
+    { key: 'inp_p75', header: 'INP p75', num: true, sortValue: (r) => Number(r.inp_p75) || 0, render: (r) => (Number(r.inp_n) ? fmtMs(r.inp_p75) : '—') },
+    { key: 'cls_p75', header: 'CLS p75', num: true, sortValue: (r) => Number(r.cls_p75) || 0, render: (r) => (Number(r.cls_n) ? Number(r.cls_p75).toFixed(3) : '—') },
+  ]
+
   const activeCols = tab === 'resources' ? resourceCols
     : tab === 'ajax' ? ajaxCols
       : tab === 'sessions' ? sessionCols
@@ -269,34 +326,69 @@ export default function BrowserRum() {
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Browser</h1>
-          <div className="opa-page-sub">Real user monitoring · Core Web Vitals (p75) · mobile crash bridge</div>
+          <div className="opa-page-sub">Real user monitoring · Core Web Vitals (field p75) · mobile crash bridge</div>
         </div>
       </div>
 
-      {/* Core Web Vitals */}
-      <Panel title="Core Web Vitals" icon={<FiZap />} loading={rum.loading} error={rum.error}
-        empty={!rum.loading && Object.keys(cwv).length === 0} emptyText="No web-vitals data in range">
-        <div className="cwv-grid">
-          {VITALS.map((m) => (
-            <CoreWebVitalCard key={m.key} label={m.label} name={m.name} vital={cwv[m.key]} />
-          ))}
-        </div>
+      {/* Core Web Vitals — CrUX-style field data */}
+      <Panel
+        title="Core Web Vitals"
+        icon={<FiZap />}
+        loading={rum.loading}
+        error={rum.error}
+        actions={<Badge>Field RUM · not lab</Badge>}
+      >
+        {!hasAnyCwv && !rum.loading ? (
+          <EmptyState
+            icon={<FiZap />}
+            title="No Core Web Vitals yet"
+            hint="Add the opa-rum.js snippet to your app. Vitals use CrUX thresholds (LCP 2.5s/4s, INP 200ms/500ms, CLS 0.1/0.25) and report p75 over real page views — not a synthetic Lighthouse score."
+          />
+        ) : (
+          <>
+            <div className="cwv-honesty opa-muted">
+              <FiInfo size={14} />
+              <span>
+                Field p75 over deduped page views{d.honesty ? ` · ${d.honesty}` : ''}.
+                Thresholds match web.dev / CrUX. FID is legacy — prefer INP.
+              </span>
+            </div>
+            <div className="cwv-section-label">Core (LCP · INP · CLS)</div>
+            <div className="cwv-grid cwv-grid-core">
+              {CORE_VITALS.map((m) => (
+                <CoreWebVitalCard key={m.key} meta={m} vital={cwv[m.key]} prominent />
+              ))}
+            </div>
+            <div className="cwv-section-label">Supporting</div>
+            <div className="cwv-grid cwv-grid-support">
+              {SUPPORT_VITALS.map((m) => (
+                <CoreWebVitalCard key={m.key} meta={m} vital={cwv[m.key]} />
+              ))}
+            </div>
+          </>
+        )}
       </Panel>
 
-      {/* Wave 12: CWV SLO budgets + facets */}
+      {/* SLO budgets + facets */}
       <div className="opa-grid cols-2">
-        <Panel title="CWV SLO budgets" icon={<FiZap />} loading={slo.loading} error={slo.error}
-          empty={!slo.loading && !slo.data?.slo} emptyText="No SLO data yet">
+        <Panel title="CWV budgets (p75)" icon={<FiZap />} loading={slo.loading} error={slo.error}
+          empty={!slo.loading && !slo.data?.slo} emptyText="No SLO data yet — ingest field beacons first">
           <div className="opa-grid cols-3">
             {['lcp', 'inp', 'cls'].map((k) => {
               const s = slo.data?.slo?.[k] || {}
+              const tone = ratingTone(s.rating)
               return (
-                <div key={k}>
+                <div key={k} className="cwv-slo-cell">
                   <div className="opa-muted opa-mono" style={{ fontSize: 11 }}>{k.toUpperCase()} p75</div>
                   <div className="opa-tnum" style={{ fontSize: 18 }}>
-                    {k === 'cls' ? (s.p75 == null ? '—' : Number(s.p75).toFixed(3)) : fmtMs(s.p75)}
+                    {k === 'cls' ? (s.p75 == null ? '—' : Number(s.p75).toFixed(3)) : (s.p75 == null ? '—' : fmtMs(s.p75))}
                   </div>
-                  <StatusPill tone={s.ok ? 'ok' : s.p75 ? 'error' : 'neutral'}>{s.rating || (s.ok ? 'ok' : '—')}</StatusPill>
+                  <StatusPill tone={tone}>{ratingLabel(s.rating) || '—'}</StatusPill>
+                  <HistBar histogram={s.histogram} />
+                  <div className="opa-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                    {Number(s.samples) ? `${fmtNum(s.samples)} samples` : 'no samples'}
+                    {k === 'cls' ? ' · budget 0.1' : ` · budget ${fmtMs(s.budget_ms || (k === 'lcp' ? 2500 : 200))}`}
+                  </div>
                 </div>
               )
             })}
@@ -312,6 +404,33 @@ export default function BrowserRum() {
               <Badge key={`g${i}`}>{r.value || '—'} · {fmtNum(r.count)}</Badge>
             ))}
           </div>
+        </Panel>
+      </div>
+
+      {/* Attribution + by-route */}
+      <div className="opa-grid cols-2">
+        <Panel title="Vital attribution" icon={<FiActivity />} loading={attribution.loading} error={attribution.error}
+          empty={!attribution.loading && !(attr.lcp_elements || []).length && !(attr.inp_targets || []).length && !(attr.cls_sources || []).length}
+          emptyText="No element attribution yet — ensure opa-rum.js ≥ 0.3 ships web_vitals_elements">
+          <div className="cwv-attr-grid">
+            <div>
+              <div className="cwv-section-label">LCP elements</div>
+              <AttrTable rows={attr.lcp_elements} />
+            </div>
+            <div>
+              <div className="cwv-section-label">INP targets</div>
+              <AttrTable rows={attr.inp_targets} />
+            </div>
+            <div>
+              <div className="cwv-section-label">CLS sources</div>
+              <AttrTable rows={attr.cls_sources} valueKey="avg_shift" valueFmt={(v) => (v == null ? '—' : Number(v).toFixed(3))} />
+            </div>
+          </div>
+        </Panel>
+        <Panel title="CWV by route" icon={<FiLayers />} flush loading={attribution.loading} error={attribution.error}
+          empty={!attribution.loading && routeRows.length === 0} emptyText="No route breakdown yet">
+          <DataTable columns={routeCols} rows={routeRows} rowKey={(r, i) => i}
+            initialSort={{ key: 'views', dir: 'desc' }} maxHeight={280} />
         </Panel>
       </div>
 
