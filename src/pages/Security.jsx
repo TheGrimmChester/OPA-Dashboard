@@ -1201,6 +1201,7 @@ export default function Security() {
     { key: 'blocked', header: 'Blocked', render: (r) => (r.blocked === 1 || r.blocked === true || r.blocked === '1'
       ? <StatusPill tone="error">blocked</StatusPill>
       : <StatusPill tone="neutral">detect</StatusPill>) },
+    { key: 'detector', header: 'Detector', render: (r) => <Badge>{r.detector || '—'}</Badge> },
     { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
     { key: 'route', header: 'Route', render: (r) => <span className="opa-mono">{r.route || '—'}</span> },
     { key: 'evidence', header: 'Evidence', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.evidence || '').slice(0, 120)}</span> },
@@ -1834,7 +1835,7 @@ export default function Security() {
               (one job per repo×PR). Large selections stay in one stack — extras <strong>wait</strong> and drain
               with stack concurrency (default serial). Each job packs <strong>full primary</strong> context for that repo plus
               <strong>linked awareness</strong>. Findings post inline (re-runs add/update/resolve); the global PR message is a narrative résumé upserted in place.
-              Related repos are shallow-cloned under the job checkout for cross-repo context. Open a job’s findings page from PR Jobs to Auto-fix or Create fix PR.
+              Related repos are shallow-cloned under the job checkout for cross-repo context. Open a job’s findings page from PR Jobs for experimental Auto-fix / Create fix PR (requires OPA-AI-Orchestrator).
               {!scmSettings.data?.cursor_key_set && (
                 <> <span style={{ color: 'var(--danger, #c44)' }}>No OPA Review API key set</span> — jobs still run with <code>ai.status=skipped</code>.</>
               )}
