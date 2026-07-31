@@ -14,6 +14,8 @@ import ExecutionStackTree from '../components/ExecutionStackTree'
 import { useProfileModel, ProfileToolbar, ProfileSummary, HotSpots } from '../components/profile'
 import { fmtMs, fmtBytes, fmtNum, fmtAgo, tierColor, statusColor, latencyStatus, SERIES } from '../theme/format'
 import { mergeCallStacks } from '../utils/mergeCallStacks'
+import { flattenTree } from '../utils/waterfallRows'
+import TraceWaterfall from '../components/TraceWaterfall'
 import './TraceDetail.css'
 
 const TIERS = ['app', 'db', 'redis', 'http']
@@ -52,32 +54,6 @@ function toneForLevel(level) {
   return 'neutral'
 }
 
-// Flatten a span tree (root.children) into rows carrying depth + the tree
-// parent's service (so cross-service hops are detectable even when the explicit
-// parent_id link was broken and the agent stitched the subtree in). Any spans
-// not reachable from the root (orphans from a partial/broken distributed trace)
-// are appended so every service still renders.
-function flattenTree(root, flat) {
-  const out = []
-  const seen = new Set()
-  const walk = (node, depth, parentSvc) => {
-    if (!node) return
-    out.push({ ...node, _depth: depth, _parentService: parentSvc })
-    if (node.span_id) seen.add(node.span_id)
-    ;(node.children || []).forEach((c) => walk(c, depth + 1, node.service))
-  }
-  if (root) walk(root, 0, null)
-  if (Array.isArray(flat)) {
-    flat.forEach((s) => {
-      if (s && s.span_id && seen.has(s.span_id)) return
-      if (!s) return
-      out.push({ ...s, _depth: 0, _parentService: null })
-      if (s.span_id) seen.add(s.span_id)
-    })
-  }
-  return out
-}
-
 export default function TraceDetail() {
   const { traceId } = useParams()
   const navigate = useNavigate()
@@ -100,6 +76,8 @@ export default function TraceDetail() {
   const [query, setQuery] = useState('')
   const [minPct, setMinPct] = useState(0)
   const [focusKey, setFocusKey] = useState(null)
+  // Collapse self-recursive / micro-span runs in the waterfall (e.g. fib × N).
+  const [collapseNoise, setCollapseNoise] = useState(true)
 
   // /full carries the per-span call stacks (span.stack) that the flame/call
   // views need; the shape is otherwise identical to /api/traces/{id}, so the
@@ -331,52 +309,23 @@ export default function TraceDetail() {
         }
       />
 
-      {/* Waterfall */}
+      {/* Waterfall — virtualized + collapse noise so 10k-span traces stay usable */}
       <Panel title="Trace waterfall" icon={<FiGitBranch />} loading={loading} error={trace.error} empty={empty}
         actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>click a span for detail</span>}>
-        <div className="tw-wrap">
-          <div className="tw-axis">
-            {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-              <div key={f} className="tw-axis-tick" style={{ left: `calc(240px + 10px + (100% - 240px - 10px - 74px - 10px) * ${f})` }}>
-                {fmtMs(totalMs * f)}
-              </div>
-            ))}
-          </div>
-          {rows.map((s) => {
-            const offset = totalMs > 0 ? ((s.start_ts - traceStart) / totalMs) * 100 : 0
-            const width = Math.max(0.8, ((s.duration_ms || 0) / totalMs) * 100)
-            const tier = spanTier(s)
-            const col = tierColor(tier)
-            const isSel = selected && selected.span_id === s.span_id
-            return (
-              <div
-                key={s.span_id}
-                className={`tw-row ${isSel ? 'is-selected' : ''}`}
-                role="button"
-                tabIndex={0}
-                aria-pressed={!!isSel}
-                onClick={() => setSelected(s)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(s) } }}
-              >
-                <div className="tw-label" style={{ paddingLeft: (s._depth || 0) * 14 }}>
-                  {multiService && <span className="tw-tierdot" style={{ background: serviceColor[s.service] || 'var(--neutral)' }} title={s.service} />}
-                  <span className="tw-tierdot" style={{ background: col }} />
-                  <span className="tw-label-name" title={`${s.name} · ${s.service || ''}`}>{s.name}</span>
-                  {isServiceEntry(s) && (
-                    <span className="opa-badge" style={{ marginLeft: 6, padding: '0 6px' }} title={`enters ${s.service}`}>
-                      <span className="opa-dot" style={{ background: serviceColor[s.service], width: 6, height: 6 }} />{s.service}
-                    </span>
-                  )}
-                </div>
-                <div className="tw-track">
-                  <div className="tw-bar" style={{ left: `${Math.min(99, Math.max(0, offset))}%`, width: `${width}%`, background: multiService ? (serviceColor[s.service] || col) : col }}
-                    title={`${s.name}${s.service ? ' · ' + s.service : ''}: ${fmtMs(s.duration_ms)} @ +${fmtMs(s.start_ts - traceStart)}`} />
-                </div>
-                <div className="tw-dur" style={{ color: `var(--${latencyStatus(s.duration_ms)})` }}>{fmtMs(s.duration_ms)}</div>
-              </div>
-            )
-          })}
-        </div>
+        <TraceWaterfall
+          rows={rows}
+          totalMs={totalMs}
+          traceStart={traceStart}
+          selectedSpanId={selectedSpanId}
+          onSelect={setSelected}
+          multiService={multiService}
+          serviceColor={serviceColor}
+          isServiceEntry={isServiceEntry}
+          viewportHeight={listH}
+          collapseNoise={collapseNoise}
+          onToggleCollapse={setCollapseNoise}
+          truncatedMeta={data.meta || null}
+        />
       </Panel>
 
       {/* Profile — ranked hot spots over every span's call stack, plus the
