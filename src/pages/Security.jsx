@@ -568,11 +568,11 @@ export default function Security() {
     setBusy(true)
     try {
       await axios.post(`${API}/api/scm/settings/cursor-key`, clear ? { clear: true } : { api_key: cursorKey })
-      flash('ok', clear ? 'Cursor key cleared' : 'Cursor key saved')
+      flash('ok', clear ? 'AI Review API key cleared' : 'AI Review API key saved')
       setCursorKey('')
       scmSettings.reload?.()
     } catch (e) {
-      flash('error', 'Cursor key update failed', e.response?.data || e.message)
+      flash('error', 'AI Review API key update failed', e.response?.data || e.message)
     } finally {
       setBusy(false)
     }
@@ -615,7 +615,7 @@ export default function Security() {
       return
     }
     if (!scmSettings.data?.cursor_key_set && !scmSettings.data?.skip_cursor_ai) {
-      flash('error', 'No Cursor API key', 'Save a key under Cursor AI Review, or expect ai.status=skipped')
+      flash('error', 'No AI Review API key', 'Save a key under AI Review API key, or expect ai.status=skipped')
     }
     setBusy(true)
     try {
@@ -1192,7 +1192,7 @@ export default function Security() {
             {JSON.stringify(prCheck.data || {}, null, 2)}
           </pre>
           <div className="opa-muted" style={{ fontSize: 12, marginTop: 8 }}>
-            Cursor key set: {scmSettings.data?.cursor_key_set ? 'yes' : 'no'} · Webhook: {scmSettings.data?.webhook_url || '—'}
+            AI Review API key set: {scmSettings.data?.cursor_key_set ? 'yes' : 'no'} · Webhook: {scmSettings.data?.webhook_url || '—'}
           </div>
         </Panel>
       )}
@@ -1445,11 +1445,11 @@ export default function Security() {
 
           <Panel title="Run AI Review" icon={<FiPlay />}>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Manually queue Cursor AI Review on a PR. Contexts for this repo and any linked group are packed automatically.
+              Manually queue AI Review on a PR. Contexts for this repo and any linked group are packed automatically.
               {!scmSettings.data?.cursor_key_set && (
-                <> <span style={{ color: 'var(--danger, #c44)' }}>No Cursor key set</span> — job still runs with <code>ai.status=skipped</code>.</>
+                <> <span style={{ color: 'var(--danger, #c44)' }}>No AI Review API key set</span> — job still runs with <code>ai.status=skipped</code>.</>
               )}
-              {scmSettings.data?.skip_cursor_ai && <> Agent has <code>SKIP_CURSOR_AI=1</code>.</>}
+              {scmSettings.data?.skip_cursor_ai && <> Agent has AI Review skipped (<code>SKIP_CURSOR_AI=1</code>).</>}
             </p>
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 12 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
@@ -1566,14 +1566,14 @@ export default function Security() {
               />
             </label>
             {genDraft?.source === 'skipped' && (
-              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>Generate returned empty (skipped) — set Cursor key or unset SKIP_CURSOR_AI.</div>
+              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>Generate returned empty (skipped) — set AI Review API key or unset SKIP_CURSOR_AI.</div>
             )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
               <button type="button" className="opa-btn primary" disabled={busy} onClick={saveContext}>
                 {ctxEditingId ? 'Update context' : 'Save context'}
               </button>
               <button type="button" className="opa-btn ghost" disabled={busy} onClick={generateContext}>
-                Generate with Cursor
+                Generate with AI
               </button>
               {ctxEditingId && (
                 <button type="button" className="opa-btn ghost" onClick={() => { setCtxEditingId(''); setCtxForm({ title: '', body_markdown: '', repo_full_name: ctxForm.repo_full_name, tags_design: false }) }}>
@@ -1649,9 +1649,9 @@ export default function Security() {
             />
           </Panel>
 
-          <Panel title="Cursor AI Review key" icon={<FiKey />}>
+          <Panel title="AI Review API key" icon={<FiKey />}>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Stored server-side only. CLI: <code>agent -p --trust --force --model auto</code>.
+              Stored server-side only. Used by the AI agent for PR review.
               Status: {scmSettings.data?.cursor_key_set ? 'set' : 'not set'} · model {scmSettings.data?.cursor_model || 'auto'}
             </p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1659,7 +1659,7 @@ export default function Security() {
                 type="password"
                 className="opa-mono"
                 style={{ minWidth: 280 }}
-                placeholder="CURSOR_API_KEY"
+                placeholder="API key"
                 value={cursorKey}
                 onChange={(e) => setCursorKey(e.target.value)}
               />
