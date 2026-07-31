@@ -59,6 +59,82 @@ function scmJobPrHref(job, connectorList = []) {
   return `${githubWebOrigin(conn)}/${repo}/pull/${pr}`
 }
 
+const SEV_RANK = { blocker: 5, critical: 4, high: 3, medium: 2, low: 1, info: 0 }
+
+/** Map severity → StatusPill tone (color-coded, not emoji-only). */
+function sevTone(sev) {
+  const v = String(sev || '').toLowerCase()
+  if (v === 'blocker' || v === 'critical') return 'error'
+  if (v === 'high') return 'alert'
+  if (v === 'medium') return 'warn'
+  if (v === 'info' || v === 'pass' || v === 'ok' || v === 'clean') return 'ok'
+  if (v === 'low') return 'neutral'
+  return 'neutral'
+}
+
+function scmJobStatusTone(status) {
+  switch (String(status || '').toLowerCase()) {
+    case 'completed': return 'ok'
+    case 'running': return 'warn'
+    case 'queued': return 'info'
+    case 'waiting': return 'neutral'
+    case 'cancelled': return 'neutral'
+    case 'failed':
+    case 'error': return 'error'
+    default: return 'neutral'
+  }
+}
+
+function scmJobKindLabel(job) {
+  const ev = String(job?.event || '').toLowerCase()
+  if (ev.includes('ai_only') || ev.includes('ai_review') || ev.includes('opa_review')) return 'OPA Review'
+  if (ev.includes('simulate')) return 'Simulate'
+  if (ev.includes('pull_request') || ev.includes('check_suite') || ev.includes('push')) return 'Repo Watch'
+  if (!ev) return ''
+  return String(job.event).replace(/^manual\./, '').replace(/_/g, ' ')
+}
+
+/** Scan aids for Jobs rows: kind · max severity · rule/category (was plain “OPA Review · high · security”). */
+function scmJobResultMeta(job) {
+  const summary = job?.summary && typeof job.summary === 'object' ? job.summary : {}
+  const ai = summary.ai && typeof summary.ai === 'object' ? summary.ai : {}
+  const gate = summary.gate && typeof summary.gate === 'object' ? summary.gate : {}
+  const findings = Array.isArray(ai.findings) ? ai.findings : []
+
+  let maxSev = ''
+  let topRule = ''
+  let maxRank = -1
+  for (const f of findings) {
+    const s = String(f?.severity || '').toLowerCase()
+    const r = SEV_RANK[s] ?? -1
+    if (r > maxRank) {
+      maxRank = r
+      maxSev = s
+      topRule = String(f?.rule || '').trim()
+    }
+  }
+  if (!maxSev && ai.status === 'findings') {
+    maxSev = String(ai.confidence_label || '').toLowerCase()
+    if (!SEV_RANK[maxSev] && maxSev !== 'info') maxSev = ''
+  }
+  if (!maxSev && gate.min_severity) {
+    maxSev = String(gate.min_severity).toLowerCase()
+  }
+  if (!topRule) {
+    const scope = String(gate.scope || '').toLowerCase()
+    if (scope.includes('security')) topRule = 'security'
+    else if (String(ai.status || '') === 'findings') topRule = 'security'
+  }
+
+  return {
+    kind: scmJobKindLabel(job),
+    severity: maxSev,
+    rule: topRule,
+    gateStatus: String(gate.status || '').toLowerCase(),
+    aiStatus: String(ai.status || '').toLowerCase(),
+  }
+}
+
 const SCANNER_OPTS = [
   { id: 'secrets', label: 'Secrets (gitleaks|lite)', mode: 'gitleaks' },
   { id: 'sast', label: 'SAST (lite)', mode: 'lite' },
@@ -352,13 +428,6 @@ export default function Security() {
     if (!uniq.includes('php-smoke')) uniq.unshift('php-smoke')
     return uniq
   }, [services.data])
-
-  const sevTone = (sev) => {
-    const v = String(sev || '').toLowerCase()
-    if (v === 'critical' || v === 'high') return 'error'
-    if (v === 'medium') return 'warn'
-    return 'neutral'
-  }
 
   const sevRank = { critical: 4, high: 3, medium: 2, low: 1 }
   const filteredSecrets = useMemo(() => {
@@ -955,19 +1024,6 @@ export default function Security() {
       return typeof r?.summary_json === 'string' ? JSON.parse(r.summary_json || '{}') : (r?.summary_json || {})
     } catch {
       return {}
-    }
-  }
-
-  const scmJobStatusTone = (status) => {
-    switch (String(status || '').toLowerCase()) {
-      case 'completed': return 'ok'
-      case 'running': return 'warn'
-      case 'queued':
-      case 'waiting': return 'neutral'
-      case 'cancelled': return 'neutral'
-      case 'failed':
-      case 'error': return 'error'
-      default: return 'neutral'
     }
   }
 
@@ -1656,7 +1712,12 @@ export default function Security() {
                 { key: 'service_name', header: 'Service', render: (r) => (r.service_name ? <Link to={serviceHref(r.service_name)}>{r.service_name}</Link> : '—') },
                 { key: 'profile', header: 'Profile', render: (r) => <Badge>{r.profile || 'auto'}</Badge> },
                 { key: 'checks_json', header: 'Checks', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{r.checks_json || '—'}</span> },
-                { key: 'min_severity', header: 'Min sev' },
+                {
+                  key: 'min_severity', header: 'Min sev',
+                  render: (r) => (r.min_severity
+                    ? <StatusPill tone={sevTone(r.min_severity)}>{r.min_severity}</StatusPill>
+                    : '—'),
+                },
                 { key: 'ai_blocking', header: 'AI block', render: (r) => (r.ai_blocking ? 'yes' : 'no') },
                 {
                   key: 'enabled',
@@ -2044,7 +2105,17 @@ export default function Security() {
                     : '—'
                 },
               },
-              { key: 'event', header: 'Event', render: (r) => <Badge>{r.event}</Badge> },
+              {
+                key: 'event', header: 'Event',
+                render: (r) => {
+                  const kind = scmJobKindLabel(r)
+                  return (
+                    <span title={r.event || ''}>
+                      <Badge>{kind || r.event || '—'}</Badge>
+                    </span>
+                  )
+                },
+              },
               {
                 key: 'status', header: 'Status',
                 render: (r) => (
@@ -2054,6 +2125,49 @@ export default function Security() {
                     </StatusPill>
                   </span>
                 ),
+              },
+              {
+                key: 'result', header: 'Result',
+                render: (r) => {
+                  const meta = scmJobResultMeta(r)
+                  const chips = []
+                  if (meta.severity) {
+                    chips.push(
+                      <StatusPill key="sev" tone={sevTone(meta.severity)} title="Max finding / policy severity">
+                        {meta.severity}
+                      </StatusPill>,
+                    )
+                  }
+                  if (meta.rule) {
+                    chips.push(<Badge key="rule" title="Finding rule / category">{meta.rule}</Badge>)
+                  }
+                  if (meta.gateStatus === 'fail' || meta.gateStatus === 'pass') {
+                    chips.push(
+                      <StatusPill key="gate" tone={meta.gateStatus === 'pass' ? 'ok' : 'error'} title="AppSec gate">
+                        gate {meta.gateStatus}
+                      </StatusPill>,
+                    )
+                  } else if (meta.aiStatus && meta.aiStatus !== 'findings') {
+                    const aiTone = meta.aiStatus === 'skipped' || meta.aiStatus === 'clean' || meta.aiStatus === 'ok'
+                      ? (meta.aiStatus === 'skipped' ? 'neutral' : 'ok')
+                      : 'warn'
+                    chips.push(
+                      <StatusPill key="ai" tone={aiTone} title="OPA Review status">
+                        {meta.aiStatus}
+                      </StatusPill>,
+                    )
+                  }
+                  if (!chips.length) return <span className="opa-muted">—</span>
+                  const plain = [meta.kind, meta.severity, meta.rule].filter(Boolean).join(' · ')
+                  return (
+                    <span
+                      style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}
+                      title={plain}
+                    >
+                      {chips}
+                    </span>
+                  )
+                },
               },
               {
                 key: 'security_run_id', header: 'Scan',
