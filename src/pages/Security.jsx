@@ -50,6 +50,20 @@ function resolveSecurityRunId(params, tab) {
   return runQ
 }
 
+/** Compact Select all / Clear controls for checkbox multi-selects. */
+function MultiSelectActions({ onSelectAll, onClear, disabled = false, selectLabel = 'Select all', clearLabel = 'Clear' }) {
+  return (
+    <span className="opa-multiselect-actions">
+      <button type="button" className="opa-btn ghost opa-btn-compact" disabled={disabled} onClick={onSelectAll}>
+        {selectLabel}
+      </button>
+      <button type="button" className="opa-btn ghost opa-btn-compact" disabled={disabled} onClick={onClear}>
+        {clearLabel}
+      </button>
+    </span>
+  )
+}
+
 /** Wave 19 + Wave 30 + Wave 33: Vulns / IAST / Secrets / SAST / IaC / Scans / Inventory / Policies / PR-check. */
 export default function Security() {
   const toast = useToast()
@@ -508,6 +522,46 @@ export default function Security() {
 
   const toggleRepoPick = (fullName) => {
     setRepoPick((prev) => ({ ...prev, [fullName]: !prev[fullName] }))
+  }
+
+  const setAllAvailableRepos = (on) => {
+    setRepoPick((prev) => {
+      const next = { ...prev }
+      for (const r of availableRepos) {
+        const name = r.full_name || r.repo_full_name
+        if (name) next[name] = on
+      }
+      return next
+    })
+  }
+
+  const setAllReviewRepos = (on) => {
+    const next = {}
+    for (const r of watchedRows) {
+      if (r.repo_full_name) next[r.repo_full_name] = on
+    }
+    setReviewRepos(next)
+    if (!on) setReviewPrs({})
+  }
+
+  const setReviewPrsForRepos = (repos, on) => {
+    setReviewPrs((prev) => {
+      const next = { ...prev }
+      for (const repo of repos) {
+        for (const p of (pullsByRepo[repo] || [])) {
+          next[`${repo}#${p.number}`] = on
+        }
+      }
+      return next
+    })
+  }
+
+  const setAllLinkPick = (on) => {
+    const next = {}
+    for (const r of watchedRows) {
+      if (r.repo_full_name) next[r.repo_full_name] = on
+    }
+    setLinkPick(next)
   }
 
   const toggleWatchedEnabled = (fullName) => {
@@ -1427,20 +1481,30 @@ export default function Security() {
               <div className="opa-muted">No installable repos returned. Add org/name in Extra repos and Save, or check PAT scopes.</div>
             )}
             {availableRepos.length > 0 && (
-              <div style={{ display: 'grid', gap: 6, maxHeight: 280, overflow: 'auto' }}>
-                {availableRepos.map((r) => {
-                  const name = r.full_name || r.repo_full_name
-                  if (!name) return null
-                  return (
-                    <label key={name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                      <input type="checkbox" checked={!!repoPick[name]} onChange={() => toggleRepoPick(name)} />
-                      <span className="opa-mono cell-strong">{name}</span>
-                      {r.private ? <Badge>private</Badge> : null}
-                      {r.mock ? <span className="opa-muted" style={{ fontSize: 11 }}>mock</span> : null}
-                    </label>
-                  )
-                })}
-              </div>
+              <>
+                <div className="opa-multiselect-head">
+                  <span className="opa-muted" style={{ fontSize: 12 }}>{availableRepos.length} repos</span>
+                  <MultiSelectActions
+                    disabled={reposLoading}
+                    onSelectAll={() => setAllAvailableRepos(true)}
+                    onClear={() => setAllAvailableRepos(false)}
+                  />
+                </div>
+                <div style={{ display: 'grid', gap: 6, maxHeight: 280, overflow: 'auto' }}>
+                  {availableRepos.map((r) => {
+                    const name = r.full_name || r.repo_full_name
+                    if (!name) return null
+                    return (
+                      <label key={name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                        <input type="checkbox" checked={!!repoPick[name]} onChange={() => toggleRepoPick(name)} />
+                        <span className="opa-mono cell-strong">{name}</span>
+                        {r.private ? <Badge>private</Badge> : null}
+                        {r.mock ? <span className="opa-muted" style={{ fontSize: 11 }}>mock</span> : null}
+                      </label>
+                    )
+                  })}
+                </div>
+              </>
             )}
           </Panel>
 
@@ -1484,43 +1548,80 @@ export default function Security() {
               )}
               {scmSettings.data?.skip_cursor_ai && <> Agent has OPA Review skipped (<code>SKIP_CURSOR_AI=1</code>).</>}
             </p>
-            <div className="cell-strong" style={{ marginBottom: 6 }}>Watched repos</div>
+            <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+              <div className="cell-strong">Watched repos</div>
+              <MultiSelectActions
+                disabled={!watchedRows.length}
+                onSelectAll={() => setAllReviewRepos(true)}
+                onClear={() => setAllReviewRepos(false)}
+              />
+            </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
               {watchedRows.map((r) => (
                 <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                   <input
                     type="checkbox"
                     checked={!!reviewRepos[r.repo_full_name]}
-                    onChange={(e) => setReviewRepos((p) => ({ ...p, [r.repo_full_name]: e.target.checked }))}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setReviewRepos((p) => ({ ...p, [r.repo_full_name]: on }))
+                      if (!on) {
+                        setReviewPrs((prev) => {
+                          const next = { ...prev }
+                          const prefix = `${r.repo_full_name}#`
+                          for (const key of Object.keys(next)) {
+                            if (key.startsWith(prefix)) next[key] = false
+                          }
+                          return next
+                        })
+                      }
+                    }}
                   />
                   <span className="opa-mono">{r.repo_full_name}</span>
                 </label>
               ))}
               {!watchedRows.length && <span className="opa-muted">Watch a repo first</span>}
             </div>
-            <div className="cell-strong" style={{ marginBottom: 6 }}>Open PRs {pullsLoading ? '(loading…)' : ''}</div>
+            <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+              <div className="cell-strong">Open PRs {pullsLoading ? '(loading…)' : ''}</div>
+              <MultiSelectActions
+                disabled={!selectedReviewRepos.length || pullsLoading || !selectedReviewRepos.some((repo) => (pullsByRepo[repo] || []).length)}
+                onSelectAll={() => setReviewPrsForRepos(selectedReviewRepos, true)}
+                onClear={() => setReviewPrsForRepos(selectedReviewRepos, false)}
+              />
+            </div>
             <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
-              {selectedReviewRepos.map((repo) => (
-                <div key={repo} style={{ padding: 8, background: 'var(--surface-2)', borderRadius: 6 }}>
-                  <div className="opa-mono" style={{ fontSize: 12, marginBottom: 6 }}>{repo}</div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
-                    {(pullsByRepo[repo] || []).map((p) => {
-                      const key = `${repo}#${p.number}`
-                      return (
-                        <label key={key} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                          <input
-                            type="checkbox"
-                            checked={!!reviewPrs[key]}
-                            onChange={(e) => setReviewPrs((prev) => ({ ...prev, [key]: e.target.checked }))}
-                          />
-                          #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
-                        </label>
-                      )
-                    })}
-                    {!(pullsByRepo[repo] || []).length && !pullsLoading && <span className="opa-muted">No open PRs</span>}
+              {selectedReviewRepos.map((repo) => {
+                const pulls = pullsByRepo[repo] || []
+                return (
+                  <div key={repo} style={{ padding: 8, background: 'var(--surface-2)', borderRadius: 6 }}>
+                    <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+                      <div className="opa-mono" style={{ fontSize: 12 }}>{repo}</div>
+                      <MultiSelectActions
+                        disabled={!pulls.length || pullsLoading}
+                        onSelectAll={() => setReviewPrsForRepos([repo], true)}
+                        onClear={() => setReviewPrsForRepos([repo], false)}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
+                      {pulls.map((p) => {
+                        const key = `${repo}#${p.number}`
+                        return (
+                          <label key={key} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!reviewPrs[key]}
+                              onChange={(e) => setReviewPrs((prev) => ({ ...prev, [key]: e.target.checked }))}
+                            />
+                            #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
+                          </label>
+                        )
+                      })}
+                      {!pulls.length && !pullsLoading && <span className="opa-muted">No open PRs</span>}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {!selectedReviewRepos.length && <span className="opa-muted">Select repos above</span>}
             </div>
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
@@ -1639,7 +1740,14 @@ export default function Security() {
                 </button>
               )}
             </div>
-            <div className="cell-strong" style={{ marginBottom: 8 }}>Link repos (shared context pack)</div>
+            <div className="opa-multiselect-head" style={{ marginBottom: 8 }}>
+              <div className="cell-strong">Link repos (shared context pack)</div>
+              <MultiSelectActions
+                disabled={!watchedRows.length}
+                onSelectAll={() => setAllLinkPick(true)}
+                onClear={() => setAllLinkPick(false)}
+              />
+            </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
               {watchedRows.map((r) => (
                 <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
