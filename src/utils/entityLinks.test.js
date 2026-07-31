@@ -15,6 +15,7 @@ import {
   tracesHref,
   truncateId,
   perfRunHref,
+  securityRunHref,
   syntheticsHref,
 } from './entityLinks.js'
 
@@ -42,6 +43,7 @@ describe('entityLinks', () => {
     expect(logsHref({ service: 'api', level: 'ERROR' })).toBe('/logs?service=api&level=ERROR')
     expect(rumSessionHref('sid')).toBe('/rum?session=sid&tab=sessions')
     expect(perfRunHref('run-9', { tab: 'results' })).toBe('/perf-lab?run=run-9&tab=results')
+    expect(securityRunHref('srun-1')).toBe('/security?run=srun-1&tab=scans')
     expect(syntheticsHref('chk-1')).toBe('/synthetics?check=chk-1')
     expect(traceReplayHref('abc', 'waterfall')).toBe('/traces/abc?replay=waterfall')
     expect(truncateId('abcdefghijklmnop', 8)).toBe('abcdefgh…')
@@ -49,6 +51,7 @@ describe('entityLinks', () => {
 
   it('maps high-value tags to links and skips empties', () => {
     expect(tagLink('load_run_id', 'r1')?.to).toBe('/traces?load_run_id=r1')
+    expect(tagLink('security_run_id', 'srun-9')?.to).toBe('/security?run=srun-9&tab=scans')
     expect(tagLink('session_id', 's1')?.to).toContain('/rum?session=s1')
     expect(tagLink('check_id', 'c1')?.to).toContain('/synthetics?check=c1')
     expect(tagLink('service', '')).toBe(null)
