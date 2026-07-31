@@ -1,11 +1,12 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   FiGlobe, FiClock, FiAlertTriangle, FiEye, FiZap, FiActivity, FiLayers,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import { Panel, KpiTile, TimeSeriesChart, StatusPill, EmptyState, DataTable, Badge, InlineBar, SegmentedControl } from '../components/ui'
+import { Panel, KpiTile, TimeSeriesChart, StatusPill, EmptyState, DataTable, Badge, InlineBar, SegmentedControl, EntityChip } from '../components/ui'
 import { fmtMs, fmtNum, fmtBytes, fmtAgo, fmtPct, latencyStatus, errorRateStatus, tierColor } from '../theme/format'
+import { rumSessionHref, sessionTracesHref, traceHref, tracesHref } from '../utils/entityLinks'
 import SessionReplayPlayer from '../components/SessionReplayPlayer'
 import './BrowserRum.css'
 
@@ -52,13 +53,15 @@ function CoreWebVitalCard({ label, name, vital }) {
 
 export default function BrowserRum() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const rum = useApi('/api/rum/metrics')
   const detail = useApi('/api/rum/detail')
   const slo = useApi('/api/rum/slo')
   const facets = useApi('/api/rum/facets')
-  const [tab, setTab] = useState('resources')
-  // Selected browser session, expanded into a timeline panel below the table.
-  const [session, setSession] = useState(null)
+  const initialTab = searchParams.get('tab') || 'resources'
+  const [tab, setTab] = useState(['resources', 'ajax', 'pages', 'sessions', 'mobile'].includes(initialTab) ? initialTab : 'resources')
+  // Selected browser session — URL ?session= keeps deep links / global search shareable.
+  const [session, setSession] = useState(searchParams.get('session') || null)
   const [mobileSession, setMobileSession] = useState('')
   const sessions = useApi('/api/rum/sessions', {}, { skip: tab !== 'sessions' })
   const mobileSessions = useApi('/api/rum/mobile/sessions', {}, { skip: tab !== 'mobile', noRange: true })
@@ -76,19 +79,38 @@ export default function BrowserRum() {
     {}, { skip: !session },
   )
 
+  useEffect(() => {
+    const p = new URLSearchParams(searchParams)
+    if (session) {
+      p.set('session', session)
+      if (tab !== 'sessions' && tab !== 'mobile') p.set('tab', 'sessions')
+    } else {
+      p.delete('session')
+    }
+    if (tab && tab !== 'resources') p.set('tab', tab)
+    else if (!session) p.delete('tab')
+    const next = p.toString()
+    if (next !== searchParams.toString()) setSearchParams(p, { replace: true })
+  }, [session, tab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectSession = (sid) => {
+    setSession((cur) => (cur === sid ? null : sid))
+    if (sid) setTab('sessions')
+  }
+
   // Correlate a browser AJAX call to the backend that served it. The v0.2
   // beacon propagates a W3C traceparent and records the trace id, so those
   // rows open the exact trace; older rows fall back to matching on request
   // path (the beacon records the full URL; backend spans key on url_path).
   const drillAjax = (r) => {
     if (r?.trace_id) {
-      navigate(`/traces/${encodeURIComponent(r.trace_id)}`)
+      navigate(traceHref(r.trace_id))
       return
     }
     if (!r?.url) return
     let path = r.url
     try { path = new URL(r.url, window.location.origin).pathname } catch { /* keep raw */ }
-    navigate('/traces?' + new URLSearchParams({ filter: `url_path:"${path}"` }).toString())
+    navigate(tracesHref({ filter: `url_path:"${path}"` }))
   }
   const d = rum.data || {}
   const cwv = d.core_web_vitals || {}
@@ -122,7 +144,7 @@ export default function BrowserRum() {
     {
       key: 'trace_id', header: 'Trace', width: 120,
       render: (r) => (r.trace_id
-        ? <span className="opa-mono cell-strong">{String(r.trace_id).slice(0, 12)}</span>
+        ? <EntityChip to={traceHref(r.trace_id)} title={r.trace_id} onClick={(e) => e.stopPropagation()}>{String(r.trace_id).slice(0, 12)}</EntityChip>
         : <span className="opa-muted">—</span>),
       sortValue: (r) => r.trace_id || '',
     },
@@ -130,14 +152,24 @@ export default function BrowserRum() {
   const pvCols = [
     { key: 'page_url', header: 'Page', render: (r) => <span className="opa-mono" style={ell}>{r.page_url || '—'}</span> },
     { key: 'load_ms', header: 'Load', num: true, sortValue: (r) => Number(r.load_ms), render: (r) => <span style={{ color: `var(--${latencyStatus(Number(r.load_ms))})` }}>{fmtMs(Number(r.load_ms))}</span> },
-    { key: 'session_id', header: 'Session', mono: true, render: (r) => <span className="opa-muted opa-mono">{String(r.session_id || '').slice(0, 12) || '—'}</span> },
+    { key: 'session_id', header: 'Session', mono: true, render: (r) => (
+      r.session_id
+        ? <EntityChip to={rumSessionHref(r.session_id)} title={`Open session ${r.session_id}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); selectSession(r.session_id) }}>
+            {String(r.session_id).slice(0, 12)}
+          </EntityChip>
+        : <span className="opa-muted">—</span>
+    ) },
     { key: 'occurred_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.occurred_at)}</span> },
   ]
   // One row per browser session (the beacon keeps a session id for the tab and
   // rotates page_view_id on each SPA route change).
   const sessionRows = sessions.data?.sessions || []
   const sessionCols = [
-    { key: 'session_id', header: 'Session', render: (r) => <span className="opa-mono cell-strong">{String(r.session_id || '').slice(0, 14)}</span> },
+    { key: 'session_id', header: 'Session', render: (r) => (
+      <EntityChip to={rumSessionHref(r.session_id)} title={r.session_id} onClick={(e) => { e.preventDefault(); e.stopPropagation(); selectSession(r.session_id) }}>
+        {String(r.session_id || '').slice(0, 14)}
+      </EntityChip>
+    ) },
     { key: 'page_count', header: 'Pages', num: true, sortValue: (r) => Number(r.page_count), render: (r) => fmtNum(r.page_count) },
     { key: 'ajax_count', header: 'AJAX', num: true, sortValue: (r) => Number(r.ajax_count), render: (r) => fmtNum(r.ajax_count) },
     {
@@ -149,6 +181,12 @@ export default function BrowserRum() {
     { key: 'avg_load_ms', header: 'Avg load', num: true, sortValue: (r) => Number(r.avg_load_ms), render: (r) => <span style={{ color: `var(--${latencyStatus(Number(r.avg_load_ms))})` }}>{fmtMs(Number(r.avg_load_ms))}</span> },
     { key: 'user_agent', header: 'User agent', render: (r) => <span className="opa-muted" style={ell}>{r.user_agent || '—'}</span> },
     { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_seen)}</span>, sortValue: (r) => Date.parse(r.last_seen) || 0 },
+    {
+      key: 'traces', header: 'APM',
+      render: (r) => (r.session_id
+        ? <EntityChip to={sessionTracesHref(r.session_id)} title="Correlated traces" onClick={(e) => e.stopPropagation()}>traces</EntityChip>
+        : <span className="opa-muted">—</span>),
+    },
   ]
 
   const mobileSessionRows = mobileSessions.data?.sessions || []
@@ -167,7 +205,7 @@ export default function BrowserRum() {
     { key: 'platform', header: 'Platform', render: (r) => <Badge>{r.platform || '—'}</Badge> },
     { key: 'session_id', header: 'Session', render: (r) => <span className="opa-mono">{String(r.session_id || '').slice(0, 14)}</span> },
     { key: 'trace_id', header: 'Trace', render: (r) => (r.trace_id
-      ? <button type="button" className="opa-btn ghost" onClick={(e) => { e.stopPropagation(); navigate(`/traces/${encodeURIComponent(r.trace_id)}`) }}>{String(r.trace_id).slice(0, 12)}</button>
+      ? <EntityChip to={traceHref(r.trace_id)} onClick={(e) => e.stopPropagation()}>{String(r.trace_id).slice(0, 12)}</EntityChip>
       : <span className="opa-muted">—</span>) },
     { key: 'occurred_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.occurred_at)}</span> },
   ]
@@ -200,7 +238,7 @@ export default function BrowserRum() {
     {
       key: 'trace', header: 'Trace', width: 120,
       render: (r) => (r.trace_id
-        ? <span className="opa-mono cell-strong">{String(r.trace_id).slice(0, 12)}</span>
+        ? <EntityChip to={traceHref(r.trace_id)} onClick={(e) => e.stopPropagation()}>{String(r.trace_id).slice(0, 12)}</EntityChip>
         : <span className="opa-muted">—</span>),
     },
     { key: 'at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.at)}</span>, sortValue: (r) => Date.parse(r.at) || 0 },
@@ -304,7 +342,7 @@ export default function BrowserRum() {
       <Panel title="Resource & session detail" icon={<FiLayers />} flush
         loading={tableLoading} error={tab === 'mobile' ? mobileSessions.error : detail.error}
         actions={
-          <SegmentedControl value={tab} onChange={(v) => { setTab(v); setSession(null); setMobileSession('') }} options={[
+          <SegmentedControl value={tab} onChange={(v) => { setTab(v); if (v !== 'sessions') setSession(null); setMobileSession('') }} options={[
             { value: 'resources', label: `Resources ${resources.length}` },
             { value: 'ajax', label: `AJAX ${ajax.length}` },
             { value: 'pages', label: `Page views ${pageViews.length}` },
@@ -319,7 +357,7 @@ export default function BrowserRum() {
                 : 'Add the opa-rum.js snippet (<script src=&quot;/opa-rum.js&quot; …>) to your app to start capturing resource timing, AJAX calls and page views.'} />
           : <DataTable columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
               onRowClick={tab === 'ajax' ? drillAjax
-                : tab === 'sessions' ? (r) => setSession(r.session_id === session ? null : r.session_id)
+                : tab === 'sessions' ? (r) => selectSession(r.session_id)
                   : tab === 'mobile' ? (r) => setMobileSession(r.session_id === mobileSession ? '' : r.session_id)
                     : undefined}
               initialSort={tab === 'sessions' || tab === 'mobile' ? { key: 'last_seen', dir: 'desc' } : { key: 'count', dir: 'desc' }}
@@ -343,10 +381,13 @@ export default function BrowserRum() {
           empty={!sessionDetail.loading && timelineRows.length === 0}
           emptyText="No events recorded for this session"
           actions={
-            <button className="opa-btn ghost" onClick={() => setSession(null)}>Close</button>
+            <div className="opa-row" style={{ gap: 8 }}>
+              <Link className="opa-btn ghost" to={sessionTracesHref(session)}>Correlated traces</Link>
+              <button className="opa-btn ghost" onClick={() => setSession(null)}>Close</button>
+            </div>
           }>
           <DataTable columns={timelineCols} rows={timelineRows} rowKey={(r, i) => i}
-            onRowClick={(r) => r.trace_id && navigate(`/traces/${encodeURIComponent(r.trace_id)}`)}
+            onRowClick={(r) => r.trace_id && navigate(traceHref(r.trace_id))}
             maxHeight={420} />
           {(replay.data?.chunks || []).length > 0 && (
             <div style={{ padding: '8px 12px' }} className="opa-muted">

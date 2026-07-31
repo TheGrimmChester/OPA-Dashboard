@@ -5,13 +5,14 @@ import {
   FiActivity, FiDatabase, FiSettings, FiBarChart2, FiGitBranch, FiShield,
   FiLayers, FiX,
 } from 'react-icons/fi'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
 import {
   Panel, KpiTile, DataTable, Badge, StatusPill, Tabs, EmptyState,
 } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { fmtNum, fmtAgo } from '../theme/format'
+import { loadRunTracesHref } from '../utils/entityLinks'
 import './PerfLab.css'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -82,11 +83,13 @@ function parseJSONField(raw, fallback) {
  */
 export default function PerfLab() {
   const toast = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const scenarios = useApi('/api/perf/scenarios', {}, { noRange: true })
   const runs = useApi('/api/perf/runs', {}, { noRange: true })
   const baselines = useApi('/api/performance/baselines', {}, { noRange: true })
 
-  const [tab, setTab] = useState('design')
+  const initialTab = searchParams.get('tab')
+  const [tab, setTab] = useState(TAB_DEFS.some((t) => t.value === initialTab) ? initialTab : 'design')
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
   const [fanout, setFanout] = useState(false)
@@ -98,7 +101,7 @@ export default function PerfLab() {
   const [compareA, setCompareA] = useState('')
   const [compareB, setCompareB] = useState('')
   const [selectedId, setSelectedId] = useState('')
-  const [activeRunId, setActiveRunId] = useState('')
+  const [activeRunId, setActiveRunId] = useState(searchParams.get('run') || '')
   const [runDetail, setRunDetail] = useState(null)
   const [samples, setSamples] = useState([])
   const [gateResult, setGateResult] = useState(null)
@@ -189,6 +192,28 @@ export default function PerfLab() {
     const t = setInterval(tick, 2000)
     return () => { cancelled = true; clearInterval(t) }
   }, [activeRunId, tab])
+
+  // Deep-link from Trace replay: /perf-lab?run=…&tab=results
+  useEffect(() => {
+    const run = searchParams.get('run')
+    const tabQ = searchParams.get('tab')
+    if (run && run !== activeRunId) {
+      setActiveRunId(run)
+      setTab(TAB_DEFS.some((t) => t.value === tabQ) ? tabQ : 'results')
+    } else if (tabQ && TAB_DEFS.some((t) => t.value === tabQ) && tabQ !== tab && !run) {
+      setTab(tabQ)
+    }
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const p = new URLSearchParams(searchParams)
+    if (activeRunId) p.set('run', activeRunId)
+    else p.delete('run')
+    if (tab && tab !== 'design') p.set('tab', tab)
+    else p.delete('tab')
+    const next = p.toString()
+    if (next !== searchParams.toString()) setSearchParams(p, { replace: true })
+  }, [activeRunId, tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setStep = (i, patch) => {
     const steps = form.steps.map((s, idx) => (idx === i ? { ...s, ...patch } : s))
@@ -493,7 +518,7 @@ export default function PerfLab() {
     { key: 'started_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.started_at)}</span> },
     {
       key: 'id2', header: 'Traces',
-      render: (r) => <Link to={`/traces?load_run_id=${encodeURIComponent(r.id)}`}>Open traces</Link>,
+      render: (r) => <Link to={loadRunTracesHref(r.id)}>Open traces</Link>,
     },
   ]
 
@@ -1005,7 +1030,7 @@ export default function PerfLab() {
             <div style={{ padding: 12, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <span className="opa-mono" style={{ fontSize: 12 }}>{activeRunId || 'No run selected'}</span>
               <StatusPill tone="neutral">{runDetail?.status || '—'}</StatusPill>
-              {activeRunId && <Link to={`/traces?load_run_id=${encodeURIComponent(activeRunId)}`}>Open traces</Link>}
+              {activeRunId && <Link to={loadRunTracesHref(activeRunId)}>Open traces</Link>}
               {activeRunId && (
                 <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => evaluateGate(activeRunId)}>
                   <FiShield size={12} /> SLA gate
@@ -1046,8 +1071,8 @@ export default function PerfLab() {
                 </select>
               </div>
             </div>
-            {compareA && <Link to={`/traces?load_run_id=${encodeURIComponent(compareA)}`}>Traces A</Link>}
-            {compareB && <Link to={`/traces?load_run_id=${encodeURIComponent(compareB)}`}>Traces B</Link>}
+            {compareA && <Link to={loadRunTracesHref(compareA)}>Traces A</Link>}
+            {compareB && <Link to={loadRunTracesHref(compareB)}>Traces B</Link>}
             {!compare && (
               <EmptyState title="Pick two runs" hint="Compare percentiles and error rate deltas between A and B." />
             )}
