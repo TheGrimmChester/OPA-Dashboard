@@ -2,7 +2,44 @@
    Only colors via design-system CSS vars; layout is local to this page. */
 
 /* ---- Waterfall ---- */
-.tw-wrap { width: 100%; }
+.tw-wrap { width: 100%; min-width: 0; }
+.tw-banner {
+  margin: 0 0 8px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--warn-subtle, var(--surface-2));
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--fs-12, 12px);
+}
+.tw-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px 0;
+  flex-wrap: wrap;
+}
+.tw-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-12, 12px);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.tw-count { font-size: var(--fs-12, 12px); font-variant-numeric: tabular-nums; }
+.tw-scroller {
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-1);
+}
+.tw-group-chevron { flex: none; color: var(--text-muted); }
+.tw-group-count { color: var(--text-muted); font-weight: 600; margin-left: 4px; }
+.tw-row-group { background: var(--surface-2); }
+.tw-bar-group { opacity: 0.75; }
 .tw-axis {
   position: relative;
   height: 18px;
