@@ -15,7 +15,7 @@ const API = import.meta.env.VITE_API_URL || ''
 const SEV_KEY = 'opa.security.min_severity'
 
 const SCANNER_OPTS = [
-  { id: 'secrets', label: 'Secrets (lite)', mode: 'lite' },
+  { id: 'secrets', label: 'Secrets (gitleaks|lite)', mode: 'gitleaks' },
   { id: 'sast', label: 'SAST (lite)', mode: 'lite' },
   { id: 'iac', label: 'IaC (stub)', mode: 'stub' },
   { id: 'container', label: 'Container (stub)', mode: 'stub' },
@@ -652,7 +652,7 @@ export default function Security() {
       <div className="opa-page-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div>
           <h1 className="opa-page-title">Security</h1>
-          <div className="opa-page-sub">CVE reachability · IAST · secrets · SAST-lite · IaC · scan runs · Repo Watch · AppSec Gate · AI Review</div>
+          <div className="opa-page-sub">CVE reachability · IAST · secrets (gitleaks|lite) · SAST-lite · IaC · scan runs · Repo Watch · AppSec Gate · AI Review</div>
         </div>
         <button type="button" className="opa-btn primary" disabled={busy} onClick={() => selectTab('scans')}>
           <FiPlay size={12} /> Start scan
@@ -746,6 +746,9 @@ export default function Security() {
               </select>
             </label>
           }>
+          <div className="opa-muted" style={{ fontSize: 11, padding: '8px 12px 0' }}>
+            Detector chip shows <Badge>gitleaks</Badge> when the Agent image has the CLI, otherwise <Badge>embedded-secret-scan</Badge> (lite regex).
+          </div>
           <DataTable columns={secretCols} rows={filteredSecrets} rowKey={(r, i) => `${r.rule}:${r.file}:${i}`} maxHeight={480} />
         </Panel>
       )}
@@ -775,7 +778,7 @@ export default function Security() {
               </button>
             }>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Runs embedded lite/stub scanners against the Agent workspace mount (<code>{workspace}</code>).
+              Runs workspace scanners against the Agent mount (<code>{workspace}</code>). Secrets use Gitleaks when installed, otherwise embedded lite regex; SAST/IaC/container remain lite/stub.
               IAST is runtime-only and is not started here. CI scripts can still POST <code>/v1/security/*</code> directly.
             </p>
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -859,7 +862,8 @@ export default function Security() {
                   summary: parseSummary(runDetail),
                   findings: runFindings?.counts,
                   error: runDetail?.error,
-                  honesty: 'Lite/stub embedded scanners',
+                  honesty: parseSummary(runDetail)?.honesty || 'gitleaks|lite secrets; other scanners lite/stub',
+                  secrets_detector: parseSummary(runDetail)?.secrets_detector,
                 }, null, 2)}
               </pre>
             </Panel>
