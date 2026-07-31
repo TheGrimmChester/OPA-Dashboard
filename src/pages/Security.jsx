@@ -6,12 +6,12 @@ import {
   FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiTrash2, FiEdit2,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
+import { apiUrl } from '../utils/apiBase'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { securityRunHref, serviceHref } from '../utils/entityLinks'
 
-const API = import.meta.env.VITE_API_URL || ''
 const SEV_KEY = 'opa.security.min_severity'
 
 /** Web host for GitHub links (public or enterprise) from connector meta. */
@@ -200,8 +200,8 @@ export default function Security() {
     let cancelled = false
     setReposLoading(true)
     Promise.all([
-      axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/watched`),
-      axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/repos`),
+      axios.get(apiUrl(`/api/connectors/${encodeURIComponent(activeConnector)}/watched`)),
+      axios.get(apiUrl(`/api/connectors/${encodeURIComponent(activeConnector)}/repos`)),
     ]).then(([watchedRes, reposRes]) => {
       if (cancelled) return
       const watched = watchedRes.data?.watched || []
@@ -241,7 +241,7 @@ export default function Security() {
   useEffect(() => {
     if (tab !== 'watch') return undefined
     let cancelled = false
-    axios.get(`${API}/api/scm/contexts`).then((res) => {
+    axios.get(apiUrl('/api/scm/contexts')).then((res) => {
       if (!cancelled) setContexts(res.data?.contexts || [])
     }).catch(() => {
       if (!cancelled) setContexts([])
@@ -263,10 +263,10 @@ export default function Security() {
     let cancelled = false
     setPullsLoading(true)
     Promise.all(selectedReviewRepos.map((repo) => Promise.all([
-      axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/pulls`, { params: { repo } })
+      axios.get(apiUrl(`/api/connectors/${encodeURIComponent(activeConnector)}/pulls`), { params: { repo } })
         .then((res) => [repo, res.data?.pulls || []])
         .catch(() => [repo, []]),
-      axios.get(`${API}/api/scm/contexts`, { params: { for_repo: repo } })
+      axios.get(apiUrl('/api/scm/contexts'), { params: { for_repo: repo } })
         .then((res) => res.data?.summary || [])
         .catch(() => []),
     ]))).then((rows) => {
@@ -290,7 +290,7 @@ export default function Security() {
     if (!lastStackId || tab !== 'watch') return undefined
     let cancelled = false
     const tick = () => {
-      axios.get(`${API}/api/scm/opa-review/stacks/${encodeURIComponent(lastStackId)}`)
+      axios.get(apiUrl(`/api/scm/opa-review/stacks/${encodeURIComponent(lastStackId)}`))
         .then((res) => { if (!cancelled) setStackStatus(res.data) })
         .catch(() => {})
     }
@@ -426,7 +426,7 @@ export default function Security() {
         dispatch: true,
       }
       if (form.scanners.length) body.scanners = form.scanners
-      const { data } = await axios.post(`${API}/api/security/runs`, body)
+      const { data } = await axios.post(apiUrl('/api/security/runs'), body)
       const rid = data.security_run_id || data.id
       if (rid) {
         setActiveRunId(rid)
@@ -453,7 +453,7 @@ export default function Security() {
     setBusy(true)
     try {
       const repos = patForm.repos.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
-      const { data } = await axios.post(`${API}/api/connectors/github/pat`, {
+      const { data } = await axios.post(apiUrl('/api/connectors/github/pat'), {
         token: patForm.token,
         login: patForm.login || 'pat-user',
         repos,
@@ -482,7 +482,7 @@ export default function Security() {
 
   const openGitHubInstall = async () => {
     try {
-      const { data } = await axios.get(`${API}/api/connectors/github/install-url`)
+      const { data } = await axios.get(apiUrl('/api/connectors/github/install-url'))
       if (data.install_url) {
         window.open(data.install_url, '_blank', 'noopener')
       } else {
@@ -537,7 +537,7 @@ export default function Security() {
       }
       if (editForm.token.trim()) body.token = editForm.token.trim()
       const { data } = await axios.patch(
-        `${API}/api/connectors/${encodeURIComponent(activeConnector)}`,
+        apiUrl(`/api/connectors/${encodeURIComponent(activeConnector)}`),
         body,
       )
       flash('ok', 'Connector updated', data.connector?.account_login || activeConnector)
@@ -558,7 +558,7 @@ export default function Security() {
     if (!window.confirm(`Delete connector ${cid}? Watched repos for it will be disabled.`)) return
     setBusy(true)
     try {
-      await axios.delete(`${API}/api/connectors/${encodeURIComponent(cid)}`)
+      await axios.delete(apiUrl(`/api/connectors/${encodeURIComponent(cid)}`))
       flash('ok', 'Connector deleted', cid)
       if (activeConnector === cid) {
         selectConnector('')
@@ -684,7 +684,7 @@ export default function Security() {
     }
     setBusy(true)
     try {
-      const { data } = await axios.put(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/watched`, {
+      const { data } = await axios.put(apiUrl(`/api/connectors/${encodeURIComponent(activeConnector)}/watched`), {
         repos: payload,
       })
       setWatchedRows(data.watched || [])
@@ -700,7 +700,7 @@ export default function Security() {
   const saveCursorKey = async (clear = false) => {
     setBusy(true)
     try {
-      await axios.post(`${API}/api/scm/settings/cursor-key`, clear ? { clear: true } : { api_key: cursorKey })
+      await axios.post(apiUrl('/api/scm/settings/cursor-key'), clear ? { clear: true } : { api_key: cursorKey })
       flash('ok', clear ? 'OPA Review API key cleared' : 'OPA Review API key saved')
       setCursorKey('')
       scmSettings.reload?.()
@@ -714,7 +714,7 @@ export default function Security() {
   const simulateJob = async () => {
     setBusy(true)
     try {
-      const { data } = await axios.post(`${API}/api/scm/simulate`, {
+      const { data } = await axios.post(apiUrl('/api/scm/simulate'), {
         repo: patForm.repos.split(/[\s,]+/).filter(Boolean)[0] || 'local/smoke-repo',
         pr: 1,
         service: form.service || 'node-smoke',
@@ -732,7 +732,7 @@ export default function Security() {
 
   const retryJob = async (id) => {
     try {
-      await axios.post(`${API}/api/scm/jobs/${encodeURIComponent(id)}/retry`)
+      await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(id)}/retry`))
       flash('ok', 'Job re-queued', id)
       scmJobs.reload?.()
     } catch (e) {
@@ -745,7 +745,7 @@ export default function Security() {
       return
     }
     try {
-      await axios.post(`${API}/api/scm/jobs/${encodeURIComponent(id)}/cancel`)
+      await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(id)}/cancel`))
       flash('ok', 'Job cancelled', id)
       scmJobs.reload?.()
     } catch (e) {
@@ -771,7 +771,7 @@ export default function Security() {
     }
     setBusy(true)
     try {
-      const { data } = await axios.post(`${API}/api/scm/opa-review/stack`, {
+      const { data } = await axios.post(apiUrl('/api/scm/opa-review/stack'), {
         items,
         force: !!aiReviewForm.force,
         ai_only: !!aiReviewForm.ai_only,
@@ -798,7 +798,7 @@ export default function Security() {
   const rerunAiOnly = async (job) => {
     if (!job?.id || !job.pr_number) return
     try {
-      const { data } = await axios.post(`${API}/api/scm/jobs/${encodeURIComponent(job.id)}/ai-review`, {
+      const { data } = await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(job.id)}/ai-review`), {
         force: true,
         ai_only: true,
       })
@@ -820,7 +820,7 @@ export default function Security() {
     setBusy(true)
     try {
       if (ctxEditingId) {
-        await axios.patch(`${API}/api/scm/contexts/${encodeURIComponent(ctxEditingId)}`, {
+        await axios.patch(apiUrl(`/api/scm/contexts/${encodeURIComponent(ctxEditingId)}`), {
           title,
           body_markdown: ctxForm.body_markdown,
           repo_full_name: repo,
@@ -828,7 +828,7 @@ export default function Security() {
         })
         flash('ok', 'Context updated')
       } else {
-        await axios.post(`${API}/api/scm/contexts`, {
+        await axios.post(apiUrl('/api/scm/contexts'), {
           title,
           body_markdown: ctxForm.body_markdown,
           repo_full_name: repo,
@@ -850,7 +850,7 @@ export default function Security() {
   const deleteContext = async (id) => {
     if (!id || !window.confirm('Delete this reviewer context?')) return
     try {
-      await axios.delete(`${API}/api/scm/contexts/${encodeURIComponent(id)}`)
+      await axios.delete(apiUrl(`/api/scm/contexts/${encodeURIComponent(id)}`))
       flash('ok', 'Context deleted')
       setWatchRefresh((n) => n + 1)
     } catch (e) {
@@ -866,7 +866,7 @@ export default function Security() {
     }
     setBusy(true)
     try {
-      const { data } = await axios.post(`${API}/api/scm/contexts/generate`, {
+      const { data } = await axios.post(apiUrl('/api/scm/contexts/generate'), {
         repo_full_name: repo,
         connector_id: activeConnector || undefined,
         title: ctxForm.title || undefined,
@@ -900,7 +900,7 @@ export default function Security() {
     }
     setBusy(true)
     try {
-      const { data } = await axios.put(`${API}/api/scm/context-links`, {
+      const { data } = await axios.put(apiUrl('/api/scm/context-links'), {
         repo_full_names: names,
         clear: !!clear,
       })
@@ -923,8 +923,8 @@ export default function Security() {
     const tick = async () => {
       try {
         const [d, f] = await Promise.all([
-          axios.get(`${API}/api/security/runs/${encodeURIComponent(activeRunId)}`),
-          axios.get(`${API}/api/security/runs/${encodeURIComponent(activeRunId)}/findings`),
+          axios.get(apiUrl(`/api/security/runs/${encodeURIComponent(activeRunId)}`)),
+          axios.get(apiUrl(`/api/security/runs/${encodeURIComponent(activeRunId)}/findings`)),
         ])
         if (cancelled) return
         setRunDetail(d.data)

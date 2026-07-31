@@ -7,6 +7,7 @@ import {
 } from 'react-icons/fi'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
+import { apiUrl } from '../utils/apiBase'
 import {
   Panel, KpiTile, DataTable, Badge, StatusPill, Tabs, EmptyState,
 } from '../components/ui'
@@ -15,7 +16,6 @@ import { fmtNum, fmtAgo } from '../theme/format'
 import { loadRunTracesHref } from '../utils/entityLinks'
 import './PerfLab.css'
 
-const API = import.meta.env.VITE_API_URL || ''
 
 const TAB_DEFS = [
   { value: 'design', label: 'Design', icon: <FiLayers size={13} /> },
@@ -41,7 +41,7 @@ const emptyStep = () => ({
   type: 'http',
   name: 'Request',
   method: 'GET',
-  url: `${API || 'http://127.0.0.1:8080'}/api/health`,
+  url: `${(import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080')}/api/health`,
   body: '',
   think_ms: 50,
   headers: {},
@@ -179,8 +179,8 @@ export default function PerfLab() {
     const tick = async () => {
       try {
         const [d, s] = await Promise.all([
-          axios.get(`${API}/api/perf/runs/${encodeURIComponent(activeRunId)}`),
-          axios.get(`${API}/api/perf/runs/${encodeURIComponent(activeRunId)}/samples`),
+          axios.get(apiUrl(`/api/perf/runs/${encodeURIComponent(activeRunId)}`)),
+          axios.get(apiUrl(`/api/perf/runs/${encodeURIComponent(activeRunId)}/samples`)),
         ])
         if (!cancelled) {
           setRunDetail(d.data)
@@ -252,7 +252,7 @@ export default function PerfLab() {
     setBusy(true)
     try {
       const firstHttp = form.steps.find((s) => !s.type || s.type === 'http') || {}
-      const { data } = await axios.post(`${API}/api/perf/scenarios/upsert`, {
+      const { data } = await axios.post(apiUrl('/api/perf/scenarios/upsert'), {
         id: selectedId || undefined,
         name: form.name,
         target_url: firstHttp.url || form.target_url,
@@ -279,7 +279,7 @@ export default function PerfLab() {
   const loadScenario = async (id) => {
     setBusy(true)
     try {
-      const { data } = await axios.get(`${API}/api/perf/scenarios/${encodeURIComponent(id)}`)
+      const { data } = await axios.get(apiUrl(`/api/perf/scenarios/${encodeURIComponent(id)}`))
       let steps = parseJSONField(data.steps_json, [])
       if (!Array.isArray(steps) || !steps.length) {
         steps = [{
@@ -323,7 +323,7 @@ export default function PerfLab() {
     try {
       const text = await file.text()
       const { data } = await axios.post(
-        `${API}/api/perf/scenarios/import-jmx?name=${encodeURIComponent(file.name.replace(/\.jmx$/i, ''))}`,
+        apiUrl(`/api/perf/scenarios/import-jmx?name=${encodeURIComponent(file.name.replace(/\.jmx$/i, ''))}`),
         { name: file.name.replace(/\.jmx$/i, ''), jmx: text },
       )
       if (data.id) {
@@ -360,7 +360,7 @@ export default function PerfLab() {
         ? (body.log ? body : { har: body })
         : (Array.isArray(body) ? { xhr: body } : body)
       const { data } = await axios.post(
-        `${API}/api/perf/scenarios/import-${kind}?${q}`,
+        apiUrl(`/api/perf/scenarios/import-${kind}?${q}`),
         payload,
       )
       setCapturePreview(data)
@@ -400,7 +400,7 @@ export default function PerfLab() {
     if (!selectedId) { flash('warn', 'Save the scenario first'); return }
     setBusy(true)
     try {
-      const { data } = await axios.post(`${API}/api/perf/scenarios/${encodeURIComponent(selectedId)}/validate`)
+      const { data } = await axios.post(apiUrl(`/api/perf/scenarios/${encodeURIComponent(selectedId)}/validate`))
       flash(data.ok === false ? 'error' : 'ok', 'Validation finished', JSON.stringify(data).slice(0, 400))
       setTab('results')
     } catch (e) {
@@ -415,7 +415,7 @@ export default function PerfLab() {
     if (!sid) { flash('warn', 'Save or select a scenario first'); return }
     setBusy(true)
     try {
-      const { data } = await axios.post(`${API}/api/perf/runs`, {
+      const { data } = await axios.post(apiUrl('/api/perf/runs'), {
         scenario_id: sid,
         vus: form.vus,
         fanout,
@@ -446,12 +446,12 @@ export default function PerfLab() {
 
   const downloadJmx = () => {
     if (!selectedId) return
-    window.open(`${API}/api/perf/scenarios/${encodeURIComponent(selectedId)}/export-jmx`, '_blank')
+    window.open(apiUrl(`/api/perf/scenarios/${encodeURIComponent(selectedId)}/export-jmx`), '_blank')
   }
 
   const downloadCapture = (kind) => {
     if (!selectedId) return
-    window.open(`${API}/api/perf/scenarios/${encodeURIComponent(selectedId)}/export-${kind}`, '_blank')
+    window.open(apiUrl(`/api/perf/scenarios/${encodeURIComponent(selectedId)}/export-${kind}`), '_blank')
   }
 
   const evaluateGate = async (runId) => {
@@ -459,7 +459,7 @@ export default function PerfLab() {
     if (!rid) { flash('warn', 'Select a run first'); return }
     setBusy(true)
     try {
-      const { data } = await axios.get(`${API}/api/perf/runs/${encodeURIComponent(rid)}/gate`)
+      const { data } = await axios.get(apiUrl(`/api/perf/runs/${encodeURIComponent(rid)}/gate`))
       setGateResult(data)
       setTab('sla')
       flash(data.pass ? 'ok' : 'error', data.pass ? 'SLA passed' : 'SLA failed', (data.reasons || []).join('; ') || rid)
