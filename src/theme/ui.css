@@ -192,6 +192,10 @@ html.opa-page-fullscreen .opa-content { padding-top: var(--sp-3); }
 .opa-btn.primary:hover { background: var(--accent-hover); }
 .opa-btn.ghost { background: none; border-color: transparent; color: var(--text-secondary); }
 .opa-btn.ghost:hover { background: var(--surface-1); color: var(--text-primary); }
+.opa-btn.opa-btn-compact { padding: 2px 8px; font-size: var(--fs-12); }
+.opa-btn:disabled { opacity: .45; cursor: not-allowed; }
+.opa-multiselect-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.opa-multiselect-actions { display: inline-flex; align-items: center; gap: 2px; }
 .opa-input, .opa-select { padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-default); background: var(--bg-sunken); color: var(--text-primary); font-size: var(--fs-13); font-family: var(--font-ui); }
 .opa-input:focus, .opa-select:focus { outline: none; border-color: var(--accent); }
 
