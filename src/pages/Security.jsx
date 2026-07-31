@@ -112,7 +112,7 @@ export default function Security() {
   const profiles = useApi('/api/security/profiles', {}, { noRange: true, skip: tab !== 'scans' })
   const services = useApi('/api/services', {}, { noRange: true, skip: tab !== 'scans' })
   const connectors = useApi('/api/connectors', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'jobs' })
-  const scmJobs = useApi('/api/scm/jobs', { limit: 50 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
+  const scmJobs = useApi('/api/scm/jobs', { limit: 200 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
   const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' && tab !== 'jobs' })
   const [patForm, setPatForm] = useState({ token: '', login: '', repos: '' })
   const [editForm, setEditForm] = useState({ login: '', display_name: '', token: '' })
@@ -253,6 +253,13 @@ export default function Security() {
     const id = setInterval(tick, 4000)
     return () => { cancelled = true; clearInterval(id) }
   }, [lastStackId, tab])
+
+  // Keep PR Jobs fresh while a stack drain is in flight (running/queued/waiting).
+  useEffect(() => {
+    if (tab !== 'jobs') return undefined
+    const id = setInterval(() => { scmJobs.reload?.() }, 4000)
+    return () => clearInterval(id)
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep tab / run / connector in sync with the URL (and strip stale run= on Watch).
   useEffect(() => {
@@ -892,6 +899,54 @@ export default function Security() {
       return {}
     }
   }
+
+  const scmJobStatusTone = (status) => {
+    switch (String(status || '').toLowerCase()) {
+      case 'completed': return 'ok'
+      case 'running': return 'warn'
+      case 'queued':
+      case 'waiting': return 'neutral'
+      case 'failed':
+      case 'error': return 'error'
+      default: return 'neutral'
+    }
+  }
+
+  const scmJobStatusRank = (status) => {
+    switch (String(status || '').toLowerCase()) {
+      case 'running': return 0
+      case 'queued': return 1
+      case 'waiting': return 2
+      case 'failed':
+      case 'error': return 3
+      case 'completed': return 4
+      default: return 5
+    }
+  }
+
+  const scmJobRows = useMemo(() => {
+    const rows = [...(scmJobs.data?.jobs || [])]
+    rows.sort((a, b) => {
+      const ra = scmJobStatusRank(a.status)
+      const rb = scmJobStatusRank(b.status)
+      if (ra !== rb) return ra - rb
+      return String(b.started_at || '').localeCompare(String(a.started_at || ''))
+    })
+    return rows
+  }, [scmJobs.data])
+
+  const scmJobCounts = useMemo(() => {
+    const fromApi = scmJobs.data?.counts
+    if (fromApi && typeof fromApi === 'object') return fromApi
+    const counts = {}
+    for (const j of scmJobRows) {
+      const st = j.status || 'unknown'
+      counts[st] = (counts[st] || 0) + 1
+    }
+    return counts
+  }, [scmJobs.data, scmJobRows])
+
+  const scmJobTotal = scmJobs.data?.total ?? scmJobRows.length
 
   const vulnCols = [
     { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
@@ -1856,15 +1911,36 @@ export default function Security() {
       )}
 
       {tab === 'jobs' && (
-        <Panel title="SCM / PR jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading} error={scmJobs.error}
-          empty={!scmJobs.loading && !(scmJobs.data?.jobs || []).length}
-          emptyText="No jobs yet — open a PR on a watched repo, or Simulate from Repo Watch"
+        <Panel title="SCM / PR jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading && !scmJobRows.length} error={scmJobs.error}
+          empty={!scmJobs.loading && !scmJobRows.length}
+          emptyText="No jobs yet — open a PR on a watched repo, or run an OPA Review stack from Repo Watch"
           actions={<button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}>
+          <div style={{ padding: '8px 12px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', fontSize: 12, borderBottom: '1px solid var(--border, #e5e7eb)' }}>
+            <span className="opa-muted">{fmtNum(scmJobTotal)} total</span>
+            {['running', 'queued', 'waiting', 'completed', 'failed', 'error'].map((st) => (
+              scmJobCounts[st] ? (
+                <span key={st} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                  <StatusPill tone={scmJobStatusTone(st)}>{st}</StatusPill>
+                  <span className="opa-mono">{scmJobCounts[st]}</span>
+                </span>
+              ) : null
+            ))}
+            <span className="opa-muted">· auto-refresh 4s · active first</span>
+          </div>
           <DataTable
             columns={[
               { key: 'id', header: 'Job', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.id).slice(0, 18)}</span> },
               { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
               { key: 'pr_number', header: 'PR', render: (r) => (r.pr_number ? `#${r.pr_number}` : '—') },
+              {
+                key: 'stack', header: 'Stack',
+                render: (r) => {
+                  const sid = r.summary?.stack_id || ''
+                  return sid
+                    ? <span className="opa-mono" style={{ fontSize: 11 }} title={sid}>{String(sid).slice(0, 14)}</span>
+                    : '—'
+                },
+              },
               {
                 key: 'commit_sha', header: 'SHA',
                 render: (r) => {
@@ -1878,7 +1954,7 @@ export default function Security() {
               {
                 key: 'status', header: 'Status',
                 render: (r) => (
-                  <StatusPill tone={r.status === 'completed' ? 'ok' : r.status === 'failed' || r.status === 'error' ? 'error' : 'neutral'}>
+                  <StatusPill tone={scmJobStatusTone(r.status)}>
                     {r.status}
                   </StatusPill>
                 ),
@@ -1926,7 +2002,7 @@ export default function Security() {
                 ),
               },
             ]}
-            rows={scmJobs.data?.jobs || []}
+            rows={scmJobRows}
             rowKey={(r) => r.id}
             maxHeight={480}
           />
