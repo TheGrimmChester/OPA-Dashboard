@@ -14,6 +14,51 @@ import { securityRunHref, serviceHref } from '../utils/entityLinks'
 const API = import.meta.env.VITE_API_URL || ''
 const SEV_KEY = 'opa.security.min_severity'
 
+/** Web host for GitHub links (public or enterprise) from connector meta. */
+function githubWebOrigin(connector) {
+  let meta = {}
+  try {
+    meta = typeof connector?.meta_json === 'string'
+      ? JSON.parse(connector.meta_json || '{}')
+      : (connector?.meta_json || {})
+  } catch {
+    meta = {}
+  }
+  const raw = String(meta.html_url_base || meta.github_host || meta.web_url || meta.base_url || meta.host || '').trim()
+  if (!raw) return 'https://github.com'
+  try {
+    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+    const u = new URL(withScheme)
+    // api.github.com / github.example/api/v3 → web origin
+    if (u.hostname === 'api.github.com') return 'https://github.com'
+    u.pathname = ''
+    u.search = ''
+    u.hash = ''
+    return u.origin
+  } catch {
+    return 'https://github.com'
+  }
+}
+
+function scmJobRepoHref(job, connectorList = []) {
+  const direct = job?.repo_url || job?.summary?.repo_url || job?.summary?.html_repo_url
+  if (direct) return String(direct)
+  const repo = String(job?.repo_full_name || '').trim()
+  if (!repo || !repo.includes('/')) return ''
+  const conn = connectorList.find((c) => c.id === job.connector_id)
+  return `${githubWebOrigin(conn)}/${repo}`
+}
+
+function scmJobPrHref(job, connectorList = []) {
+  const direct = job?.pr_url || job?.html_url || job?.summary?.pr_url || job?.summary?.html_url
+  if (direct && /\/pull\/\d+/.test(String(direct))) return String(direct)
+  const repo = String(job?.repo_full_name || '').trim()
+  const pr = Number(job?.pr_number || 0)
+  if (!repo || !repo.includes('/') || pr <= 0) return ''
+  const conn = connectorList.find((c) => c.id === job.connector_id)
+  return `${githubWebOrigin(conn)}/${repo}/pull/${pr}`
+}
+
 const SCANNER_OPTS = [
   { id: 'secrets', label: 'Secrets (gitleaks|lite)', mode: 'gitleaks' },
   { id: 'sast', label: 'SAST (lite)', mode: 'lite' },
@@ -695,6 +740,19 @@ export default function Security() {
     }
   }
 
+  const cancelJob = async (id) => {
+    if (!window.confirm(`Cancel job ${String(id).slice(0, 18)}…? Waiting/queued jobs stop immediately; running work is interrupted best-effort.`)) {
+      return
+    }
+    try {
+      await axios.post(`${API}/api/scm/jobs/${encodeURIComponent(id)}/cancel`)
+      flash('ok', 'Job cancelled', id)
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'Cancel failed', e.response?.data || e.message)
+    }
+  }
+
   const runAiReview = async () => {
     const items = []
     selectedReviewRepos.forEach((repo) => {
@@ -906,6 +964,7 @@ export default function Security() {
       case 'running': return 'warn'
       case 'queued':
       case 'waiting': return 'neutral'
+      case 'cancelled': return 'neutral'
       case 'failed':
       case 'error': return 'error'
       default: return 'neutral'
@@ -919,8 +978,9 @@ export default function Security() {
       case 'waiting': return 2
       case 'failed':
       case 'error': return 3
-      case 'completed': return 4
-      default: return 5
+      case 'cancelled': return 4
+      case 'completed': return 5
+      default: return 6
     }
   }
 
@@ -947,6 +1007,12 @@ export default function Security() {
   }, [scmJobs.data, scmJobRows])
 
   const scmJobTotal = scmJobs.data?.total ?? scmJobRows.length
+
+  const ExtLink = ({ href, children, className, style, title }) => (
+    href
+      ? <a href={href} target="_blank" rel="noopener noreferrer" className={className} style={style} title={title || href}>{children}</a>
+      : <span className={className} style={style}>{children}</span>
+  )
 
   const vulnCols = [
     { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
@@ -1917,7 +1983,7 @@ export default function Security() {
           actions={<button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}>
           <div style={{ padding: '8px 12px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', fontSize: 12, borderBottom: '1px solid var(--border, #e5e7eb)' }}>
             <span className="opa-muted">{fmtNum(scmJobTotal)} total</span>
-            {['running', 'queued', 'waiting', 'completed', 'failed', 'error'].map((st) => (
+            {['running', 'queued', 'waiting', 'completed', 'cancelled', 'failed', 'error'].map((st) => (
               scmJobCounts[st] ? (
                 <span key={st} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                   <StatusPill tone={scmJobStatusTone(st)}>{st}</StatusPill>
@@ -1930,8 +1996,23 @@ export default function Security() {
           <DataTable
             columns={[
               { key: 'id', header: 'Job', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.id).slice(0, 18)}</span> },
-              { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
-              { key: 'pr_number', header: 'PR', render: (r) => (r.pr_number ? `#${r.pr_number}` : '—') },
+              { key: 'repo_full_name', header: 'Repo', render: (r) => {
+                const href = scmJobRepoHref(r, connectorList)
+                return (
+                  <ExtLink href={href} className="opa-mono" title={href || r.repo_full_name}>
+                    {r.repo_full_name || '—'}
+                  </ExtLink>
+                )
+              } },
+              { key: 'pr_number', header: 'PR', render: (r) => {
+                if (!r.pr_number) return '—'
+                const href = scmJobPrHref(r, connectorList)
+                return (
+                  <ExtLink href={href} className="opa-mono" title={href || `PR #${r.pr_number}`}>
+                    #{r.pr_number}
+                  </ExtLink>
+                )
+              } },
               {
                 key: 'stack', header: 'Stack',
                 render: (r) => {
@@ -1994,6 +2075,9 @@ export default function Security() {
                 key: 'actions', header: '',
                 render: (r) => (
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {['queued', 'waiting', 'running'].includes(String(r.status || '').toLowerCase()) ? (
+                      <button type="button" className="opa-btn ghost" onClick={() => cancelJob(r.id)}>Cancel</button>
+                    ) : null}
                     <button type="button" className="opa-btn ghost" onClick={() => retryJob(r.id)}>Retry</button>
                     {r.pr_number ? (
                       <button type="button" className="opa-btn ghost" onClick={() => rerunAiOnly(r)}>Re-run OPA Review</button>
