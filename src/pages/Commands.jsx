@@ -17,6 +17,7 @@ export default function Commands() {
   const totalRequests = rows.reduce((s, r) => s + (r.requests || 0), 0)
   const totalSuppressed = rows.reduce((s, r) => s + (r.suppressed || 0), 0)
   const limited = rows.filter((r) => (r.sample_ratio ?? 1) < 0.999).length
+  const maxReq = Math.max(1, ...rows.map((x) => x.requests || 0))
 
   const columns = [
     {
@@ -44,7 +45,7 @@ export default function Commands() {
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <InlineBar
             value={r.requests || 0}
-            max={Math.max(1, ...rows.map((x) => x.requests || 0))}
+            max={maxReq}
             label={fmtNum(r.requests || 0)}
             color="var(--accent)"
             width={80}
