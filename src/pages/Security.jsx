@@ -82,28 +82,79 @@ export default function Security() {
   const [patForm, setPatForm] = useState({ token: '', login: '', repos: '' })
   const [cursorKey, setCursorKey] = useState('')
   const [watchedRows, setWatchedRows] = useState([])
+  const [availableRepos, setAvailableRepos] = useState([])
+  const [repoPick, setRepoPick] = useState({})
+  const [reposLoading, setReposLoading] = useState(false)
+  const [reposMeta, setReposMeta] = useState({ error: '', note: '', mock: false })
   const [watchPolicy, setWatchPolicy] = useState({
     checks: { secrets: true, sast: true, iac: true, sbom: true, ai_review: true },
     ai_blocking: false,
   })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
+  const [watchRefresh, setWatchRefresh] = useState(0)
 
   useEffect(() => {
     if (!activeConnector || tab !== 'watch') {
       setWatchedRows([])
+      setAvailableRepos([])
+      setRepoPick({})
+      setReposMeta({ error: '', note: '', mock: false })
       return undefined
     }
     let cancelled = false
-    axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/watched`)
-      .then((r) => { if (!cancelled) setWatchedRows(r.data?.watched || []) })
-      .catch(() => { if (!cancelled) setWatchedRows([]) })
+    setReposLoading(true)
+    Promise.all([
+      axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/watched`),
+      axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/repos`),
+    ]).then(([watchedRes, reposRes]) => {
+      if (cancelled) return
+      const watched = watchedRes.data?.watched || []
+      const repos = reposRes.data?.repos || []
+      setWatchedRows(watched)
+      setAvailableRepos(repos)
+      setReposMeta({
+        error: reposRes.data?.error || '',
+        note: reposRes.data?.note || reposRes.data?.honesty || '',
+        mock: !!reposRes.data?.mock,
+      })
+      const pick = {}
+      for (const r of repos) {
+        const name = r.full_name || r.repo_full_name
+        if (name) pick[name] = false
+      }
+      for (const w of watched) {
+        if (w.repo_full_name) pick[w.repo_full_name] = !!w.enabled
+      }
+      setRepoPick(pick)
+    }).catch((e) => {
+      if (cancelled) return
+      setWatchedRows([])
+      setAvailableRepos([])
+      setRepoPick({})
+      setReposMeta({
+        error: e.response?.data?.error || e.message || 'failed to load repos',
+        note: e.response?.data?.note || '',
+        mock: false,
+      })
+    }).finally(() => {
+      if (!cancelled) setReposLoading(false)
+    })
     return () => { cancelled = true }
-  }, [activeConnector, tab])
+  }, [activeConnector, tab, watchRefresh])
 
   useEffect(() => {
     const c = searchParams.get('connector')
     if (c) setActiveConnector(c)
   }, [searchParams])
+
+  // Auto-select a live connector when the watch tab opens.
+  useEffect(() => {
+    if (tab !== 'watch' || activeConnector) return
+    const list = connectors.data?.connectors || []
+    if (!list.length) return
+    const preferred = list.find((x) => x.has_token) || list[0]
+    if (preferred?.id) setActiveConnector(preferred.id)
+  }, [tab, activeConnector, connectors.data])
 
   const s = summary.data || {}
   const is = iastSum.data || {}
@@ -221,10 +272,17 @@ export default function Security() {
         repos,
       })
       const id = data.connector?.id
-      if (id) setActiveConnector(id)
+      if (id) {
+        setActiveConnector(id)
+        const p = new URLSearchParams(searchParams)
+        p.set('tab', 'watch')
+        p.set('connector', id)
+        setSearchParams(p, { replace: true })
+      }
       flash('ok', 'GitHub PAT connected', data.honesty)
       connectors.reload?.()
       setPatForm({ token: '', login: patForm.login, repos: patForm.repos })
+      setWatchRefresh((n) => n + 1)
     } catch (e) {
       flash('error', 'PAT connect failed', e.response?.data || e.message)
     } finally {
@@ -245,31 +303,93 @@ export default function Security() {
     }
   }
 
+  const selectConnector = (id) => {
+    setActiveConnector(id)
+    const p = new URLSearchParams(searchParams)
+    p.set('tab', 'watch')
+    if (id) p.set('connector', id)
+    else p.delete('connector')
+    setSearchParams(p, { replace: true })
+  }
+
+  const toggleRepoPick = (fullName) => {
+    setRepoPick((prev) => ({ ...prev, [fullName]: !prev[fullName] }))
+  }
+
+  const toggleWatchedEnabled = (fullName) => {
+    setWatchedRows((rows) => rows.map((r) => (
+      r.repo_full_name === fullName ? { ...r, enabled: !r.enabled } : r
+    )))
+    setRepoPick((prev) => {
+      const row = watchedRows.find((r) => r.repo_full_name === fullName)
+      const nextOn = !(row?.enabled)
+      return { ...prev, [fullName]: nextOn }
+    })
+  }
+
   const saveWatched = async () => {
     if (!activeConnector) {
       flash('warn', 'Select a connector first')
       return
     }
-    const repos = patForm.repos.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
-    if (!repos.length) {
-      flash('warn', 'Enter repo full names (org/name)')
+    const checks = Object.entries(watchPolicy.checks).filter(([, on]) => on).map(([id]) => id)
+    const defaultChecks = checks.length ? checks : ['secrets', 'sast', 'iac', 'sbom', 'ai_review']
+    const byName = {}
+    for (const w of watchedRows) {
+      if (!w.repo_full_name) continue
+      byName[w.repo_full_name] = {
+        repo_full_name: w.repo_full_name,
+        repo_id: w.repo_id || '',
+        enabled: !!w.enabled,
+        service_name: w.service_name || '',
+        profile: w.profile || form.profile || 'auto',
+        checks: defaultChecks,
+        min_severity: w.min_severity || minSev,
+        ai_blocking: !!watchPolicy.ai_blocking,
+      }
+    }
+    for (const [name, on] of Object.entries(repoPick)) {
+      if (!name) continue
+      if (on) {
+        const avail = availableRepos.find((r) => (r.full_name || r.repo_full_name) === name)
+        byName[name] = {
+          ...(byName[name] || {}),
+          repo_full_name: name,
+          repo_id: avail?.id || byName[name]?.repo_id || '',
+          enabled: true,
+          profile: form.profile || 'auto',
+          checks: defaultChecks,
+          min_severity: minSev,
+          ai_blocking: !!watchPolicy.ai_blocking,
+        }
+      } else if (byName[name]) {
+        byName[name].enabled = false
+      }
+    }
+    for (const name of patForm.repos.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)) {
+      byName[name] = {
+        ...(byName[name] || {}),
+        repo_full_name: name,
+        enabled: true,
+        profile: form.profile || 'auto',
+        checks: defaultChecks,
+        min_severity: minSev,
+        ai_blocking: !!watchPolicy.ai_blocking,
+      }
+    }
+    const payload = Object.values(byName)
+    if (!payload.length) {
+      flash('warn', 'Select at least one repository')
       return
     }
-    const checks = Object.entries(watchPolicy.checks).filter(([, on]) => on).map(([id]) => id)
     setBusy(true)
     try {
       const { data } = await axios.put(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/watched`, {
-        repos: repos.map((repo_full_name) => ({
-          repo_full_name,
-          enabled: true,
-          profile: form.profile || 'auto',
-          checks: checks.length ? checks : ['secrets', 'sast', 'iac', 'sbom', 'ai_review'],
-          min_severity: minSev,
-          ai_blocking: !!watchPolicy.ai_blocking,
-        })),
+        repos: payload,
       })
       setWatchedRows(data.watched || [])
       flash('ok', 'Watched repos updated', `${(data.watched || []).length} repos`)
+      setWatchRefresh((n) => n + 1)
     } catch (e) {
       flash('error', 'Watch update failed', e.response?.data || e.message)
     } finally {
@@ -748,28 +868,41 @@ export default function Security() {
       {tab === 'watch' && (
         <>
           <Panel title="Connectors" icon={<FiShield />}
+            loading={connectors.loading}
+            error={connectors.error}
             actions={
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" className="opa-btn ghost" onClick={openGitHubInstall}>Connect GitHub App</button>
                 <button type="button" className="opa-btn ghost" disabled={busy} onClick={simulateJob}>Simulate PR job</button>
+                <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
+                  <FiRefreshCw size={12} /> Refresh
+                </button>
               </div>
             }>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
               GitHub App is production (webhooks + Check Runs). PAT bootstrap is for local/dev.
               App configured: {connectors.data?.github_app_configured ? 'yes' : 'no'}.
             </p>
+            {!connectors.data?.github_app_configured && (connectors.data?.connectors || []).length === 0 && (
+              <div className="opa-muted" style={{
+                marginBottom: 12, padding: 10, background: 'var(--surface-2)', borderRadius: 6, fontSize: 13,
+              }}>
+                No GitHub App env on the Agent (<code>OPA_GITHUB_APP_ID</code> / private key).
+                Connect with a PAT below, or set App env and use <strong>Connect GitHub App</strong>.
+              </div>
+            )}
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 12 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
                 PAT token
-                <input type="password" className="opa-mono" value={patForm.token} onChange={(e) => setPatForm((f) => ({ ...f, token: e.target.value }))} placeholder="ghp_…" />
+                <input type="password" className="opa-mono" value={patForm.token} onChange={(e) => setPatForm((f) => ({ ...f, token: e.target.value }))} placeholder="ghp_… (or any token when mock)" />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
                 Login
                 <input value={patForm.login} onChange={(e) => setPatForm((f) => ({ ...f, login: e.target.value }))} placeholder="github-user" />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Repos (org/name …)
-                <input className="opa-mono" value={patForm.repos} onChange={(e) => setPatForm((f) => ({ ...f, repos: e.target.value }))} placeholder="acme/api acme/web" />
+                Extra repos (optional)
+                <input className="opa-mono" value={patForm.repos} onChange={(e) => setPatForm((f) => ({ ...f, repos: e.target.value }))} placeholder="org/name … if not in list" />
               </label>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
@@ -797,27 +930,77 @@ export default function Security() {
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="opa-btn primary" disabled={busy || !patForm.token} onClick={connectPAT}>Connect PAT</button>
-              <button type="button" className="opa-btn ghost" disabled={busy || !activeConnector} onClick={saveWatched}>Save watched repos</button>
+              <button type="button" className="opa-btn primary" disabled={busy || !activeConnector} onClick={saveWatched}>Save watched repos</button>
             </div>
             <div style={{ marginTop: 16 }}>
               <div className="cell-strong" style={{ marginBottom: 8 }}>Active connectors</div>
-              {(connectors.data?.connectors || []).length === 0 && <div className="opa-muted">No connectors yet</div>}
+              {(connectors.data?.connectors || []).length === 0 && (
+                <div className="opa-muted">No connectors yet — connect a PAT or install the GitHub App.</div>
+              )}
               {(connectors.data?.connectors || []).map((c) => (
                 <button
                   key={c.id}
                   type="button"
                   className={`opa-btn ${activeConnector === c.id ? 'primary' : 'ghost'}`}
                   style={{ marginRight: 8, marginBottom: 8 }}
-                  onClick={() => setActiveConnector(c.id)}
+                  onClick={() => selectConnector(c.id)}
+                  title={c.has_token ? 'Live credentials in Agent memory' : 'No live token — reconnect PAT to list repos'}
                 >
                   {c.kind} · {c.account_login || c.installation_id || c.id.slice(0, 12)}
+                  {c.has_token ? '' : ' · reconnect'}
                 </button>
               ))}
             </div>
           </Panel>
 
+          <Panel title="Available repositories" icon={<FiEye />}
+            loading={reposLoading}
+            actions={
+              activeConnector ? (
+                <button type="button" className="opa-btn ghost" disabled={reposLoading} onClick={() => setWatchRefresh((n) => n + 1)}>
+                  <FiRefreshCw size={12} /> Reload list
+                </button>
+              ) : null
+            }>
+            {!activeConnector && (
+              <div className="opa-muted">Select or connect a connector to load installable repos from <code>GET /api/connectors/{'{id}'}/repos</code>.</div>
+            )}
+            {activeConnector && reposMeta.error && (
+              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 13 }}>
+                Could not list repos: <span className="opa-mono">{String(reposMeta.error)}</span>
+                {reposMeta.note ? <> — {reposMeta.note}</> : null}
+                {' '}Use checkboxes after reconnect, or type extra org/name above and Save.
+              </div>
+            )}
+            {activeConnector && reposMeta.mock && !reposMeta.error && (
+              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 12 }}>
+                Mock list (<code>OPA_SCM_MOCK_GITHUB=1</code>) — not calling GitHub API.
+              </div>
+            )}
+            {activeConnector && !reposLoading && availableRepos.length === 0 && !reposMeta.error && (
+              <div className="opa-muted">No installable repos returned. Add org/name in Extra repos and Save, or check PAT scopes.</div>
+            )}
+            {availableRepos.length > 0 && (
+              <div style={{ display: 'grid', gap: 6, maxHeight: 280, overflow: 'auto' }}>
+                {availableRepos.map((r) => {
+                  const name = r.full_name || r.repo_full_name
+                  if (!name) return null
+                  return (
+                    <label key={name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                      <input type="checkbox" checked={!!repoPick[name]} onChange={() => toggleRepoPick(name)} />
+                      <span className="opa-mono cell-strong">{name}</span>
+                      {r.private ? <Badge>private</Badge> : null}
+                      {r.mock ? <span className="opa-muted" style={{ fontSize: 11 }}>mock</span> : null}
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </Panel>
+
           <Panel title="Watched repositories" icon={<FiEye />} flush
-            empty={!watchedRows.length} emptyText="Select a connector and save repo full names above">
+            empty={!reposLoading && !watchedRows.length}
+            emptyText="Pick repos above and click Save watched repos">
             <DataTable
               columns={[
                 { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono cell-strong">{r.repo_full_name}</span> },
@@ -826,7 +1009,18 @@ export default function Security() {
                 { key: 'checks_json', header: 'Checks', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{r.checks_json || '—'}</span> },
                 { key: 'min_severity', header: 'Min sev' },
                 { key: 'ai_blocking', header: 'AI block', render: (r) => (r.ai_blocking ? 'yes' : 'no') },
-                { key: 'enabled', header: 'On', render: (r) => (r.enabled ? 'yes' : 'no') },
+                {
+                  key: 'enabled',
+                  header: 'On',
+                  render: (r) => (
+                    <input
+                      type="checkbox"
+                      checked={!!r.enabled}
+                      onChange={() => toggleWatchedEnabled(r.repo_full_name)}
+                      aria-label={`Enable ${r.repo_full_name}`}
+                    />
+                  ),
+                },
               ]}
               rows={watchedRows}
               rowKey={(r) => r.id || r.repo_full_name}
