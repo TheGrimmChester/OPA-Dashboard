@@ -3,7 +3,7 @@ import axios from 'axios'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   FiShield, FiAlertTriangle, FiEye, FiEyeOff, FiCrosshair, FiKey, FiSliders,
-  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiTrash2, FiEdit2,
+  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiTrash2, FiEdit2, FiX,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { apiUrl } from '../utils/apiBase'
@@ -11,6 +11,7 @@ import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { securityRunHref, serviceHref, scmJobHref } from '../utils/entityLinks'
+import './Security.css'
 
 const SEV_KEY = 'opa.security.min_severity'
 
@@ -154,6 +155,36 @@ const PROFILE_HINTS = {
 
 /** Tabs where a `run=` deep-link filters findings / shows run detail. */
 const RUN_CONTEXT_TABS = new Set(['scans', 'secrets', 'sast', 'iac'])
+
+/** PR Jobs table URL filters (`?tab=jobs&status=…&severity=…&repo=…&q=…`). */
+const JOB_FILTER_KEYS = ['status', 'severity', 'repo', 'q']
+const JOB_STATUS_FILTERS = new Set(['running', 'queued', 'waiting', 'completed', 'failed', 'cancelled'])
+const JOB_SEV_FILTERS = new Set(['blocker|critical', 'high', 'medium', 'low', 'none'])
+
+function resolveJobStatusFilter(params) {
+  const v = String(params.get('status') || '').toLowerCase()
+  return JOB_STATUS_FILTERS.has(v) ? v : ''
+}
+
+function resolveJobSeverityFilter(params) {
+  const v = String(params.get('severity') || '').toLowerCase()
+  return JOB_SEV_FILTERS.has(v) ? v : ''
+}
+
+function jobMatchesSeverityFilter(metaSeverity, filter) {
+  const sev = String(metaSeverity || '').toLowerCase()
+  if (!filter) return true
+  if (filter === 'none') return !sev
+  if (filter === 'blocker|critical') return sev === 'blocker' || sev === 'critical'
+  return sev === filter
+}
+
+function jobMatchesStatusFilter(status, filter) {
+  const st = String(status || '').toLowerCase()
+  if (!filter) return true
+  if (filter === 'failed') return st === 'failed' || st === 'error'
+  return st === filter
+}
 
 function resolveSecurityTab(params) {
   const tabQ = params.get('tab')
@@ -396,6 +427,13 @@ export default function Security() {
       const p = new URLSearchParams(searchParams)
       p.delete('run')
       setSearchParams(p, { replace: true })
+      return
+    }
+    // Drop PR Jobs filters when another tab is active (keeps shared URL clean).
+    if (nextTab !== 'jobs' && JOB_FILTER_KEYS.some((k) => searchParams.has(k))) {
+      const p = new URLSearchParams(searchParams)
+      for (const k of JOB_FILTER_KEYS) p.delete(k)
+      setSearchParams(p, { replace: true })
     }
   }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -452,6 +490,24 @@ export default function Security() {
     }
     if (next !== 'watch') p.delete('connector')
     else if (activeConnector) p.set('connector', activeConnector)
+    if (next !== 'jobs') {
+      for (const k of JOB_FILTER_KEYS) p.delete(k)
+    }
+    setSearchParams(p, { replace: true })
+  }
+
+  const setJobFilter = (key, value) => {
+    const p = new URLSearchParams(searchParams)
+    p.set('tab', 'jobs')
+    if (value) p.set(key, value)
+    else p.delete(key)
+    setSearchParams(p, { replace: true })
+  }
+
+  const clearJobFilters = () => {
+    const p = new URLSearchParams(searchParams)
+    p.set('tab', 'jobs')
+    for (const k of JOB_FILTER_KEYS) p.delete(k)
     setSearchParams(p, { replace: true })
   }
 
@@ -1063,6 +1119,40 @@ export default function Security() {
     })
     return rows
   }, [scmJobs.data])
+
+  const jobStatusFilter = tab === 'jobs' ? resolveJobStatusFilter(searchParams) : ''
+  const jobSeverityFilter = tab === 'jobs' ? resolveJobSeverityFilter(searchParams) : ''
+  const jobRepoFilter = tab === 'jobs' ? String(searchParams.get('repo') || '') : ''
+  const jobQFilter = tab === 'jobs' ? String(searchParams.get('q') || '') : ''
+  const jobFiltersActive = !!(jobStatusFilter || jobSeverityFilter || jobRepoFilter || jobQFilter)
+
+  const scmJobRepos = useMemo(() => {
+    const set = new Set()
+    for (const j of scmJobRows) {
+      const name = String(j.repo_full_name || '').trim()
+      if (name) set.add(name)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [scmJobRows])
+
+  const filteredScmJobRows = useMemo(() => {
+    const q = jobQFilter.trim().toLowerCase()
+    return scmJobRows.filter((j) => {
+      if (!jobMatchesStatusFilter(j.status, jobStatusFilter)) return false
+      if (!jobMatchesSeverityFilter(scmJobResultMeta(j).severity, jobSeverityFilter)) return false
+      if (jobRepoFilter && String(j.repo_full_name || '') !== jobRepoFilter) return false
+      if (q) {
+        const hay = [
+          j.id,
+          j.repo_full_name,
+          j.pr_number,
+          j.summary?.stack_id,
+        ].map((x) => String(x ?? '').toLowerCase()).join(' ')
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [scmJobRows, jobStatusFilter, jobSeverityFilter, jobRepoFilter, jobQFilter])
 
   const scmJobCounts = useMemo(() => {
     const fromApi = scmJobs.data?.counts
@@ -2056,18 +2146,104 @@ export default function Security() {
           empty={!scmJobs.loading && !scmJobRows.length}
           emptyText="No jobs yet — open a PR on a watched repo, or run an OPA Review stack from Repo Watch"
           actions={<button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}>
-          <div style={{ padding: '8px 12px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', fontSize: 12, borderBottom: '1px solid var(--border, #e5e7eb)' }}>
+          <div className="opa-jobs-summary">
             <span className="opa-muted">{fmtNum(scmJobTotal)} total</span>
             {['running', 'queued', 'waiting', 'completed', 'cancelled', 'failed', 'error'].map((st) => (
               scmJobCounts[st] ? (
-                <span key={st} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }} title={scmJobStatusHint(st)}>
+                <button
+                  key={st}
+                  type="button"
+                  className={`opa-jobs-count-chip${jobStatusFilter === (st === 'error' ? 'failed' : st) ? ' active' : ''}`}
+                  title={`${scmJobStatusHint(st)} — click to filter`}
+                  onClick={() => {
+                    const next = st === 'error' ? 'failed' : st
+                    setJobFilter('status', jobStatusFilter === next ? '' : next)
+                  }}
+                >
                   <StatusPill tone={scmJobStatusTone(st)}>{st}</StatusPill>
                   <span className="opa-mono">{scmJobCounts[st]}</span>
-                </span>
+                </button>
               ) : null
             ))}
             <span className="opa-muted">· auto-refresh 4s · active first</span>
           </div>
+          <div className="opa-jobs-filters">
+            <label className="opa-jobs-filter">
+              <span className="opa-muted">Status</span>
+              <select
+                className="opa-select"
+                value={jobStatusFilter}
+                onChange={(e) => setJobFilter('status', e.target.value)}
+                aria-label="Filter by status"
+              >
+                <option value="">All</option>
+                <option value="running">running</option>
+                <option value="queued">queued</option>
+                <option value="waiting">waiting</option>
+                <option value="completed">completed</option>
+                <option value="failed">failed</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </label>
+            <label className="opa-jobs-filter">
+              <span className="opa-muted">Severity</span>
+              <select
+                className="opa-select"
+                value={jobSeverityFilter}
+                onChange={(e) => setJobFilter('severity', e.target.value)}
+                aria-label="Filter by result severity"
+              >
+                <option value="">All</option>
+                <option value="blocker|critical">blocker / critical</option>
+                <option value="high">high</option>
+                <option value="medium">medium</option>
+                <option value="low">low</option>
+                <option value="none">none</option>
+              </select>
+            </label>
+            <label className="opa-jobs-filter">
+              <span className="opa-muted">Repo</span>
+              <select
+                className="opa-select"
+                value={jobRepoFilter}
+                onChange={(e) => setJobFilter('repo', e.target.value)}
+                aria-label="Filter by repo"
+              >
+                <option value="">All repos</option>
+                {scmJobRepos.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="opa-jobs-filter opa-jobs-filter-search">
+              <span className="opa-muted">Search</span>
+              <input
+                className="opa-input"
+                type="search"
+                value={jobQFilter}
+                onChange={(e) => setJobFilter('q', e.target.value)}
+                placeholder="Job id, repo, PR, stack…"
+                aria-label="Search jobs"
+                spellCheck={false}
+              />
+            </label>
+            {jobFiltersActive ? (
+              <button type="button" className="opa-btn ghost" onClick={clearJobFilters} title="Clear filters">
+                <FiX size={12} /> Clear
+              </button>
+            ) : null}
+            {jobFiltersActive ? (
+              <span className="opa-muted opa-jobs-filter-count">
+                {fmtNum(filteredScmJobRows.length)} of {fmtNum(scmJobRows.length)}
+              </span>
+            ) : null}
+          </div>
+          {scmJobRows.length > 0 && filteredScmJobRows.length === 0 ? (
+            <div className="opa-jobs-empty-filter opa-muted">
+              No jobs match these filters.
+              <button type="button" className="opa-btn ghost" onClick={clearJobFilters}>Clear filters</button>
+            </div>
+          ) : (
           <DataTable
             columns={[
               { key: 'id', header: 'Job', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.id).slice(0, 18)}</span> },
@@ -2232,10 +2408,11 @@ export default function Security() {
                 },
               },
             ]}
-            rows={scmJobRows}
+            rows={filteredScmJobRows}
             rowKey={(r) => r.id}
             maxHeight={480}
           />
+          )}
         </Panel>
       )}
     </div>

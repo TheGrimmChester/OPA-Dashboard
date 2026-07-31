@@ -61,6 +61,46 @@
   padding: 0;
 }
 
+.opa-review-findings-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle, #eee);
+  font-size: var(--fs-12);
+}
+
+.opa-review-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.opa-review-filter .opa-select {
+  min-width: 120px;
+}
+
+.opa-review-filter-search {
+  flex: 1 1 180px;
+  max-width: 280px;
+}
+
+.opa-review-filter-search .opa-input {
+  width: 100%;
+  min-width: 160px;
+}
+
+.opa-review-findings-empty {
+  padding: 18px 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: var(--fs-13);
+}
+
 .opa-review-finding {
   display: flex;
   flex-direction: column;
