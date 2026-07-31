@@ -444,14 +444,38 @@ export default function PerfLab() {
     }
   }
 
-  const downloadJmx = () => {
+  const downloadExport = async (path, filename) => {
     if (!selectedId) return
-    window.open(apiUrl(`/api/perf/scenarios/${encodeURIComponent(selectedId)}/export-jmx`), '_blank')
+    setBusy(true)
+    try {
+      const response = await axios.get(apiUrl(path), { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      flash('error', 'Export failed', e.message || 'download failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const downloadJmx = () => {
+    downloadExport(
+      `/api/perf/scenarios/${encodeURIComponent(selectedId)}/export-jmx`,
+      `${selectedId}.jmx`,
+    )
   }
 
   const downloadCapture = (kind) => {
-    if (!selectedId) return
-    window.open(apiUrl(`/api/perf/scenarios/${encodeURIComponent(selectedId)}/export-${kind}`), '_blank')
+    downloadExport(
+      `/api/perf/scenarios/${encodeURIComponent(selectedId)}/export-${kind}`,
+      `${selectedId}.${kind}`,
+    )
   }
 
   const evaluateGate = async (runId) => {
