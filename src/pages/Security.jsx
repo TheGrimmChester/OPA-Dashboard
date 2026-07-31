@@ -704,42 +704,26 @@ export default function Security() {
     if (!scmSettings.data?.cursor_key_set && !scmSettings.data?.skip_cursor_ai) {
       flash('error', 'No OPA Review API key', 'Save a key under OPA Review API key, or expect ai.status=skipped')
     }
-    // Agent caps a single stack at 40 items; chunk Select-all bursts so the UI does not 400.
-    const MAX_STACK_ITEMS = 40
-    const chunks = []
-    for (let i = 0; i < items.length; i += MAX_STACK_ITEMS) {
-      chunks.push(items.slice(i, i + MAX_STACK_ITEMS))
-    }
     setBusy(true)
     try {
-      const stackIds = []
-      let allJobIds = []
-      let lastData = null
-      for (let i = 0; i < chunks.length; i += 1) {
-        const { data } = await axios.post(`${API}/api/scm/opa-review/stack`, {
-          items: chunks[i],
-          force: !!aiReviewForm.force,
-          ai_only: !!aiReviewForm.ai_only,
-          preview_url: String(aiReviewForm.preview_url || '').trim() || undefined,
-        })
-        lastData = data
-        if (data.stack_id) stackIds.push(data.stack_id)
-        allJobIds = allJobIds.concat(data.job_ids || [])
-      }
-      setLastStackId(stackIds[0] || '')
-      setStackStatus(lastData)
-      setLastAiJobId(allJobIds[0] || '')
-      const chunkNote = chunks.length > 1
-        ? ` · split into ${chunks.length} stacks (max ${MAX_STACK_ITEMS}/stack)`
-        : ''
-      flash('ok', 'OPA Review stack queued', `${stackIds.join(', ')} · ${allJobIds.length} job(s)${chunkNote}`)
+      const { data } = await axios.post(`${API}/api/scm/opa-review/stack`, {
+        items,
+        force: !!aiReviewForm.force,
+        ai_only: !!aiReviewForm.ai_only,
+        preview_url: String(aiReviewForm.preview_url || '').trim() || undefined,
+      })
+      setLastStackId(data.stack_id || '')
+      setStackStatus(data)
+      setLastAiJobId((data.job_ids || [])[0] || '')
+      const note = data.note ? ` · ${data.note}` : ''
+      flash('ok', 'OPA Review stack queued', `${data.stack_id || ''} · ${(data.job_ids || []).length} job(s)${note}`)
       selectTab('jobs')
       scmJobs.reload?.()
     } catch (e) {
       const raw = e.response?.data
       const detail = typeof raw === 'string'
         ? raw
-        : (raw?.error ? `${raw.error}${raw.count != null ? ` (selected ${raw.count}, max ${raw.max})` : ''}` : (e.message || 'request failed'))
+        : (raw?.error ? `${raw.error}${raw.count != null ? ` (selected ${raw.count}${raw.max != null ? `, max ${raw.max}` : ''})` : ''}` : (e.message || 'request failed'))
       flash('error', 'OPA Review stack failed', detail)
     } finally {
       setBusy(false)
@@ -1562,8 +1546,9 @@ export default function Security() {
           <Panel title="Run OPA Review" icon={<FiPlay />}>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
               Select one or more watched repos and open PRs, then enqueue an <strong>OPA Review stack</strong>
-              (one job per repo×PR). Each job packs <strong>full primary</strong> context for that repo plus
-              <strong>linked awareness</strong>. Findings post inline; the global PR message is a short résumé.
+              (one job per repo×PR). Large selections stay in one stack — extras <strong>wait</strong> and drain
+              with stack concurrency (default serial). Each job packs <strong>full primary</strong> context for that repo plus
+              <strong>linked awareness</strong>. Findings post inline; the global PR message is a narrative résumé.
               {!scmSettings.data?.cursor_key_set && (
                 <> <span style={{ color: 'var(--danger, #c44)' }}>No OPA Review API key set</span> — jobs still run with <code>ai.status=skipped</code>.</>
               )}
@@ -1608,7 +1593,7 @@ export default function Security() {
                 Open PRs {pullsLoading ? '(loading…)' : ''}
                 {!!Object.values(reviewPrs).filter(Boolean).length && (
                   <span className="opa-muted"> · {Object.values(reviewPrs).filter(Boolean).length} selected
-                    {Object.values(reviewPrs).filter(Boolean).length > 40 ? ' (will split into stacks of 40)' : ''}
+                    {Object.values(reviewPrs).filter(Boolean).length > 40 ? ' (will wait in one stack)' : ''}
                   </span>
                 )}
               </div>
@@ -1681,11 +1666,17 @@ export default function Security() {
             )}
             {stackStatus && (
               <div style={{ marginBottom: 10, padding: 8, background: 'var(--surface-2)', borderRadius: 6, fontSize: 12 }}>
-                <div><strong>Stack</strong> <span className="opa-mono">{stackStatus.stack_id || lastStackId}</span> · {stackStatus.status}</div>
+                <div>
+                  <strong>Stack</strong> <span className="opa-mono">{stackStatus.stack_id || stackStatus.id || lastStackId}</span>
+                  {' '}· {stackStatus.status}
+                  {stackStatus.note ? <span className="opa-muted"> · {stackStatus.note}</span> : null}
+                </div>
                 <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
                   {(stackStatus.items || []).map((it, idx) => (
                     <div key={`${it.repo_full_name}-${it.pr_number}-${idx}`} className="opa-mono">
-                      {it.repo_full_name}#{it.pr_number} → {it.status}{it.error ? ` (${it.error})` : ''}{it.job_id ? ` · ${String(it.job_id).slice(0, 14)}` : ''}
+                      {it.repo_full_name}#{it.pr_number} → {it.status || '—'}
+                      {it.error ? ` (${it.error})` : ''}
+                      {it.job_id ? ` · ${String(it.job_id).slice(0, 14)}` : ''}
                     </div>
                   ))}
                 </div>
