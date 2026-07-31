@@ -99,7 +99,7 @@ export default function Security() {
   const services = useApi('/api/services', {}, { noRange: true, skip: tab !== 'scans' })
   const connectors = useApi('/api/connectors', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'jobs' })
   const scmJobs = useApi('/api/scm/jobs', { limit: 50 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
-  const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' })
+  const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' && tab !== 'jobs' })
   const [patForm, setPatForm] = useState({ token: '', login: '', repos: '' })
   const [editForm, setEditForm] = useState({ login: '', display_name: '', token: '' })
   const [editingConnector, setEditingConnector] = useState(false)
@@ -115,6 +115,16 @@ export default function Security() {
   })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
   const [watchRefresh, setWatchRefresh] = useState(0)
+  const [aiReviewForm, setAiReviewForm] = useState({ repo: '', pr: '', force: true, ai_only: false })
+  const [openPulls, setOpenPulls] = useState([])
+  const [pullsLoading, setPullsLoading] = useState(false)
+  const [appliedContexts, setAppliedContexts] = useState([])
+  const [lastAiJobId, setLastAiJobId] = useState('')
+  const [contexts, setContexts] = useState([])
+  const [ctxForm, setCtxForm] = useState({ title: '', body_markdown: '', repo_full_name: '', tags_design: false })
+  const [ctxEditingId, setCtxEditingId] = useState('')
+  const [linkPick, setLinkPick] = useState({})
+  const [genDraft, setGenDraft] = useState(null)
 
   useEffect(() => {
     if (!activeConnector || tab !== 'watch') {
@@ -164,6 +174,44 @@ export default function Security() {
     })
     return () => { cancelled = true }
   }, [activeConnector, tab, watchRefresh])
+
+  useEffect(() => {
+    if (tab !== 'watch') return undefined
+    let cancelled = false
+    axios.get(`${API}/api/scm/contexts`).then((res) => {
+      if (!cancelled) setContexts(res.data?.contexts || [])
+    }).catch(() => {
+      if (!cancelled) setContexts([])
+    })
+    return () => { cancelled = true }
+  }, [tab, watchRefresh])
+
+  useEffect(() => {
+    if (tab !== 'watch' || !activeConnector || !aiReviewForm.repo) {
+      setOpenPulls([])
+      setAppliedContexts([])
+      return undefined
+    }
+    let cancelled = false
+    setPullsLoading(true)
+    Promise.all([
+      axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/pulls`, {
+        params: { repo: aiReviewForm.repo },
+      }),
+      axios.get(`${API}/api/scm/contexts`, { params: { for_repo: aiReviewForm.repo } }),
+    ]).then(([pullsRes, ctxRes]) => {
+      if (cancelled) return
+      setOpenPulls(pullsRes.data?.pulls || [])
+      setAppliedContexts(ctxRes.data?.summary || [])
+    }).catch(() => {
+      if (cancelled) return
+      setOpenPulls([])
+      setAppliedContexts([])
+    }).finally(() => {
+      if (!cancelled) setPullsLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [tab, activeConnector, aiReviewForm.repo, watchRefresh])
 
   // Keep tab / run / connector in sync with the URL (and strip stale run= on Watch).
   useEffect(() => {
@@ -556,6 +604,157 @@ export default function Security() {
       scmJobs.reload?.()
     } catch (e) {
       flash('error', 'Retry failed', e.response?.data || e.message)
+    }
+  }
+
+  const runAiReview = async () => {
+    const repo = String(aiReviewForm.repo || '').trim()
+    const pr = Number(aiReviewForm.pr)
+    if (!repo || !pr) {
+      flash('error', 'Select a repo and PR number')
+      return
+    }
+    if (!scmSettings.data?.cursor_key_set && !scmSettings.data?.skip_cursor_ai) {
+      flash('error', 'No Cursor API key', 'Save a key under Cursor AI Review, or expect ai.status=skipped')
+    }
+    setBusy(true)
+    try {
+      const { data } = await axios.post(`${API}/api/scm/ai-review`, {
+        repo_full_name: repo,
+        pr_number: pr,
+        connector_id: activeConnector || undefined,
+        force: !!aiReviewForm.force,
+        ai_only: !!aiReviewForm.ai_only,
+        allow_unwatched: true,
+      })
+      setLastAiJobId(data.job_id || '')
+      setAppliedContexts(data.review_contexts || appliedContexts)
+      flash('ok', 'AI Review queued', data.job_id)
+      selectTab('jobs')
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'AI Review failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const rerunAiOnly = async (job) => {
+    if (!job?.id || !job.pr_number) return
+    try {
+      const { data } = await axios.post(`${API}/api/scm/jobs/${encodeURIComponent(job.id)}/ai-review`, {
+        force: true,
+        ai_only: true,
+      })
+      setLastAiJobId(data.job_id || '')
+      flash('ok', 'AI-only re-run queued', data.job_id)
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'AI re-run failed', e.response?.data || e.message)
+    }
+  }
+
+  const saveContext = async () => {
+    const title = String(ctxForm.title || '').trim()
+    const repo = String(ctxForm.repo_full_name || aiReviewForm.repo || '').trim()
+    if (!title || !repo) {
+      flash('error', 'Context needs title and repo')
+      return
+    }
+    setBusy(true)
+    try {
+      if (ctxEditingId) {
+        await axios.patch(`${API}/api/scm/contexts/${encodeURIComponent(ctxEditingId)}`, {
+          title,
+          body_markdown: ctxForm.body_markdown,
+          repo_full_name: repo,
+          tags: ctxForm.tags_design ? ['design', 'ui'] : [],
+        })
+        flash('ok', 'Context updated')
+      } else {
+        await axios.post(`${API}/api/scm/contexts`, {
+          title,
+          body_markdown: ctxForm.body_markdown,
+          repo_full_name: repo,
+          connector_id: activeConnector || undefined,
+          tags: ctxForm.tags_design ? ['design', 'ui'] : [],
+        })
+        flash('ok', 'Context created')
+      }
+      setCtxForm({ title: '', body_markdown: '', repo_full_name: repo, tags_design: false })
+      setCtxEditingId('')
+      setWatchRefresh((n) => n + 1)
+    } catch (e) {
+      flash('error', 'Save context failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const deleteContext = async (id) => {
+    if (!id || !window.confirm('Delete this reviewer context?')) return
+    try {
+      await axios.delete(`${API}/api/scm/contexts/${encodeURIComponent(id)}`)
+      flash('ok', 'Context deleted')
+      setWatchRefresh((n) => n + 1)
+    } catch (e) {
+      flash('error', 'Delete failed', e.response?.data || e.message)
+    }
+  }
+
+  const generateContext = async () => {
+    const repo = String(ctxForm.repo_full_name || aiReviewForm.repo || '').trim()
+    if (!repo) {
+      flash('error', 'Pick a repo for Generate')
+      return
+    }
+    setBusy(true)
+    try {
+      const { data } = await axios.post(`${API}/api/scm/contexts/generate`, {
+        repo_full_name: repo,
+        connector_id: activeConnector || undefined,
+        pr_number: Number(aiReviewForm.pr) || undefined,
+        title: ctxForm.title || undefined,
+      })
+      if (data.status === 'skipped') {
+        flash('error', 'Generate skipped', data.honesty || data.reason)
+      } else {
+        flash('ok', 'Draft generated', data.status)
+      }
+      const draft = data.draft || {}
+      setGenDraft(draft)
+      setCtxForm({
+        title: draft.title || ctxForm.title || `Reviewer context — ${repo}`,
+        body_markdown: draft.body_markdown || '',
+        repo_full_name: repo,
+        tags_design: Array.isArray(draft.tags) && draft.tags.some((t) => ['design', 'ui'].includes(String(t))),
+      })
+      setCtxEditingId('')
+    } catch (e) {
+      flash('error', 'Generate failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const linkSelectedRepos = async (clear = false) => {
+    const names = Object.entries(linkPick).filter(([, on]) => on).map(([n]) => n)
+    if (!names.length) {
+      flash('error', 'Select at least two watched repos to link')
+      return
+    }
+    setBusy(true)
+    try {
+      const { data } = await axios.put(`${API}/api/scm/context-links`, {
+        repo_full_names: names,
+        clear: !!clear,
+      })
+      flash('ok', clear ? 'Link group cleared' : 'Repos linked', data.link_group_id || '')
+      setWatchRefresh((n) => n + 1)
+    } catch (e) {
+      flash('error', 'Link failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -1244,6 +1443,212 @@ export default function Security() {
             />
           </Panel>
 
+          <Panel title="Run AI Review" icon={<FiPlay />}>
+            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
+              Manually queue Cursor AI Review on a PR. Contexts for this repo and any linked group are packed automatically.
+              {!scmSettings.data?.cursor_key_set && (
+                <> <span style={{ color: 'var(--danger, #c44)' }}>No Cursor key set</span> — job still runs with <code>ai.status=skipped</code>.</>
+              )}
+              {scmSettings.data?.skip_cursor_ai && <> Agent has <code>SKIP_CURSOR_AI=1</code>.</>}
+            </p>
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Watched repo
+                <select
+                  className="opa-mono"
+                  value={aiReviewForm.repo}
+                  onChange={(e) => setAiReviewForm((f) => ({ ...f, repo: e.target.value, pr: '' }))}
+                >
+                  <option value="">Select…</option>
+                  {watchedRows.map((r) => (
+                    <option key={r.repo_full_name} value={r.repo_full_name}>{r.repo_full_name}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Open PR
+                <select
+                  className="opa-mono"
+                  disabled={!aiReviewForm.repo || pullsLoading}
+                  value={aiReviewForm.pr}
+                  onChange={(e) => setAiReviewForm((f) => ({ ...f, pr: e.target.value }))}
+                >
+                  <option value="">{pullsLoading ? 'Loading…' : 'Select or type below…'}</option>
+                  {openPulls.map((p) => (
+                    <option key={p.number} value={String(p.number)}>
+                      #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                PR number
+                <input
+                  className="opa-mono"
+                  type="number"
+                  min={1}
+                  value={aiReviewForm.pr}
+                  onChange={(e) => setAiReviewForm((f) => ({ ...f, pr: e.target.value }))}
+                  placeholder="42"
+                />
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
+              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                <input type="checkbox" checked={!!aiReviewForm.force} onChange={(e) => setAiReviewForm((f) => ({ ...f, force: e.target.checked }))} />
+                Force (include drafts)
+              </label>
+              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                <input type="checkbox" checked={!!aiReviewForm.ai_only} onChange={(e) => setAiReviewForm((f) => ({ ...f, ai_only: e.target.checked }))} />
+                AI only (skip AppSec scanners)
+              </label>
+            </div>
+            {!!appliedContexts.length && (
+              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                Contexts to apply:{' '}
+                {appliedContexts.map((c) => `${c.role}:${c.title || c.id}`).join(' · ')}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button type="button" className="opa-btn primary" disabled={busy || !aiReviewForm.repo || !aiReviewForm.pr} onClick={runAiReview}>
+                Run AI Review
+              </button>
+              {lastAiJobId && (
+                <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>
+                  Last job {String(lastAiJobId).slice(0, 16)}…
+                </button>
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="Reviewer contexts" icon={<FiCode />}>
+            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
+              Per-repo briefs packed into AI Review. Tag <code>design</code>/<code>ui</code> for design-system enforcement
+              (auto-prioritized when the PR touches JSX/CSS/components). Link watched repos so a review pulls all contexts in the group.
+            </p>
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Repo
+                <select
+                  className="opa-mono"
+                  value={ctxForm.repo_full_name}
+                  onChange={(e) => setCtxForm((f) => ({ ...f, repo_full_name: e.target.value }))}
+                >
+                  <option value="">Select…</option>
+                  <option value="*">* (org-level)</option>
+                  {watchedRows.map((r) => (
+                    <option key={r.repo_full_name} value={r.repo_full_name}>{r.repo_full_name}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Title
+                <input value={ctxForm.title} onChange={(e) => setCtxForm((f) => ({ ...f, title: e.target.value }))} placeholder="Auth & trust boundaries" />
+              </label>
+            </div>
+            <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
+              <input
+                type="checkbox"
+                checked={!!ctxForm.tags_design}
+                onChange={(e) => setCtxForm((f) => ({ ...f, tags_design: e.target.checked }))}
+              />
+              Design / UI enforcement context (tags: design, ui)
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, marginBottom: 8 }}>
+              Body (markdown)
+              <textarea
+                className="opa-mono"
+                rows={8}
+                style={{ width: '100%', fontSize: 12 }}
+                value={ctxForm.body_markdown}
+                onChange={(e) => setCtxForm((f) => ({ ...f, body_markdown: e.target.value }))}
+                placeholder="Product purpose, trust boundaries, footguns… or Design enforcement notes (tokens, required components)"
+              />
+            </label>
+            {genDraft?.source === 'skipped' && (
+              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>Generate returned empty (skipped) — set Cursor key or unset SKIP_CURSOR_AI.</div>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+              <button type="button" className="opa-btn primary" disabled={busy} onClick={saveContext}>
+                {ctxEditingId ? 'Update context' : 'Save context'}
+              </button>
+              <button type="button" className="opa-btn ghost" disabled={busy} onClick={generateContext}>
+                Generate with Cursor
+              </button>
+              {ctxEditingId && (
+                <button type="button" className="opa-btn ghost" onClick={() => { setCtxEditingId(''); setCtxForm({ title: '', body_markdown: '', repo_full_name: ctxForm.repo_full_name, tags_design: false }) }}>
+                  Cancel edit
+                </button>
+              )}
+            </div>
+            <div className="cell-strong" style={{ marginBottom: 8 }}>Link repos (shared context pack)</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
+              {watchedRows.map((r) => (
+                <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!linkPick[r.repo_full_name]}
+                    onChange={(e) => setLinkPick((p) => ({ ...p, [r.repo_full_name]: e.target.checked }))}
+                  />
+                  <span className="opa-mono">{r.repo_full_name}</span>
+                  {r.link_group_id ? <Badge>{r.link_group_id.slice(0, 10)}</Badge> : null}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+              <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(false)}>Link selected</button>
+              <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(true)}>Clear links</button>
+            </div>
+            <DataTable
+              columns={[
+                { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
+                { key: 'title', header: 'Title' },
+                { key: 'source', header: 'Source', render: (r) => <Badge>{r.source || 'manual'}</Badge> },
+                {
+                  key: 'tags_json', header: 'Tags',
+                  render: (r) => {
+                    let tags = []
+                    try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
+                    if (!tags.length) return '—'
+                    return tags.map((t) => <Badge key={t}>{t}</Badge>)
+                  },
+                },
+                { key: 'link_group_id', header: 'Group', render: (r) => (r.link_group_id ? <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.link_group_id).slice(0, 12)}</span> : '—') },
+                {
+                  key: 'actions', header: '',
+                  render: (r) => {
+                    let tags = []
+                    try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
+                    const isDesign = tags.some((t) => ['design', 'ui', 'design-system'].includes(String(t)))
+                    return (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        type="button"
+                        className="opa-btn ghost"
+                        onClick={() => {
+                          setCtxEditingId(r.id)
+                          setCtxForm({
+                            title: r.title || '',
+                            body_markdown: r.body_markdown || '',
+                            repo_full_name: r.repo_full_name || '',
+                            tags_design: isDesign,
+                          })
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button type="button" className="opa-btn ghost" onClick={() => deleteContext(r.id)}>Delete</button>
+                    </div>
+                    )
+                  },
+                },
+              ]}
+              rows={contexts}
+              rowKey={(r) => r.id}
+              maxHeight={280}
+            />
+          </Panel>
+
           <Panel title="Cursor AI Review key" icon={<FiKey />}>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
               Stored server-side only. CLI: <code>agent -p --trust --force --model auto</code>.
@@ -1275,11 +1680,20 @@ export default function Security() {
               { key: 'id', header: 'Job', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.id).slice(0, 18)}</span> },
               { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
               { key: 'pr_number', header: 'PR', render: (r) => (r.pr_number ? `#${r.pr_number}` : '—') },
+              {
+                key: 'commit_sha', header: 'SHA',
+                render: (r) => {
+                  const sha = r.commit_sha || r.summary?.worktree?.resolved_sha || ''
+                  return sha
+                    ? <span className="opa-mono" style={{ fontSize: 11 }} title={sha}>{String(sha).slice(0, 10)}</span>
+                    : '—'
+                },
+              },
               { key: 'event', header: 'Event', render: (r) => <Badge>{r.event}</Badge> },
               {
                 key: 'status', header: 'Status',
                 render: (r) => (
-                  <StatusPill tone={r.status === 'completed' ? 'ok' : r.status === 'failed' ? 'error' : 'neutral'}>
+                  <StatusPill tone={r.status === 'completed' ? 'ok' : r.status === 'failed' || r.status === 'error' ? 'error' : 'neutral'}>
                     {r.status}
                   </StatusPill>
                 ),
@@ -1289,6 +1703,19 @@ export default function Security() {
                 render: (r) => (r.security_run_id
                   ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
                   : '—'),
+              },
+              {
+                key: 'checkout', header: 'Worktree',
+                render: (r) => {
+                  const path = r.summary?.checkout_path || r.summary?.checkout_rel || r.summary?.worktree?.worktree_rel || ''
+                  const mock = r.summary?.worktree?.mock
+                  if (!path) return '—'
+                  return (
+                    <span className="opa-mono" style={{ fontSize: 11 }} title={String(path)}>
+                      {mock ? 'mock · ' : ''}{String(path).replace(/^.*\/worktrees\//, 'worktrees/').slice(0, 28)}
+                    </span>
+                  )
+                },
               },
               {
                 key: 'check_run_ids', header: 'Checks',
@@ -1305,7 +1732,12 @@ export default function Security() {
               {
                 key: 'actions', header: '',
                 render: (r) => (
-                  <button type="button" className="opa-btn ghost" onClick={() => retryJob(r.id)}>Retry</button>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    <button type="button" className="opa-btn ghost" onClick={() => retryJob(r.id)}>Retry</button>
+                    {r.pr_number ? (
+                      <button type="button" className="opa-btn ghost" onClick={() => rerunAiOnly(r)}>Re-run AI</button>
+                    ) : null}
+                  </div>
                 ),
               },
             ]}
