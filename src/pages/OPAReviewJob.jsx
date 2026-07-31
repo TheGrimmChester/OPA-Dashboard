@@ -303,6 +303,7 @@ export default function OPAReviewJob() {
           type="button"
           className="opa-btn ghost"
           disabled={!canFix || busy}
+          title="Experimental — requires OPA-AI-Orchestrator (/api/scm/jobs/…/auto-fix)"
           onClick={() => enqueueAutoFix({ createPr: false })}
         >
           Auto-fix all
@@ -311,11 +312,18 @@ export default function OPAReviewJob() {
           type="button"
           className="opa-btn primary"
           disabled={!canFix || busy}
+          title="Experimental — requires OPA-AI-Orchestrator (/api/scm/jobs/…/auto-fix)"
           onClick={() => enqueueAutoFix({ createPr: true })}
         >
           <FiGitPullRequest size={14} /> Create fix PR
         </button>
       </div>
+      <p className="opa-muted" style={{ margin: '0 0 12px', fontSize: 12 }}>
+        Auto-fix / Create fix PR are <strong>experimental</strong> and require{' '}
+        <strong>OPA-AI-Orchestrator</strong> (<code>POST /api/scm/jobs/{'{id}'}/auto-fix</code>).
+        Agent returns 410 for <code>/api/scm/*</code> after the service extract — point{' '}
+        <code>VITE_ORCHESTRATOR_URL</code> (or smoke nginx) at Orchestrator.
+      </p>
 
       <Panel
         title="Findings"

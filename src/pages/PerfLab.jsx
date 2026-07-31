@@ -87,6 +87,7 @@ export default function PerfLab() {
   const scenarios = useApi('/api/perf/scenarios', {}, { noRange: true })
   const runs = useApi('/api/perf/runs', {}, { noRange: true })
   const baselines = useApi('/api/performance/baselines', {}, { noRange: true })
+  const federationPeers = useApi('/api/federation/peers', {}, { noRange: true })
 
   const initialTab = searchParams.get('tab')
   const [tab, setTab] = useState(TAB_DEFS.some((t) => t.value === initialTab) ? initialTab : 'design')
@@ -127,6 +128,12 @@ export default function PerfLab() {
   const scnRows = scenarios.data?.scenarios || []
   const runRows = runs.data?.runs || []
   const baseRows = baselines.data?.baselines || []
+  const peerRows = Array.isArray(federationPeers.data?.peers) ? federationPeers.data.peers : []
+  const hasFederationPeers = peerRows.length > 0
+  // Without peers, fan-out is local-sample-only — keep toggle off and disabled.
+  useEffect(() => {
+    if (!hasFederationPeers && fanout) setFanout(false)
+  }, [hasFederationPeers, fanout])
   const engineLabel = scenarios.data?.engine || engine
   const runnerLabel = scenarios.data?.runner || 'docker'
 
@@ -1018,7 +1025,15 @@ export default function PerfLab() {
                 </div>
                 <div className="perf-field">
                   <label>Federation fan-out</label>
-                  <select className="opa-input" value={fanout ? '1' : '0'} onChange={(e) => setFanout(e.target.value === '1')}>
+                  <select
+                    className="opa-input"
+                    value={fanout && hasFederationPeers ? '1' : '0'}
+                    disabled={!hasFederationPeers}
+                    title={hasFederationPeers
+                      ? 'Dispatch to Agent federation peers via remote-load (≠ multi-region cloud)'
+                      : 'No federation peers — local-sample-only. Set OPA_FEDERATION_PEERS on Agent/Perf-Lab.'}
+                    onChange={(e) => setFanout(hasFederationPeers && e.target.value === '1')}
+                  >
                     <option value="0">Off</option>
                     <option value="1">Peers (≠ multi-region cloud)</option>
                   </select>
@@ -1027,6 +1042,9 @@ export default function PerfLab() {
               <p className="perf-hint">
                 Dispatch uses ephemeral JMeter containers on the compose network. Point target_url at an instrumented service (default http://node-app:3000/hello) so Open traces finds tags.load_run_id.
                 Node requires OPA_PERF_ALLOW_NODE_FALLBACK=1.
+                {!hasFederationPeers
+                  ? ' Federation fan-out disabled until peers are configured (OPA_FEDERATION_PEERS / opa.federation_peers) — otherwise runs stay local-sample-only.'
+                  : ` Federation peers available: ${peerRows.length}.`}
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 <button type="button" className="opa-btn primary" disabled={busy || !selectedId} onClick={() => startRun()} aria-label="Start load run">
