@@ -22,7 +22,7 @@ export default function OnboardingBanner() {
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Waiting for your first trace</div>
         <div className="opa-muted" style={{ fontSize: 13, marginBottom: 8 }}>
-          Instrument an app and point it at this agent. Live verification lands on Overview once spans arrive.
+          Instrument an app and point it at this agent. Live verification lands on Service once spans arrive.
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           {Object.keys(SNIPPETS).map((k) => (

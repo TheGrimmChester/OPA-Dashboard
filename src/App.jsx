@@ -35,7 +35,7 @@ import './App.css'
 // split into their own chunks instead of the main bundle.
 const CompareTraces = lazy(() => import('./pages/CompareTraces'))
 const Stats = lazy(() => import('./pages/Stats'))
-const Overview = lazy(() => import('./pages/Overview'))
+const Services = lazy(() => import('./pages/Services'))
 const ServiceDetail = lazy(() => import('./pages/ServiceDetail'))
 const TraceDetail = lazy(() => import('./pages/TraceDetail'))
 const ProfilingView = lazy(() => import('./pages/ProfilingView'))
@@ -146,13 +146,11 @@ function App() {
         <AppShell>
           <Suspense fallback={<div className="route-loading" style={{ padding: 24, color: 'var(--text-muted)' }}>Loading…</div>}>
           <Routes>
-            <Route
-              path="/"
-              element={<Overview />}
-            />
+            <Route path="/" element={<Navigate to="/services" replace />} />
+            <Route path="/overview" element={<Navigate to="/services" replace />} />
             <Route
               path="/services"
-              element={<Overview />}
+              element={<Services />}
             />
             <Route
               path="/services/:serviceName"

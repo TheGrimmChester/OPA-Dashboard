@@ -12,7 +12,7 @@ import FullscreenToggle from './FullscreenToggle'
 import { LocaleSwitcher } from '../../contexts/I18nContext'
 
 const LABELS = (() => {
-  const m = { '': 'Overview', services: 'Services', traces: 'Traces', profiling: 'Profiling', errors: 'Errors', sql: 'Databases', http: 'External HTTP', 'service-map': 'Service Map', rum: 'Browser', performance: 'Performance', live: 'Live', system: 'System', users: 'Users & Roles', 'api-keys': 'API Keys', compare: 'Compare', query: 'Query', metrics: 'Metrics Explorer', dashboards: 'Dashboards' }
+  const m = { '': 'Service', services: 'Service', traces: 'Traces', profiling: 'Profiling', errors: 'Errors', sql: 'Databases', http: 'External HTTP', 'service-map': 'Service Map', rum: 'Browser', performance: 'Performance', live: 'Live', system: 'System', users: 'Users & Roles', 'api-keys': 'API Keys', compare: 'Compare', query: 'Query', metrics: 'Metrics Explorer', dashboards: 'Dashboards' }
   NAV_GROUPS.forEach((g) => g.items.forEach((i) => { m[i.to.replace('/', '')] = i.label }))
   return m
 })()
@@ -20,7 +20,7 @@ const LABELS = (() => {
 function Breadcrumb() {
   const { pathname } = useLocation()
   const parts = pathname.split('/').filter(Boolean)
-  if (parts.length === 0) return <span className="crumb-current">Overview</span>
+  if (parts.length === 0) return <span className="crumb-current">Service</span>
   const crumbs = []
   let acc = ''
   parts.forEach((p, i) => {
