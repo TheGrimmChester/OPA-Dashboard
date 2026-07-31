@@ -3,7 +3,8 @@ import { FiGitBranch, FiAlertTriangle } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { useTimeRange } from '../contexts/TimeRangeContext'
 import { Panel, DataTable, StatusPill, EmptyState, ErrorState, KpiTile } from './ui'
-import { fmtMs, fmtNum } from '../theme/format'
+import { fmtNum } from '../theme/format'
+import { defaultSplit, fmtSignedMs } from '../utils/callgraphCompare'
 import './CallgraphWindowCompare.css'
 
 const CLASS_TONE = {
@@ -13,16 +14,6 @@ const CLASS_TONE = {
   removed: 'neutral',
   moved: 'warn',
   unchanged: 'neutral',
-}
-
-function defaultSplit(from, to) {
-  const a = Date.parse(from)
-  const b = Date.parse(to)
-  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) {
-    return { fromA: from, toA: to, fromB: from, toB: to }
-  }
-  const mid = new Date((a + b) / 2).toISOString()
-  return { fromA: from, toA: mid, fromB: mid, toB: to }
 }
 
 /**
@@ -56,6 +47,11 @@ export default function CallgraphWindowCompare({ service, transaction }) {
 
   const nodes = Array.isArray(data?.nodes) ? data.nodes : []
   const counts = data?.counts_by_class || {}
+  const maxAbs = useMemo(
+    () => Math.max(1, ...nodes.map((n) => Math.abs(n.delta?.self_ms || 0))),
+    [nodes],
+  )
+  const stale = ready && loading && Boolean(data)
 
   const columns = [
     {
@@ -84,7 +80,7 @@ export default function CallgraphWindowCompare({ service, transaction }) {
         const d = r.delta?.self_ms ?? 0
         return (
           <span className={`opa-mono ${d > 0 ? 'cg-diff-worse' : d < 0 ? 'cg-diff-better' : ''}`}>
-            {d > 0 ? '+' : ''}{fmtMs(d)}
+            {fmtSignedMs(d)}
           </span>
         )
       },
@@ -105,8 +101,7 @@ export default function CallgraphWindowCompare({ service, transaction }) {
       sortable: false,
       render: (r) => {
         const d = r.delta?.self_ms ?? 0
-        const max = Math.max(...nodes.map((n) => Math.abs(n.delta?.self_ms || 0)), 1)
-        const pct = Math.min(100, (Math.abs(d) / max) * 100)
+        const pct = Math.min(100, (Math.abs(d) / maxAbs) * 100)
         return (
           <div className="cg-diff-bar-track">
             <div
@@ -126,10 +121,11 @@ export default function CallgraphWindowCompare({ service, transaction }) {
   }))
 
   return (
-    <div className="cg-diff">
+    <div className={`cg-diff${stale ? ' cg-diff-stale' : ''}`}>
       <Panel title="Call-graph windows" icon={<FiGitBranch />} actions={
         <span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>
           baseline {windows.fromA?.slice(0, 19)} → {windows.toA?.slice(0, 19)} · candidate {windows.fromB?.slice(0, 19)} → {windows.toB?.slice(0, 19)}
+          {stale ? ' · updating…' : ''}
         </span>
       }>
         <div className="opa-row" style={{ gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
@@ -138,7 +134,12 @@ export default function CallgraphWindowCompare({ service, transaction }) {
         </div>
       </Panel>
 
-      {!ready && <EmptyState title="Pick a service and transaction" message="Compare splits the global time range into two halves and diffs path_hash populations." />}
+      {!ready && (
+        <EmptyState
+          title="Pick a service and transaction"
+          hint="Compare splits the global time range into two halves and diffs path_hash populations."
+        />
+      )}
       {ready && error && <ErrorState message={typeof error === 'string' ? error : 'Compare failed'} />}
       {ready && loading && !data && <EmptyState title="Loading compare…" />}
 
