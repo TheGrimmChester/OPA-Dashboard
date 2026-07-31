@@ -257,6 +257,8 @@ export default function Security() {
   const [pullsLoading, setPullsLoading] = useState(false)
   const [appliedContexts, setAppliedContexts] = useState([])
   const [lastAiJobId, setLastAiJobId] = useState('')
+  const [expandedJobId, setExpandedJobId] = useState('')
+  const [jobFindings, setJobFindings] = useState({}) // jobId -> { findings, auto_fixes, analyzed_sha, loading, error }
   const [lastStackId, setLastStackId] = useState('')
   const [stackStatus, setStackStatus] = useState(null)
   const [contexts, setContexts] = useState([])
@@ -876,6 +878,74 @@ export default function Security() {
       scmJobs.reload?.()
     } catch (e) {
       flash('error', 'OPA Review re-run failed', e.response?.data || e.message)
+    }
+  }
+
+  const loadJobFindings = async (job) => {
+    if (!job?.id) return
+    const id = job.id
+    if (expandedJobId === id) {
+      setExpandedJobId('')
+      return
+    }
+    setExpandedJobId(id)
+    // Prefer embedded summary findings; refresh from GET for keys + auto_fixes.
+    const embedded = Array.isArray(job?.summary?.ai?.findings) ? job.summary.ai.findings : []
+    setJobFindings((p) => ({
+      ...p,
+      [id]: {
+        findings: embedded,
+        auto_fixes: job?.summary?.auto_fixes || [],
+        analyzed_sha: job?.summary?.analyzed_sha || job?.commit_sha || '',
+        previous_analyzed_sha: job?.summary?.previous_analyzed_sha || '',
+        loading: true,
+        error: '',
+      },
+    }))
+    try {
+      const { data } = await axios.get(apiUrl(`/api/scm/jobs/${encodeURIComponent(id)}`))
+      setJobFindings((p) => ({
+        ...p,
+        [id]: {
+          findings: Array.isArray(data.findings) ? data.findings : (data.summary?.ai?.findings || []),
+          auto_fixes: data.auto_fixes || data.summary?.auto_fixes || [],
+          analyzed_sha: data.analyzed_sha || data.summary?.analyzed_sha || data.commit_sha || '',
+          previous_analyzed_sha: data.previous_analyzed_sha || data.summary?.previous_analyzed_sha || '',
+          loading: false,
+          error: '',
+        },
+      }))
+    } catch (e) {
+      setJobFindings((p) => ({
+        ...p,
+        [id]: {
+          ...(p[id] || {}),
+          loading: false,
+          error: e.response?.data || e.message || 'failed to load findings',
+        },
+      }))
+    }
+  }
+
+  const enqueueAutoFix = async (job, { findingKeys = null, createPr = true } = {}) => {
+    if (!job?.id) return
+    try {
+      const body = { create_pr: !!createPr }
+      if (Array.isArray(findingKeys) && findingKeys.length) body.finding_keys = findingKeys
+      const { data } = await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(job.id)}/auto-fix`), body)
+      flash(
+        'ok',
+        createPr ? 'OPA Review Create fix PR queued' : 'OPA Review Auto-fix queued',
+        data.auto_fix_id || data.honesty || '',
+      )
+      // Refresh findings panel + jobs list for status.
+      if (expandedJobId === job.id) {
+        setExpandedJobId('')
+        await loadJobFindings(job)
+      }
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'Auto-fix failed', e.response?.data || e.message)
     }
   }
 
@@ -1743,7 +1813,8 @@ export default function Security() {
               Select one or more watched repos and open PRs, then enqueue an <strong>OPA Review stack</strong>
               (one job per repo×PR). Large selections stay in one stack — extras <strong>wait</strong> and drain
               with stack concurrency (default serial). Each job packs <strong>full primary</strong> context for that repo plus
-              <strong>linked awareness</strong>. Findings post inline; the global PR message is a narrative résumé.
+              <strong>linked awareness</strong>. Findings post inline (re-runs add/update/resolve); the global PR message is a narrative résumé upserted in place.
+              Related repos are shallow-cloned under the job checkout for cross-repo context. Use <strong>Findings</strong> on PR Jobs to Auto-fix or Create fix PR.
               {!scmSettings.data?.cursor_key_set && (
                 <> <span style={{ color: 'var(--danger, #c44)' }}>No OPA Review API key set</span> — jobs still run with <code>ai.status=skipped</code>.</>
               )}
@@ -2099,10 +2170,15 @@ export default function Security() {
               {
                 key: 'commit_sha', header: 'SHA',
                 render: (r) => {
-                  const sha = r.commit_sha || r.summary?.worktree?.resolved_sha || ''
-                  return sha
-                    ? <span className="opa-mono" style={{ fontSize: 11 }} title={sha}>{String(sha).slice(0, 10)}</span>
-                    : '—'
+                  const sha = r.summary?.analyzed_sha || r.analyzed_sha || r.commit_sha || r.summary?.worktree?.resolved_sha || ''
+                  const prev = r.summary?.previous_analyzed_sha || ''
+                  if (!sha) return '—'
+                  return (
+                    <span className="opa-mono" style={{ fontSize: 11 }} title={prev ? `${sha} (prev ${prev})` : sha}>
+                      {String(sha).slice(0, 10)}
+                      {prev && !String(prev).startsWith(String(sha).slice(0, 10)) ? ' ·↑' : ''}
+                    </span>
+                  )
                 },
               },
               {
@@ -2202,23 +2278,114 @@ export default function Security() {
               },
               {
                 key: 'actions', header: '',
-                render: (r) => (
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {['queued', 'waiting', 'running'].includes(String(r.status || '').toLowerCase()) ? (
-                      <button type="button" className="opa-btn ghost" onClick={() => cancelJob(r.id)}>Cancel</button>
-                    ) : null}
-                    <button type="button" className="opa-btn ghost" onClick={() => retryJob(r.id)}>Retry</button>
-                    {r.pr_number ? (
-                      <button type="button" className="opa-btn ghost" onClick={() => rerunAiOnly(r)}>Re-run OPA Review</button>
-                    ) : null}
-                  </div>
-                ),
+                render: (r) => {
+                  const findings = Array.isArray(r.summary?.ai?.findings) ? r.summary.ai.findings : []
+                  const canFix = ['completed', 'failed', 'running'].includes(String(r.status || '').toLowerCase()) && findings.length > 0
+                  return (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {['queued', 'waiting', 'running'].includes(String(r.status || '').toLowerCase()) ? (
+                        <button type="button" className="opa-btn ghost" onClick={() => cancelJob(r.id)}>Cancel</button>
+                      ) : null}
+                      <button type="button" className="opa-btn ghost" onClick={() => retryJob(r.id)}>Retry</button>
+                      {r.pr_number ? (
+                        <button type="button" className="opa-btn ghost" onClick={() => rerunAiOnly(r)}>Re-run OPA Review</button>
+                      ) : null}
+                      <button type="button" className="opa-btn ghost" onClick={() => loadJobFindings(r)}>
+                        {expandedJobId === r.id ? 'Hide findings' : `Findings${findings.length ? ` (${findings.length})` : ''}`}
+                      </button>
+                      {canFix ? (
+                        <>
+                          <button type="button" className="opa-btn ghost" onClick={() => enqueueAutoFix(r, { createPr: false })}>Auto-fix all</button>
+                          <button type="button" className="opa-btn primary" onClick={() => enqueueAutoFix(r, { createPr: true })}>Create fix PR</button>
+                        </>
+                      ) : null}
+                    </div>
+                  )
+                },
               },
             ]}
             rows={scmJobRows}
             rowKey={(r) => r.id}
             maxHeight={480}
           />
+          {expandedJobId ? (() => {
+            const panel = jobFindings[expandedJobId] || {}
+            const findings = Array.isArray(panel.findings) ? panel.findings : []
+            const fixes = Array.isArray(panel.auto_fixes) ? panel.auto_fixes : []
+            const job = scmJobRows.find((j) => j.id === expandedJobId)
+            return (
+              <div style={{ padding: 12, borderTop: '1px solid var(--border, #e5e7eb)', fontSize: 13 }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                  <strong>OPA Review findings</strong>
+                  <span className="opa-mono" style={{ fontSize: 11 }}>{String(expandedJobId).slice(0, 22)}</span>
+                  {panel.analyzed_sha ? (
+                    <span className="opa-muted">analyzed <span className="opa-mono">{String(panel.analyzed_sha).slice(0, 12)}</span></span>
+                  ) : null}
+                  {panel.previous_analyzed_sha ? (
+                    <span className="opa-muted">prev <span className="opa-mono">{String(panel.previous_analyzed_sha).slice(0, 12)}</span></span>
+                  ) : null}
+                  {findings.length > 0 ? (
+                    <>
+                      <button type="button" className="opa-btn ghost" onClick={() => enqueueAutoFix(job, { createPr: false })}>Auto-fix all</button>
+                      <button type="button" className="opa-btn primary" onClick={() => enqueueAutoFix(job, { createPr: true })}>Create fix PR</button>
+                    </>
+                  ) : null}
+                </div>
+                {panel.loading && <div className="opa-muted">Loading findings…</div>}
+                {panel.error && <div style={{ color: 'var(--danger, #c44)' }}>{String(panel.error)}</div>}
+                {!panel.loading && !findings.length && <div className="opa-muted">No findings on this job.</div>}
+                {findings.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {findings.map((f, i) => {
+                      const key = f.finding_key || `${f.file || ''}:${f.line || i}`
+                      const sev = String(f.severity || '').toLowerCase() || 'info'
+                      return (
+                        <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap', padding: '6px 0', borderBottom: '1px solid var(--border-subtle, #eee)' }}>
+                          <StatusPill tone={sevTone(sev)}>{sev}</StatusPill>
+                          <span className="opa-mono" style={{ fontSize: 12 }}>
+                            {f.file || '—'}{f.line ? `:${f.line}` : ''}
+                          </span>
+                          <span style={{ flex: 1, minWidth: 160 }}>{f.problem || f.message || '—'}</span>
+                          <button
+                            type="button"
+                            className="opa-btn ghost"
+                            onClick={() => enqueueAutoFix(job, { findingKeys: [f.finding_key || key], createPr: false })}
+                          >
+                            Auto-fix
+                          </button>
+                          <button
+                            type="button"
+                            className="opa-btn ghost"
+                            onClick={() => enqueueAutoFix(job, { findingKeys: [f.finding_key || key], createPr: true })}
+                          >
+                            Create fix PR
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {fixes.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div className="cell-strong" style={{ marginBottom: 6 }}>Auto-fix status</div>
+                    {fixes.slice().reverse().map((fx, i) => {
+                      const f = typeof fx === 'object' && fx ? fx : {}
+                      return (
+                        <div key={f.id || i} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', fontSize: 12, marginBottom: 4 }}>
+                          <StatusPill tone={scmJobStatusTone(f.status)}>{f.status || '—'}</StatusPill>
+                          <span className="opa-mono">{String(f.id || '').slice(0, 16)}</span>
+                          {f.pr_url ? <a href={f.pr_url} target="_blank" rel="noreferrer">PR</a> : null}
+                          {f.branch ? <span className="opa-muted">{f.branch}</span> : null}
+                          {f.error ? <span style={{ color: 'var(--danger, #c44)' }}>{f.error}</span> : null}
+                          {f.honesty ? <span className="opa-muted">{f.honesty}</span> : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })() : null}
         </Panel>
       )}
     </div>
