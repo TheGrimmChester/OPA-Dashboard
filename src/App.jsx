@@ -51,6 +51,7 @@ const LiveHub = lazy(() => import('./pages/LiveHub'))
 const PlatformOps = lazy(() => import('./pages/PlatformOps'))
 const Serverless = lazy(() => import('./pages/Serverless'))
 const Security = lazy(() => import('./pages/Security'))
+const OPAReviewJob = lazy(() => import('./pages/OPAReviewJob'))
 const Catalog = lazy(() => import('./pages/Catalog'))
 const Automation = lazy(() => import('./pages/Automation'))
 const Cloud = lazy(() => import('./pages/Cloud'))
@@ -183,6 +184,10 @@ function App() {
             <Route
               path="/security"
               element={<Security />}
+            />
+            <Route
+              path="/security/jobs/:jobId"
+              element={<OPAReviewJob />}
             />
             <Route
               path="/catalog"

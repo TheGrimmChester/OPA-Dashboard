@@ -93,6 +93,16 @@ export function securityRunHref(runId, { tab } = {}) {
   return withParams('/security', { run: runId, tab: tab || 'scans' })
 }
 
+/** OPA Review job findings + Auto-fix detail page. */
+export function scmJobHref(jobId) {
+  if (!jobId) return null
+  return `/security/jobs/${encodeURIComponent(jobId)}`
+}
+
+export function securityJobsHref() {
+  return withParams('/security', { tab: 'jobs' })
+}
+
 export function traceReplayHref(traceId, mode = 'waterfall') {
   if (!traceId) return null
   const base = `/traces/${encodeURIComponent(traceId)}`
