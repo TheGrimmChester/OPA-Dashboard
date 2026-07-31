@@ -31,15 +31,36 @@ const PROFILE_HINTS = {
   full: 'All lite/stub scanners',
 }
 
+/** Tabs where a `run=` deep-link filters findings / shows run detail. */
+const RUN_CONTEXT_TABS = new Set(['scans', 'secrets', 'sast', 'iac'])
+
+function resolveSecurityTab(params) {
+  const tabQ = params.get('tab')
+  if (tabQ) return tabQ
+  // Bare `?run=` links open Scans; never invent a tab that steals Repo Watch.
+  if (params.get('run')) return 'scans'
+  return 'vulns'
+}
+
+function resolveSecurityRunId(params, tab) {
+  const runQ = params.get('run') || ''
+  if (!runQ) return ''
+  // Explicit non-run tabs (e.g. tab=watch&run=…) keep the tab; ignore run context.
+  if (!RUN_CONTEXT_TABS.has(tab)) return ''
+  return runQ
+}
+
 /** Wave 19 + Wave 30 + Wave 33: Vulns / IAST / Secrets / SAST / IaC / Scans / Inventory / Policies / PR-check. */
 export default function Security() {
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [tab, setTab] = useState(() => searchParams.get('tab') || 'vulns')
+  const [tab, setTab] = useState(() => resolveSecurityTab(searchParams))
   const [minSev, setMinSev] = useState(() => localStorage.getItem(SEV_KEY) || 'high')
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
-  const [activeRunId, setActiveRunId] = useState(() => searchParams.get('run') || '')
+  const [activeRunId, setActiveRunId] = useState(() => (
+    resolveSecurityRunId(searchParams, resolveSecurityTab(searchParams))
+  ))
   const [runDetail, setRunDetail] = useState(null)
   const [runFindings, setRunFindings] = useState(null)
   const [form, setForm] = useState({
@@ -50,7 +71,7 @@ export default function Security() {
     image: '',
   })
 
-  const runFilter = activeRunId && (tab === 'secrets' || tab === 'sast' || tab === 'iac' || tab === 'scans')
+  const runFilter = activeRunId && RUN_CONTEXT_TABS.has(tab)
     ? { security_run_id: activeRunId }
     : {}
 
@@ -142,19 +163,32 @@ export default function Security() {
     return () => { cancelled = true }
   }, [activeConnector, tab, watchRefresh])
 
+  // Keep tab / run / connector in sync with the URL (and strip stale run= on Watch).
   useEffect(() => {
-    const c = searchParams.get('connector')
-    if (c) setActiveConnector(c)
-  }, [searchParams])
+    const nextTab = resolveSecurityTab(searchParams)
+    const nextRun = resolveSecurityRunId(searchParams, nextTab)
+    const nextConnector = searchParams.get('connector') || ''
+    if (nextTab !== tab) setTab(nextTab)
+    if (nextRun !== activeRunId) setActiveRunId(nextRun)
+    if (nextConnector && nextConnector !== activeConnector) setActiveConnector(nextConnector)
 
-  // Auto-select a live connector when the watch tab opens.
+    // Mangled deep links like ?run=…&tab=watch&connector=… — honor watch, drop run.
+    if (searchParams.get('tab') === 'watch' && searchParams.get('run')) {
+      const p = new URLSearchParams(searchParams)
+      p.delete('run')
+      setSearchParams(p, { replace: true })
+    }
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select a live connector when the watch tab opens (skip if URL named one).
   useEffect(() => {
     if (tab !== 'watch' || activeConnector) return
+    if (searchParams.get('connector')) return
     const list = connectors.data?.connectors || []
     if (!list.length) return
     const preferred = list.find((x) => x.has_token) || list[0]
     if (preferred?.id) setActiveConnector(preferred.id)
-  }, [tab, activeConnector, connectors.data])
+  }, [tab, activeConnector, connectors.data, searchParams])
 
   const s = summary.data || {}
   const is = iastSum.data || {}
@@ -198,19 +232,29 @@ export default function Security() {
     setTab(next)
     const p = new URLSearchParams(searchParams)
     p.set('tab', next)
-    if (activeRunId) p.set('run', activeRunId)
-    else p.delete('run')
+    if (RUN_CONTEXT_TABS.has(next) && activeRunId) {
+      p.set('run', activeRunId)
+    } else {
+      p.delete('run')
+      if (!RUN_CONTEXT_TABS.has(next)) setActiveRunId('')
+    }
+    if (next !== 'watch') p.delete('connector')
+    else if (activeConnector) p.set('connector', activeConnector)
     setSearchParams(p, { replace: true })
   }
 
   const selectRun = (id) => {
     setActiveRunId(id || '')
     const p = new URLSearchParams(searchParams)
-    if (id) p.set('run', id)
-    else p.delete('run')
-    p.set('tab', tab === 'vulns' ? 'scans' : tab)
+    if (id) {
+      p.set('run', id)
+      p.set('tab', 'scans')
+      p.delete('connector')
+      setTab('scans')
+    } else {
+      p.delete('run')
+    }
     setSearchParams(p, { replace: true })
-    if (id && tab !== 'scans') setTab('scans')
   }
 
   const flash = (tone, title, detail) => {
@@ -274,9 +318,12 @@ export default function Security() {
       const id = data.connector?.id
       if (id) {
         setActiveConnector(id)
+        setActiveRunId('')
+        setTab('watch')
         const p = new URLSearchParams(searchParams)
         p.set('tab', 'watch')
         p.set('connector', id)
+        p.delete('run')
         setSearchParams(p, { replace: true })
       }
       flash('ok', 'GitHub PAT connected', data.honesty)
@@ -305,8 +352,11 @@ export default function Security() {
 
   const selectConnector = (id) => {
     setActiveConnector(id)
+    setTab('watch')
+    setActiveRunId('')
     const p = new URLSearchParams(searchParams)
     p.set('tab', 'watch')
+    p.delete('run')
     if (id) p.set('connector', id)
     else p.delete('connector')
     setSearchParams(p, { replace: true })
@@ -441,7 +491,7 @@ export default function Security() {
   }
 
   useEffect(() => {
-    if (!activeRunId) {
+    if (!activeRunId || !RUN_CONTEXT_TABS.has(tab)) {
       setRunDetail(null)
       setRunFindings(null)
       return undefined
@@ -475,7 +525,7 @@ export default function Security() {
       cancelled = true
       clearInterval(t)
     }
-  }, [activeRunId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeRunId, tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const parseSummary = (r) => {
     try {
@@ -589,6 +639,13 @@ export default function Security() {
 
   const profileRows = profiles.data?.profiles || []
   const workspace = profiles.data?.workspace || runs.data?.workspace || '/workspace'
+  const connectorList = connectors.data?.connectors || []
+  const activeConnectorRow = connectorList.find((c) => c.id === activeConnector)
+  const connectorMissing = !!activeConnector && !connectors.loading && !activeConnectorRow
+  const connectorNeedsReconnect = !!activeConnector && (
+    reposMeta.error === 'connector_not_in_memory'
+    || (activeConnectorRow && activeConnectorRow.has_token === false)
+  )
 
   return (
     <div className="opa-stack">
@@ -934,10 +991,10 @@ export default function Security() {
             </div>
             <div style={{ marginTop: 16 }}>
               <div className="cell-strong" style={{ marginBottom: 8 }}>Active connectors</div>
-              {(connectors.data?.connectors || []).length === 0 && (
+              {connectorList.length === 0 && (
                 <div className="opa-muted">No connectors yet — connect a PAT or install the GitHub App.</div>
               )}
-              {(connectors.data?.connectors || []).map((c) => (
+              {connectorList.map((c) => (
                 <button
                   key={c.id}
                   type="button"
@@ -951,6 +1008,28 @@ export default function Security() {
                 </button>
               ))}
             </div>
+            {(connectorMissing || connectorNeedsReconnect) && (
+              <div className="opa-banner" role="status" style={{
+                marginTop: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 6, fontSize: 13,
+              }}>
+                <div className="cell-strong" style={{ marginBottom: 4 }}>
+                  {connectorMissing ? 'Connector not found on Agent' : 'Reconnect required'}
+                </div>
+                <div className="opa-muted" style={{ marginBottom: 8 }}>
+                  Deep-linked connector <code className="opa-mono">{activeConnector}</code>
+                  {connectorMissing
+                    ? ' is not in Agent memory or ClickHouse (often after recreate).'
+                    : ' — credentials are in-process only and are not restored from ClickHouse after Agent restart.'}
+                  {' '}Paste a PAT above and click <strong>Connect PAT</strong>, or use <strong>Connect GitHub App</strong>.
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
+                    <FiRefreshCw size={12} /> Retry
+                  </button>
+                  <button type="button" className="opa-btn ghost" onClick={() => selectConnector('')}>Clear connector</button>
+                </div>
+              </div>
+            )}
           </Panel>
 
           <Panel title="Available repositories" icon={<FiEye />}
@@ -969,13 +1048,23 @@ export default function Security() {
               <div className="opa-muted" style={{ marginBottom: 8, fontSize: 13 }}>
                 Could not list repos: <span className="opa-mono">{String(reposMeta.error)}</span>
                 {reposMeta.note ? <> — {reposMeta.note}</> : null}
-                {' '}Use checkboxes after reconnect, or type extra org/name above and Save.
+                {reposMeta.error === 'connector_not_in_memory'
+                  ? <> Reconnect with PAT / GitHub App above (tokens are not reloaded after Agent restart).</>
+                  : String(reposMeta.error).includes('401') || String(reposMeta.error).includes('403')
+                    ? <> Check PAT scopes / org SSO, then Connect PAT again.</>
+                    : <> Use checkboxes after reconnect, or type extra org/name above and Save.</>}
               </div>
             )}
             {activeConnector && reposMeta.mock && !reposMeta.error && (
               <div className="opa-muted" style={{ marginBottom: 8, fontSize: 12 }}>
-                Mock list (<code>OPA_SCM_MOCK_GITHUB=1</code>) — not calling GitHub API.
+                Mock list (<code>OPA_SCM_MOCK_GITHUB=1</code>) — not calling GitHub.
+                Paste a real <code>ghp_</code> / <code>github_pat_</code> token and Connect PAT to load your repos
+                (smoke mock is bypassed for real tokens).
+                {reposMeta.note ? <> {reposMeta.note}</> : null}
               </div>
+            )}
+            {activeConnector && !reposMeta.mock && !reposMeta.error && reposMeta.note && (
+              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 12 }}>{reposMeta.note}</div>
             )}
             {activeConnector && !reposLoading && availableRepos.length === 0 && !reposMeta.error && (
               <div className="opa-muted">No installable repos returned. Add org/name in Extra repos and Save, or check PAT scopes.</div>
