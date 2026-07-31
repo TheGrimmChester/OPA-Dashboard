@@ -76,6 +76,30 @@ export default function Security() {
   const runs = useApi('/api/security/runs', { limit: 50 }, { noRange: true, skip: tab !== 'scans' && !activeRunId })
   const profiles = useApi('/api/security/profiles', {}, { noRange: true, skip: tab !== 'scans' })
   const services = useApi('/api/services', {}, { noRange: true, skip: tab !== 'scans' })
+  const connectors = useApi('/api/connectors', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'jobs' })
+  const scmJobs = useApi('/api/scm/jobs', { limit: 50 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
+  const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' })
+  const [patForm, setPatForm] = useState({ token: '', login: '', repos: '' })
+  const [cursorKey, setCursorKey] = useState('')
+  const [watchedRows, setWatchedRows] = useState([])
+  const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
+
+  useEffect(() => {
+    if (!activeConnector || tab !== 'watch') {
+      setWatchedRows([])
+      return undefined
+    }
+    let cancelled = false
+    axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/watched`)
+      .then((r) => { if (!cancelled) setWatchedRows(r.data?.watched || []) })
+      .catch(() => { if (!cancelled) setWatchedRows([]) })
+    return () => { cancelled = true }
+  }, [activeConnector, tab])
+
+  useEffect(() => {
+    const c = searchParams.get('connector')
+    if (c) setActiveConnector(c)
+  }, [searchParams])
 
   const s = summary.data || {}
   const is = iastSum.data || {}
@@ -180,6 +204,114 @@ export default function Security() {
       flash('error', 'Start scan failed', e.response?.data || e.message)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const connectPAT = async () => {
+    setBusy(true)
+    try {
+      const repos = patForm.repos.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
+      const { data } = await axios.post(`${API}/api/connectors/github/pat`, {
+        token: patForm.token,
+        login: patForm.login || 'pat-user',
+        repos,
+      })
+      const id = data.connector?.id
+      if (id) setActiveConnector(id)
+      flash('ok', 'GitHub PAT connected', data.honesty)
+      connectors.reload?.()
+      setPatForm({ token: '', login: patForm.login, repos: patForm.repos })
+    } catch (e) {
+      flash('error', 'PAT connect failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openGitHubInstall = async () => {
+    try {
+      const { data } = await axios.get(`${API}/api/connectors/github/install-url`)
+      if (data.install_url) {
+        window.open(data.install_url, '_blank', 'noopener')
+      } else {
+        flash('warn', 'GitHub App not configured', data.note || 'Use PAT bootstrap or set Agent env')
+      }
+    } catch (e) {
+      flash('error', 'Install URL failed', e.response?.data || e.message)
+    }
+  }
+
+  const saveWatched = async () => {
+    if (!activeConnector) {
+      flash('warn', 'Select a connector first')
+      return
+    }
+    const repos = patForm.repos.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
+    if (!repos.length) {
+      flash('warn', 'Enter repo full names (org/name)')
+      return
+    }
+    setBusy(true)
+    try {
+      const { data } = await axios.put(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/watched`, {
+        repos: repos.map((repo_full_name) => ({
+          repo_full_name,
+          enabled: true,
+          profile: form.profile || 'auto',
+          checks: ['secrets', 'sast', 'iac', 'ai_review'],
+          min_severity: minSev,
+          ai_blocking: false,
+        })),
+      })
+      setWatchedRows(data.watched || [])
+      flash('ok', 'Watched repos updated', `${(data.watched || []).length} repos`)
+    } catch (e) {
+      flash('error', 'Watch update failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const saveCursorKey = async (clear = false) => {
+    setBusy(true)
+    try {
+      await axios.post(`${API}/api/scm/settings/cursor-key`, clear ? { clear: true } : { api_key: cursorKey })
+      flash('ok', clear ? 'Cursor key cleared' : 'Cursor key saved')
+      setCursorKey('')
+      scmSettings.reload?.()
+    } catch (e) {
+      flash('error', 'Cursor key update failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const simulateJob = async () => {
+    setBusy(true)
+    try {
+      const { data } = await axios.post(`${API}/api/scm/simulate`, {
+        repo: patForm.repos.split(/[\s,]+/).filter(Boolean)[0] || 'local/smoke-repo',
+        pr: 1,
+        service: form.service || 'node-smoke',
+        profile: form.profile || 'auto',
+      })
+      flash('ok', 'Simulated SCM job', data.job_id)
+      selectTab('jobs')
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'Simulate failed', e.response?.data || e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const retryJob = async (id) => {
+    try {
+      await axios.post(`${API}/api/scm/jobs/${encodeURIComponent(id)}/retry`)
+      flash('ok', 'Job re-queued', id)
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'Retry failed', e.response?.data || e.message)
     }
   }
 
@@ -338,7 +470,7 @@ export default function Security() {
       <div className="opa-page-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div>
           <h1 className="opa-page-title">Security</h1>
-          <div className="opa-page-sub">CVE reachability · IAST · secrets · SAST-lite · IaC stub · scan runs · PR check</div>
+          <div className="opa-page-sub">CVE reachability · IAST · secrets · SAST-lite · IaC · scan runs · Repo Watch · AppSec Gate · AI Review</div>
         </div>
         <button type="button" className="opa-btn primary" disabled={busy} onClick={() => selectTab('scans')}>
           <FiPlay size={12} /> Start scan
@@ -369,9 +501,11 @@ export default function Security() {
         <button type="button" className={`opa-tab ${tab === 'sast' ? 'active' : ''}`} onClick={() => selectTab('sast')}>SAST</button>
         <button type="button" className={`opa-tab ${tab === 'iac' ? 'active' : ''}`} onClick={() => selectTab('iac')}>IaC</button>
         <button type="button" className={`opa-tab ${tab === 'scans' ? 'active' : ''}`} onClick={() => selectTab('scans')}>Scans</button>
+        <button type="button" className={`opa-tab ${tab === 'watch' ? 'active' : ''}`} onClick={() => selectTab('watch')}>Repo Watch</button>
+        <button type="button" className={`opa-tab ${tab === 'jobs' ? 'active' : ''}`} onClick={() => selectTab('jobs')}>PR Jobs</button>
         <button type="button" className={`opa-tab ${tab === 'inventory' ? 'active' : ''}`} onClick={() => selectTab('inventory')}>Inventory</button>
         <button type="button" className={`opa-tab ${tab === 'policies' ? 'active' : ''}`} onClick={() => selectTab('policies')}>Policies</button>
-        <button type="button" className={`opa-tab ${tab === 'pr' ? 'active' : ''}`} onClick={() => selectTab('pr')}>PR check</button>
+        <button type="button" className={`opa-tab ${tab === 'pr' ? 'active' : ''}`} onClick={() => selectTab('pr')}>Gate</button>
       </div>
 
       {activeRunId && tab !== 'scans' && (tab === 'secrets' || tab === 'sast' || tab === 'iac') && (
@@ -588,19 +722,147 @@ export default function Security() {
       )}
 
       {tab === 'pr' && (
-        <Panel title="PR check" icon={<FiCheckCircle />} loading={prCheck.loading} error={prCheck.error}>
+        <Panel title="AppSec Gate" icon={<FiCheckCircle />} loading={prCheck.loading} error={prCheck.error}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
-            Aggregates vulns + secrets + SAST + IaC/containers for CI.
-            CI: <code>/v1/security/pr-check</code> with Bearer / <code>X-OPA-Security-Token</code>
-            when <code>OPA_SECURITY_INGEST_TOKEN</code> is set; humans: OIDC/password session.
-            Honesty: pragmatic scanner gate — not a dedicated AppSec SSO product.
+            <strong>Tenant gate</strong> aggregates all findings (legacy CI). Prefer <strong>scoped</strong> checks with
+            {' '}<code>security_run_id</code> from Repo Watch / Scans.
+            CI: <code>POST /v1/security/pr-check</code> with <code>X-OPA-Security-Token</code>.
           </p>
+          <pre className="opa-mono" style={{ fontSize: 11, background: 'var(--surface-2)', padding: 12, overflow: 'auto' }}>
+{prCheck.data?.ci_snippet_scoped || prCheck.data?.ci_snippet || ''}
+          </pre>
           <pre className="opa-mono" style={{ fontSize: 12, background: 'var(--surface-2)', padding: 12 }}>
             {JSON.stringify(prCheck.data || {}, null, 2)}
           </pre>
           <div className="opa-muted" style={{ fontSize: 12, marginTop: 8 }}>
-            Counts — secrets: {secretRows.length}, sast: {sastRows.length}, iac: {iacRows.length}
+            Cursor key set: {scmSettings.data?.cursor_key_set ? 'yes' : 'no'} · Webhook: {scmSettings.data?.webhook_url || '—'}
           </div>
+        </Panel>
+      )}
+
+      {tab === 'watch' && (
+        <>
+          <Panel title="Connectors" icon={<FiShield />}
+            actions={
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="opa-btn ghost" onClick={openGitHubInstall}>Connect GitHub App</button>
+                <button type="button" className="opa-btn ghost" disabled={busy} onClick={simulateJob}>Simulate PR job</button>
+              </div>
+            }>
+            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
+              GitHub App is production (webhooks + Check Runs). PAT bootstrap is for local/dev.
+              App configured: {connectors.data?.github_app_configured ? 'yes' : 'no'}.
+            </p>
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                PAT token
+                <input type="password" className="opa-mono" value={patForm.token} onChange={(e) => setPatForm((f) => ({ ...f, token: e.target.value }))} placeholder="ghp_…" />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Login
+                <input value={patForm.login} onChange={(e) => setPatForm((f) => ({ ...f, login: e.target.value }))} placeholder="github-user" />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Repos (org/name …)
+                <input className="opa-mono" value={patForm.repos} onChange={(e) => setPatForm((f) => ({ ...f, repos: e.target.value }))} placeholder="acme/api acme/web" />
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="opa-btn primary" disabled={busy || !patForm.token} onClick={connectPAT}>Connect PAT</button>
+              <button type="button" className="opa-btn ghost" disabled={busy || !activeConnector} onClick={saveWatched}>Save watched repos</button>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <div className="cell-strong" style={{ marginBottom: 8 }}>Active connectors</div>
+              {(connectors.data?.connectors || []).length === 0 && <div className="opa-muted">No connectors yet</div>}
+              {(connectors.data?.connectors || []).map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`opa-btn ${activeConnector === c.id ? 'primary' : 'ghost'}`}
+                  style={{ marginRight: 8, marginBottom: 8 }}
+                  onClick={() => setActiveConnector(c.id)}
+                >
+                  {c.kind} · {c.account_login || c.installation_id || c.id.slice(0, 12)}
+                </button>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Watched repositories" icon={<FiEye />} flush
+            empty={!watchedRows.length} emptyText="Select a connector and save repo full names above">
+            <DataTable
+              columns={[
+                { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono cell-strong">{r.repo_full_name}</span> },
+                { key: 'service_name', header: 'Service', render: (r) => (r.service_name ? <Link to={serviceHref(r.service_name)}>{r.service_name}</Link> : '—') },
+                { key: 'profile', header: 'Profile', render: (r) => <Badge>{r.profile || 'auto'}</Badge> },
+                { key: 'checks_json', header: 'Checks', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{r.checks_json || '—'}</span> },
+                { key: 'min_severity', header: 'Min sev' },
+                { key: 'ai_blocking', header: 'AI block', render: (r) => (r.ai_blocking ? 'yes' : 'no') },
+                { key: 'enabled', header: 'On', render: (r) => (r.enabled ? 'yes' : 'no') },
+              ]}
+              rows={watchedRows}
+              rowKey={(r) => r.id || r.repo_full_name}
+              maxHeight={320}
+            />
+          </Panel>
+
+          <Panel title="Cursor AI Review key" icon={<FiKey />}>
+            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
+              Stored server-side only. CLI: <code>agent -p --trust --force --model auto</code>.
+              Status: {scmSettings.data?.cursor_key_set ? 'set' : 'not set'} · model {scmSettings.data?.cursor_model || 'auto'}
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="password"
+                className="opa-mono"
+                style={{ minWidth: 280 }}
+                placeholder="CURSOR_API_KEY"
+                value={cursorKey}
+                onChange={(e) => setCursorKey(e.target.value)}
+              />
+              <button type="button" className="opa-btn primary" disabled={busy || !cursorKey} onClick={() => saveCursorKey(false)}>Save key</button>
+              <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => saveCursorKey(true)}>Clear</button>
+            </div>
+          </Panel>
+        </>
+      )}
+
+      {tab === 'jobs' && (
+        <Panel title="SCM / PR jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading} error={scmJobs.error}
+          empty={!scmJobs.loading && !(scmJobs.data?.jobs || []).length}
+          emptyText="No jobs yet — open a PR on a watched repo, or Simulate from Repo Watch"
+          actions={<button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}>
+          <DataTable
+            columns={[
+              { key: 'id', header: 'Job', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.id).slice(0, 18)}</span> },
+              { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
+              { key: 'pr_number', header: 'PR', render: (r) => (r.pr_number ? `#${r.pr_number}` : '—') },
+              { key: 'event', header: 'Event', render: (r) => <Badge>{r.event}</Badge> },
+              {
+                key: 'status', header: 'Status',
+                render: (r) => (
+                  <StatusPill tone={r.status === 'completed' ? 'ok' : r.status === 'failed' ? 'error' : 'neutral'}>
+                    {r.status}
+                  </StatusPill>
+                ),
+              },
+              {
+                key: 'security_run_id', header: 'Scan',
+                render: (r) => (r.security_run_id
+                  ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
+                  : '—'),
+              },
+              {
+                key: 'actions', header: '',
+                render: (r) => (
+                  <button type="button" className="opa-btn ghost" onClick={() => retryJob(r.id)}>Retry</button>
+                ),
+              },
+            ]}
+            rows={scmJobs.data?.jobs || []}
+            rowKey={(r) => r.id}
+            maxHeight={480}
+          />
         </Panel>
       )}
     </div>
