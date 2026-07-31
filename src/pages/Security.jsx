@@ -115,11 +115,15 @@ export default function Security() {
   })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
   const [watchRefresh, setWatchRefresh] = useState(0)
-  const [aiReviewForm, setAiReviewForm] = useState({ repo: '', pr: '', force: true, ai_only: false })
-  const [openPulls, setOpenPulls] = useState([])
+  const [aiReviewForm, setAiReviewForm] = useState({ force: true, ai_only: false, preview_url: '' })
+  const [reviewRepos, setReviewRepos] = useState({}) // repo -> bool
+  const [reviewPrs, setReviewPrs] = useState({}) // `${repo}#${pr}` -> bool
+  const [pullsByRepo, setPullsByRepo] = useState({}) // repo -> pulls[]
   const [pullsLoading, setPullsLoading] = useState(false)
   const [appliedContexts, setAppliedContexts] = useState([])
   const [lastAiJobId, setLastAiJobId] = useState('')
+  const [lastStackId, setLastStackId] = useState('')
+  const [stackStatus, setStackStatus] = useState(null)
   const [contexts, setContexts] = useState([])
   const [ctxForm, setCtxForm] = useState({ title: '', body_markdown: '', repo_full_name: '', tags_design: false })
   const [ctxEditingId, setCtxEditingId] = useState('')
@@ -186,32 +190,55 @@ export default function Security() {
     return () => { cancelled = true }
   }, [tab, watchRefresh])
 
+  const selectedReviewRepos = useMemo(
+    () => Object.keys(reviewRepos).filter((r) => reviewRepos[r]),
+    [reviewRepos],
+  )
+
   useEffect(() => {
-    if (tab !== 'watch' || !activeConnector || !aiReviewForm.repo) {
-      setOpenPulls([])
+    if (tab !== 'watch' || !activeConnector || !selectedReviewRepos.length) {
+      setPullsByRepo({})
       setAppliedContexts([])
       return undefined
     }
     let cancelled = false
     setPullsLoading(true)
-    Promise.all([
-      axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/pulls`, {
-        params: { repo: aiReviewForm.repo },
-      }),
-      axios.get(`${API}/api/scm/contexts`, { params: { for_repo: aiReviewForm.repo } }),
-    ]).then(([pullsRes, ctxRes]) => {
+    Promise.all(selectedReviewRepos.map((repo) => Promise.all([
+      axios.get(`${API}/api/connectors/${encodeURIComponent(activeConnector)}/pulls`, { params: { repo } })
+        .then((res) => [repo, res.data?.pulls || []])
+        .catch(() => [repo, []]),
+      axios.get(`${API}/api/scm/contexts`, { params: { for_repo: repo } })
+        .then((res) => res.data?.summary || [])
+        .catch(() => []),
+    ]))).then((rows) => {
       if (cancelled) return
-      setOpenPulls(pullsRes.data?.pulls || [])
-      setAppliedContexts(ctxRes.data?.summary || [])
-    }).catch(() => {
-      if (cancelled) return
-      setOpenPulls([])
-      setAppliedContexts([])
+      const next = {}
+      let contexts = []
+      rows.forEach(([pullPair, summary]) => {
+        const [repo, pulls] = pullPair
+        next[repo] = pulls
+        contexts = contexts.concat(summary || [])
+      })
+      setPullsByRepo(next)
+      setAppliedContexts(contexts)
     }).finally(() => {
       if (!cancelled) setPullsLoading(false)
     })
     return () => { cancelled = true }
-  }, [tab, activeConnector, aiReviewForm.repo, watchRefresh])
+  }, [tab, activeConnector, selectedReviewRepos.join('|'), watchRefresh])
+
+  useEffect(() => {
+    if (!lastStackId || tab !== 'watch') return undefined
+    let cancelled = false
+    const tick = () => {
+      axios.get(`${API}/api/scm/opa-review/stacks/${encodeURIComponent(lastStackId)}`)
+        .then((res) => { if (!cancelled) setStackStatus(res.data) })
+        .catch(() => {})
+    }
+    tick()
+    const id = setInterval(tick, 4000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [lastStackId, tab])
 
   // Keep tab / run / connector in sync with the URL (and strip stale run= on Watch).
   useEffect(() => {
@@ -568,11 +595,11 @@ export default function Security() {
     setBusy(true)
     try {
       await axios.post(`${API}/api/scm/settings/cursor-key`, clear ? { clear: true } : { api_key: cursorKey })
-      flash('ok', clear ? 'AI Review API key cleared' : 'AI Review API key saved')
+      flash('ok', clear ? 'OPA Review API key cleared' : 'OPA Review API key saved')
       setCursorKey('')
       scmSettings.reload?.()
     } catch (e) {
-      flash('error', 'AI Review API key update failed', e.response?.data || e.message)
+      flash('error', 'OPA Review API key update failed', e.response?.data || e.message)
     } finally {
       setBusy(false)
     }
@@ -608,32 +635,37 @@ export default function Security() {
   }
 
   const runAiReview = async () => {
-    const repo = String(aiReviewForm.repo || '').trim()
-    const pr = Number(aiReviewForm.pr)
-    if (!repo || !pr) {
-      flash('error', 'Select a repo and PR number')
+    const items = []
+    selectedReviewRepos.forEach((repo) => {
+      Object.keys(reviewPrs).forEach((key) => {
+        if (!reviewPrs[key] || !key.startsWith(`${repo}#`)) return
+        const pr = Number(key.slice(repo.length + 1))
+        if (pr > 0) items.push({ repo_full_name: repo, pr_number: pr, connector_id: activeConnector || undefined })
+      })
+    })
+    if (!items.length) {
+      flash('error', 'Select at least one repo and PR')
       return
     }
     if (!scmSettings.data?.cursor_key_set && !scmSettings.data?.skip_cursor_ai) {
-      flash('error', 'No AI Review API key', 'Save a key under AI Review API key, or expect ai.status=skipped')
+      flash('error', 'No OPA Review API key', 'Save a key under OPA Review API key, or expect ai.status=skipped')
     }
     setBusy(true)
     try {
-      const { data } = await axios.post(`${API}/api/scm/ai-review`, {
-        repo_full_name: repo,
-        pr_number: pr,
-        connector_id: activeConnector || undefined,
+      const { data } = await axios.post(`${API}/api/scm/opa-review/stack`, {
+        items,
         force: !!aiReviewForm.force,
         ai_only: !!aiReviewForm.ai_only,
-        allow_unwatched: true,
+        preview_url: String(aiReviewForm.preview_url || '').trim() || undefined,
       })
-      setLastAiJobId(data.job_id || '')
-      setAppliedContexts(data.review_contexts || appliedContexts)
-      flash('ok', 'AI Review queued', data.job_id)
+      setLastStackId(data.stack_id || '')
+      setStackStatus(data)
+      setLastAiJobId((data.job_ids || [])[0] || '')
+      flash('ok', 'OPA Review stack queued', `${data.stack_id} · ${((data.job_ids || []).length)} job(s)`)
       selectTab('jobs')
       scmJobs.reload?.()
     } catch (e) {
-      flash('error', 'AI Review failed', e.response?.data || e.message)
+      flash('error', 'OPA Review stack failed', e.response?.data || e.message)
     } finally {
       setBusy(false)
     }
@@ -647,16 +679,16 @@ export default function Security() {
         ai_only: true,
       })
       setLastAiJobId(data.job_id || '')
-      flash('ok', 'AI-only re-run queued', data.job_id)
+      flash('ok', 'OPA Review-only re-run queued', data.job_id)
       scmJobs.reload?.()
     } catch (e) {
-      flash('error', 'AI re-run failed', e.response?.data || e.message)
+      flash('error', 'OPA Review re-run failed', e.response?.data || e.message)
     }
   }
 
   const saveContext = async () => {
     const title = String(ctxForm.title || '').trim()
-    const repo = String(ctxForm.repo_full_name || aiReviewForm.repo || '').trim()
+    const repo = String(ctxForm.repo_full_name || selectedReviewRepos[0] || '').trim()
     if (!title || !repo) {
       flash('error', 'Context needs title and repo')
       return
@@ -703,7 +735,7 @@ export default function Security() {
   }
 
   const generateContext = async () => {
-    const repo = String(ctxForm.repo_full_name || aiReviewForm.repo || '').trim()
+    const repo = String(ctxForm.repo_full_name || selectedReviewRepos[0] || '').trim()
     if (!repo) {
       flash('error', 'Pick a repo for Generate')
       return
@@ -713,7 +745,6 @@ export default function Security() {
       const { data } = await axios.post(`${API}/api/scm/contexts/generate`, {
         repo_full_name: repo,
         connector_id: activeConnector || undefined,
-        pr_number: Number(aiReviewForm.pr) || undefined,
         title: ctxForm.title || undefined,
       })
       if (data.status === 'skipped') {
@@ -923,7 +954,7 @@ export default function Security() {
       <div className="opa-page-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div>
           <h1 className="opa-page-title">Security</h1>
-          <div className="opa-page-sub">CVE reachability · IAST · secrets (gitleaks|lite) · SAST-lite · IaC · scan runs · Repo Watch · AppSec Gate · AI Review</div>
+          <div className="opa-page-sub">CVE reachability · IAST · secrets (gitleaks|lite) · SAST-lite · IaC · scan runs · Repo Watch · AppSec Gate · OPA Review</div>
         </div>
         <button type="button" className="opa-btn primary" disabled={busy} onClick={() => selectTab('scans')}>
           <FiPlay size={12} /> Start scan
@@ -1192,7 +1223,7 @@ export default function Security() {
             {JSON.stringify(prCheck.data || {}, null, 2)}
           </pre>
           <div className="opa-muted" style={{ fontSize: 12, marginTop: 8 }}>
-            AI Review API key set: {scmSettings.data?.cursor_key_set ? 'yes' : 'no'} · Webhook: {scmSettings.data?.webhook_url || '—'}
+            OPA Review API key set: {scmSettings.data?.cursor_key_set ? 'yes' : 'no'} · Webhook: {scmSettings.data?.webhook_url || '—'}
           </div>
         </Panel>
       )}
@@ -1248,7 +1279,7 @@ export default function Security() {
                       checks: { ...p.checks, [id]: e.target.checked },
                     }))}
                   />
-                  {id === 'ai_review' ? 'AI Review' : id.toUpperCase()}
+                  {id === 'ai_review' ? 'OPA Review' : id.toUpperCase()}
                 </label>
               ))}
               <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
@@ -1443,53 +1474,63 @@ export default function Security() {
             />
           </Panel>
 
-          <Panel title="Run AI Review" icon={<FiPlay />}>
+          <Panel title="Run OPA Review" icon={<FiPlay />}>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Manually queue AI Review on a PR. Contexts for this repo and any linked group are packed automatically.
+              Select one or more watched repos and open PRs, then enqueue an <strong>OPA Review stack</strong>
+              (one job per repo×PR). Each job packs <strong>full primary</strong> context for that repo plus
+              <strong>linked awareness</strong>. Findings post inline; the global PR message is a short résumé.
               {!scmSettings.data?.cursor_key_set && (
-                <> <span style={{ color: 'var(--danger, #c44)' }}>No AI Review API key set</span> — job still runs with <code>ai.status=skipped</code>.</>
+                <> <span style={{ color: 'var(--danger, #c44)' }}>No OPA Review API key set</span> — jobs still run with <code>ai.status=skipped</code>.</>
               )}
-              {scmSettings.data?.skip_cursor_ai && <> Agent has AI Review skipped (<code>SKIP_CURSOR_AI=1</code>).</>}
+              {scmSettings.data?.skip_cursor_ai && <> Agent has OPA Review skipped (<code>SKIP_CURSOR_AI=1</code>).</>}
             </p>
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 12 }}>
+            <div className="cell-strong" style={{ marginBottom: 6 }}>Watched repos</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
+              {watchedRows.map((r) => (
+                <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!reviewRepos[r.repo_full_name]}
+                    onChange={(e) => setReviewRepos((p) => ({ ...p, [r.repo_full_name]: e.target.checked }))}
+                  />
+                  <span className="opa-mono">{r.repo_full_name}</span>
+                </label>
+              ))}
+              {!watchedRows.length && <span className="opa-muted">Watch a repo first</span>}
+            </div>
+            <div className="cell-strong" style={{ marginBottom: 6 }}>Open PRs {pullsLoading ? '(loading…)' : ''}</div>
+            <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
+              {selectedReviewRepos.map((repo) => (
+                <div key={repo} style={{ padding: 8, background: 'var(--surface-2)', borderRadius: 6 }}>
+                  <div className="opa-mono" style={{ fontSize: 12, marginBottom: 6 }}>{repo}</div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
+                    {(pullsByRepo[repo] || []).map((p) => {
+                      const key = `${repo}#${p.number}`
+                      return (
+                        <label key={key} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!reviewPrs[key]}
+                            onChange={(e) => setReviewPrs((prev) => ({ ...prev, [key]: e.target.checked }))}
+                          />
+                          #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
+                        </label>
+                      )
+                    })}
+                    {!(pullsByRepo[repo] || []).length && !pullsLoading && <span className="opa-muted">No open PRs</span>}
+                  </div>
+                </div>
+              ))}
+              {!selectedReviewRepos.length && <span className="opa-muted">Select repos above</span>}
+            </div>
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Watched repo
-                <select
-                  className="opa-mono"
-                  value={aiReviewForm.repo}
-                  onChange={(e) => setAiReviewForm((f) => ({ ...f, repo: e.target.value, pr: '' }))}
-                >
-                  <option value="">Select…</option>
-                  {watchedRows.map((r) => (
-                    <option key={r.repo_full_name} value={r.repo_full_name}>{r.repo_full_name}</option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Open PR
-                <select
-                  className="opa-mono"
-                  disabled={!aiReviewForm.repo || pullsLoading}
-                  value={aiReviewForm.pr}
-                  onChange={(e) => setAiReviewForm((f) => ({ ...f, pr: e.target.value }))}
-                >
-                  <option value="">{pullsLoading ? 'Loading…' : 'Select or type below…'}</option>
-                  {openPulls.map((p) => (
-                    <option key={p.number} value={String(p.number)}>
-                      #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                PR number
+                Preview URL (optional, UI visual MCP)
                 <input
                   className="opa-mono"
-                  type="number"
-                  min={1}
-                  value={aiReviewForm.pr}
-                  onChange={(e) => setAiReviewForm((f) => ({ ...f, pr: e.target.value }))}
-                  placeholder="42"
+                  value={aiReviewForm.preview_url}
+                  onChange={(e) => setAiReviewForm((f) => ({ ...f, preview_url: e.target.value }))}
+                  placeholder="https://preview.example.com"
                 />
               </label>
             </div>
@@ -1500,22 +1541,39 @@ export default function Security() {
               </label>
               <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                 <input type="checkbox" checked={!!aiReviewForm.ai_only} onChange={(e) => setAiReviewForm((f) => ({ ...f, ai_only: e.target.checked }))} />
-                AI only (skip AppSec scanners)
+                OPA Review only (skip AppSec scanners)
               </label>
             </div>
             {!!appliedContexts.length && (
               <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                Contexts to apply:{' '}
+                Contexts (primary + linked awareness):{' '}
                 {appliedContexts.map((c) => `${c.role}:${c.title || c.id}`).join(' · ')}
               </div>
             )}
+            {stackStatus && (
+              <div style={{ marginBottom: 10, padding: 8, background: 'var(--surface-2)', borderRadius: 6, fontSize: 12 }}>
+                <div><strong>Stack</strong> <span className="opa-mono">{stackStatus.stack_id || lastStackId}</span> · {stackStatus.status}</div>
+                <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                  {(stackStatus.items || []).map((it, idx) => (
+                    <div key={`${it.repo_full_name}-${it.pr_number}-${idx}`} className="opa-mono">
+                      {it.repo_full_name}#{it.pr_number} → {it.status}{it.error ? ` (${it.error})` : ''}{it.job_id ? ` · ${String(it.job_id).slice(0, 14)}` : ''}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button type="button" className="opa-btn primary" disabled={busy || !aiReviewForm.repo || !aiReviewForm.pr} onClick={runAiReview}>
-                Run AI Review
+              <button
+                type="button"
+                className="opa-btn primary"
+                disabled={busy || !Object.values(reviewPrs).some(Boolean)}
+                onClick={runAiReview}
+              >
+                Run OPA Review stack
               </button>
-              {lastAiJobId && (
+              {lastStackId && (
                 <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>
-                  Last job {String(lastAiJobId).slice(0, 16)}…
+                  Stack {String(lastStackId).slice(0, 16)}…
                 </button>
               )}
             </div>
@@ -1523,7 +1581,7 @@ export default function Security() {
 
           <Panel title="Reviewer contexts" icon={<FiCode />}>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Per-repo briefs packed into AI Review. Tag <code>design</code>/<code>ui</code> for design-system enforcement
+              Per-repo briefs packed into OPA Review (full primary + linked awareness). Tag <code>design</code>/<code>ui</code> for design-system enforcement
               (auto-prioritized when the PR touches JSX/CSS/components). Link watched repos so a review pulls all contexts in the group.
             </p>
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
@@ -1562,11 +1620,11 @@ export default function Security() {
                 style={{ width: '100%', fontSize: 12 }}
                 value={ctxForm.body_markdown}
                 onChange={(e) => setCtxForm((f) => ({ ...f, body_markdown: e.target.value }))}
-                placeholder="Product purpose, trust boundaries, footguns… or Design enforcement notes (tokens, required components)"
+                placeholder={"## System\n## PR intent\n## Scope\n## Important invariants\n## Risk areas\n## Testing context\n## Operational\n"}
               />
             </label>
             {genDraft?.source === 'skipped' && (
-              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>Generate returned empty (skipped) — set AI Review API key or unset SKIP_CURSOR_AI.</div>
+              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>Generate returned empty (skipped) — set OPA Review API key or unset SKIP_CURSOR_AI.</div>
             )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
               <button type="button" className="opa-btn primary" disabled={busy} onClick={saveContext}>
@@ -1649,9 +1707,9 @@ export default function Security() {
             />
           </Panel>
 
-          <Panel title="AI Review API key" icon={<FiKey />}>
+          <Panel title="OPA Review API key" icon={<FiKey />}>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Stored server-side only. Used by the AI agent for PR review.
+              Stored server-side only. Used by OPA Review for PR review (senior-engineer brief template).
               Status: {scmSettings.data?.cursor_key_set ? 'set' : 'not set'} · model {scmSettings.data?.cursor_model || 'auto'}
             </p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1723,7 +1781,7 @@ export default function Security() {
                   const ids = r.check_run_ids || {}
                   const chips = []
                   if (ids.appsec) chips.push(`Gate:${ids.appsec}`)
-                  if (ids.ai) chips.push(`AI:${ids.ai}`)
+                  if (ids.ai) chips.push(`OPA:${ids.ai}`)
                   return chips.length
                     ? <span className="opa-muted" style={{ fontSize: 11 }}>{chips.join(' · ')}</span>
                     : '—'
@@ -1735,7 +1793,7 @@ export default function Security() {
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                     <button type="button" className="opa-btn ghost" onClick={() => retryJob(r.id)}>Retry</button>
                     {r.pr_number ? (
-                      <button type="button" className="opa-btn ghost" onClick={() => rerunAiOnly(r)}>Re-run AI</button>
+                      <button type="button" className="opa-btn ghost" onClick={() => rerunAiOnly(r)}>Re-run OPA Review</button>
                     ) : null}
                   </div>
                 ),
