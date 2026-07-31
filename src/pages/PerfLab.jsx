@@ -281,7 +281,7 @@ export default function PerfLab() {
           <h1 className="opa-page-title">Perf lab</h1>
           <div className="opa-page-sub">
             Visual scenario builder → Apache JMeter · load_run_id ↔ traces
-            <span className="opa-muted"> (no JMeter expertise required; fan-out ≠ multi-region cloud)</span>
+            <span className="opa-muted"> (admin required to save/dispatch/validate when auth is on; fan-out ≠ multi-region cloud)</span>
           </div>
         </div>
       </div>
