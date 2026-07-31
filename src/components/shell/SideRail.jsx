@@ -2,7 +2,7 @@ import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
-  FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiGrid, FiTarget,
+  FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiTarget,
   FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield, FiBookOpen,
   FiChevronsLeft, FiChevronsRight, FiTerminal,
 } from 'react-icons/fi'
@@ -12,7 +12,6 @@ export const NAV_GROUPS = [
   {
     labelKey: 'nav.group.monitor',
     items: [
-      { to: '/', labelKey: 'nav.overview', icon: FiGrid, exact: true },
       { to: '/services', labelKey: 'nav.services', icon: FiServer },
       { to: '/catalog', labelKey: 'nav.catalog', icon: FiBookOpen },
       { to: '/key-transactions', labelKey: 'nav.keyTransactions', icon: FiTarget },
