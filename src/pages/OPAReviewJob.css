@@ -1,0 +1,122 @@
+.opa-review-job-crumb {
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+
+.opa-review-job-crumb a {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.opa-review-job-crumb a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.opa-review-job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  font-size: var(--fs-12);
+}
+
+.opa-review-job-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px 16px;
+  padding: 12px 14px;
+  margin-bottom: var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  font-size: var(--fs-13);
+}
+
+.opa-review-job-summary-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.opa-review-job-summary-row > span:last-child,
+.opa-review-job-summary-row > a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opa-review-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--sp-4);
+}
+
+.opa-review-findings,
+.opa-review-fixes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.opa-review-finding {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle, #eee);
+}
+
+.opa-review-finding:last-child {
+  border-bottom: none;
+}
+
+.opa-review-finding-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.opa-review-finding-loc {
+  font-size: var(--fs-12);
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.opa-review-finding-msg {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: 1.45;
+  color: var(--text-primary);
+  max-width: 72ch;
+}
+
+.opa-review-finding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.opa-review-fix {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle, #eee);
+  font-size: var(--fs-13);
+}
+
+.opa-review-fix:last-child {
+  border-bottom: none;
+}
+
+.opa-review-fix-err {
+  color: var(--danger, #c44);
+}

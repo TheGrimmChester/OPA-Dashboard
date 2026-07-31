@@ -16,6 +16,8 @@ import {
   truncateId,
   perfRunHref,
   securityRunHref,
+  scmJobHref,
+  securityJobsHref,
   syntheticsHref,
 } from './entityLinks.js'
 
@@ -44,6 +46,8 @@ describe('entityLinks', () => {
     expect(rumSessionHref('sid')).toBe('/rum?session=sid&tab=sessions')
     expect(perfRunHref('run-9', { tab: 'results' })).toBe('/perf-lab?run=run-9&tab=results')
     expect(securityRunHref('srun-1')).toBe('/security?run=srun-1&tab=scans')
+    expect(scmJobHref('job-1')).toBe('/security/jobs/job-1')
+    expect(securityJobsHref()).toBe('/security?tab=jobs')
     expect(syntheticsHref('chk-1')).toBe('/synthetics?check=chk-1')
     expect(traceReplayHref('abc', 'waterfall')).toBe('/traces/abc?replay=waterfall')
     expect(truncateId('abcdefghijklmnop', 8)).toBe('abcdefgh…')
