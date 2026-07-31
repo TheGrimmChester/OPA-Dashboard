@@ -89,7 +89,12 @@ export default function ErrorsInbox() {
       key: 'service',
       header: 'Service',
       sortValue: (r) => r?.service || '',
-      render: (r) => <span className="opa-mono opa-muted">{r?.service || '—'}</span>,
+      render: (r) => (r?.service
+        ? <button type="button" className="opa-btn ghost opa-mono" style={{ padding: '0 4px' }}
+            onClick={(e) => { e.stopPropagation(); navigate(`/services/${encodeURIComponent(r.service)}`) }}>
+            {r.service}
+          </button>
+        : <span className="opa-mono opa-muted">—</span>),
     },
     {
       key: 'count',
