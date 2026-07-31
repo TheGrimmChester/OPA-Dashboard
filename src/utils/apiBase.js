@@ -1,12 +1,12 @@
 /**
  * Resolve API base URL by path prefix.
- * - /api/perf → VITE_PERF_LAB_URL (default http://localhost:8092, else VITE_API_URL)
- * - /api/scm, /api/connectors, /api/security, /v1/scm, /v1/security
- *   → VITE_ORCHESTRATOR_URL (default http://localhost:8091, else VITE_API_URL)
- * - everything else → VITE_API_URL
+ * - /api/perf/* → VITE_PERF_LAB_URL (fallback Agent URL)
+ * - /api/scm/*, /api/connectors/*, /api/security/runs*, /api/security/profiles, /v1/scm/*
+ *   → VITE_ORCHESTRATOR_URL (fallback Agent URL)
+ * - everything else (incl. /api/security/secrets|sast|iac|policies) → VITE_API_URL
  *
- * Empty VITE_* build args mean same-origin (nginx path proxy in smoke).
- * Absolute defaults apply only when the env var is unset (local Vite).
+ * Empty env values mean same-origin (nginx path proxy in smoke).
+ * Absolute localhost defaults apply only when the env var is unset (local Vite).
  */
 const AGENT_URL = import.meta.env.VITE_API_URL ?? ''
 
@@ -29,11 +29,10 @@ export function apiBaseForPath(path = '') {
     p.startsWith('/api/scm/') ||
     p.startsWith('/api/scm?') ||
     p.startsWith('/api/connectors') ||
-    p === '/api/security' ||
-    p.startsWith('/api/security/') ||
-    p.startsWith('/api/security?') ||
-    p.startsWith('/v1/scm') ||
-    p.startsWith('/v1/security')
+    p === '/api/security/profiles' ||
+    p.startsWith('/api/security/profiles?') ||
+    p.startsWith('/api/security/runs') ||
+    p.startsWith('/v1/scm')
   ) {
     return ORCH_URL
   }
