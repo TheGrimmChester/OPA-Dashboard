@@ -70,6 +70,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/users', labelKey: 'nav.users', icon: FiUsers },
       { to: '/api-keys', labelKey: 'nav.apiKeys', icon: FiKey },
+      { to: '/settings/ai', labelKey: 'nav.aiSettings', icon: FiCpu },
       { to: '/automation', labelKey: 'nav.automation', icon: FiCpu },
       { to: '/federation', labelKey: 'nav.federation', icon: FiGlobe },
     ],
