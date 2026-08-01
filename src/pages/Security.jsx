@@ -269,7 +269,6 @@ export default function Security() {
   const [patForm, setPatForm] = useState({ token: '', login: '', repos: '' })
   const [editForm, setEditForm] = useState({ login: '', display_name: '', token: '' })
   const [editingConnector, setEditingConnector] = useState(false)
-  const [cursorKey, setCursorKey] = useState('')
   const [watchedRows, setWatchedRows] = useState([])
   const [availableRepos, setAvailableRepos] = useState([])
   const [repoPick, setRepoPick] = useState({})
@@ -822,20 +821,6 @@ export default function Security() {
     }
   }
 
-  const saveCursorKey = async (clear = false) => {
-    setBusy(true)
-    try {
-      await axios.post(apiUrl('/api/scm/settings/cursor-key'), clear ? { clear: true } : { api_key: cursorKey })
-      flash('ok', clear ? 'OPA Review API key cleared' : 'OPA Review API key saved')
-      setCursorKey('')
-      scmSettings.reload?.()
-    } catch (e) {
-      flash('error', 'OPA Review API key update failed', e.response?.data || e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const simulateJob = async () => {
     setBusy(true)
     try {
@@ -892,7 +877,7 @@ export default function Security() {
       return
     }
     if (!scmSettings.data?.cursor_key_set && !scmSettings.data?.skip_cursor_ai) {
-      flash('error', 'No OPA Review API key', 'Save a key under OPA Review API key, or expect ai.status=skipped')
+      flash('error', 'No OPA Review API key', 'Configure CLI agent under AI settings, or expect ai.status=skipped')
     }
     setBusy(true)
     try {
@@ -1837,7 +1822,7 @@ export default function Security() {
               <strong>linked awareness</strong>. Findings post inline (re-runs add/update/resolve); the global PR message is a narrative résumé upserted in place.
               Related repos are shallow-cloned under the job checkout for cross-repo context. Open a job’s findings page from PR Jobs for experimental Auto-fix / Create fix PR (requires OPA-AI-Orchestrator).
               {!scmSettings.data?.cursor_key_set && (
-                <> <span style={{ color: 'var(--danger, #c44)' }}>No OPA Review API key set</span> — jobs still run with <code>ai.status=skipped</code>.</>
+                <> <span style={{ color: 'var(--danger, #c44)' }}>No OPA Review API key set</span> — manage under <Link to="/settings/ai">AI settings</Link>; jobs still run with <code>ai.status=skipped</code>.</>
               )}
               {scmSettings.data?.skip_cursor_ai && <> Agent has OPA Review skipped (<code>SKIP_CURSOR_AI=1</code>).</>}
             </p>
@@ -2121,23 +2106,21 @@ export default function Security() {
             />
           </Panel>
 
-          <Panel title="OPA Review API key" icon={<FiKey />}>
-            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Stored server-side only. Used by OPA Review for PR review (senior-engineer brief template).
-              Status: {scmSettings.data?.cursor_key_set ? 'set' : 'not set'} · model {scmSettings.data?.cursor_model || 'auto'}
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input
-                type="password"
-                className="opa-mono"
-                style={{ minWidth: 280 }}
-                placeholder="API key"
-                value={cursorKey}
-                onChange={(e) => setCursorKey(e.target.value)}
-              />
-              <button type="button" className="opa-btn primary" disabled={busy || !cursorKey} onClick={() => saveCursorKey(false)}>Save key</button>
-              <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => saveCursorKey(true)}>Clear</button>
+          <Panel title="OPA Review AI" icon={<FiKey />}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <StatusPill tone={scmSettings.data?.cursor_key_set ? 'ok' : 'warn'} title="CLI agent key for OPA Review">
+                CLI key {scmSettings.data?.cursor_key_set ? 'set' : 'not set'}
+              </StatusPill>
+              <span className="opa-muted" style={{ fontSize: 12 }}>
+                model {scmSettings.data?.cursor_model || 'auto'}
+              </span>
+              <Link to="/settings/ai" className="opa-btn ghost" style={{ textDecoration: 'none' }}>
+                Manage in AI settings
+              </Link>
             </div>
+            <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
+              Watch-specific <code>ai_review</code> / <code>ai_blocking</code> toggles stay here. API keys live under AI settings.
+            </p>
           </Panel>
         </>
       )}

@@ -70,6 +70,7 @@ const Commands = lazy(() => import('./pages/Commands'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
+const AISettings = lazy(() => import('./pages/AISettings'))
 const Slos = lazy(() => import('./pages/Slos'))
 const Alerts = lazy(() => import('./pages/Alerts'))
 const Anomalies = lazy(() => import('./pages/Anomalies'))
@@ -251,6 +252,14 @@ function App() {
             <Route
               path="/api-keys"
               element={<ApiKeys />}
+            />
+            <Route
+              path="/settings/ai"
+              element={<AISettings />}
+            />
+            <Route
+              path="/ai"
+              element={<Navigate to="/settings/ai" replace />}
             />
             <Route
               path="/service-map"
