@@ -18,26 +18,35 @@ if (savedTheme === 'light') {
   document.documentElement.removeAttribute('data-theme')
 }
 
-// Attach the bearer token to every same-origin API request so pages work when
-// OPA_AUTH_REQUIRED is enabled, without each component wiring headers by hand.
-// Scoped to same-origin/relative URLs so the token is never sent cross-origin.
+// Attach bearer + identity to API requests (same-origin and known local service URLs).
+// Identity headers let the orchestrator resolve user-scoped AI secrets when auth is off
+// (middleware skipped) but the user is still signed in via the Agent.
 axios.interceptors.request.use((config) => {
   const url = config.url || ''
-  let sameOrigin = true
-  if (/^https?:\/\//i.test(url)) {
+  let attach = false
+  if (!/^https?:\/\//i.test(url)) {
+    attach = true // relative / same-origin proxy
+  } else {
     try {
-      sameOrigin = new URL(url).origin === window.location.origin
+      const host = new URL(url).hostname
+      attach = host === 'localhost' || host === '127.0.0.1' || host === window.location.hostname
     } catch {
-      sameOrigin = false
+      attach = false
     }
   }
-  if (sameOrigin) {
+  if (attach) {
+    config.headers = config.headers || {}
     const token = localStorage.getItem('auth_token')
-    if (token) {
-      config.headers = config.headers || {}
-      if (!config.headers.Authorization) {
-        config.headers.Authorization = `Bearer ${token}`
-      }
+    if (token && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    const username = localStorage.getItem('username')
+    const role = localStorage.getItem('role')
+    if (username && !config.headers['X-User-Username']) {
+      config.headers['X-User-Username'] = username
+    }
+    if (role && !config.headers['X-User-Role']) {
+      config.headers['X-User-Role'] = role
     }
   }
   return config

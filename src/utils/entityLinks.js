@@ -103,6 +103,11 @@ export function securityJobsHref({ status, severity, repo, q } = {}) {
   return withParams('/security', { tab: 'jobs', status, severity, repo, q })
 }
 
+/** SCM connectors settings (GitHub App / PAT). */
+export function connectorsHref({ edit } = {}) {
+  return withParams('/settings/connectors', { edit })
+}
+
 export function traceReplayHref(traceId, mode = 'waterfall') {
   if (!traceId) return null
   const base = `/traces/${encodeURIComponent(traceId)}`
