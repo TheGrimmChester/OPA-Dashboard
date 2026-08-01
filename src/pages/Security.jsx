@@ -784,7 +784,14 @@ export default function Security() {
       return
     }
     if (!scmSettings.data?.cursor_key_set && !scmSettings.data?.skip_cursor_ai) {
-      flash('error', 'No CLI agent API key', 'Save a personal or org CLI agent key under Account, or expect ai.status=skipped')
+      const who = scmSettings.data?.user_id || 'current user'
+      const org = scmSettings.data?.organization_id || 'selected org'
+      flash(
+        'error',
+        'No CLI agent API key',
+        scmSettings.data?.honesty ||
+          `No key for ${who} in ${org}. Save personal (same username) or org key under Account — keys are not shared across usernames.`,
+      )
     }
     setBusy(true)
     try {
@@ -1974,16 +1981,22 @@ export default function Security() {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <StatusPill tone={scmSettings.data?.cursor_key_set ? 'ok' : 'warn'} title="CLI agent key for OPA Review">
                 CLI key {scmSettings.data?.cursor_key_set ? 'set' : 'not set'}
+                {scmSettings.data?.cursor_key_scope ? ` · ${scmSettings.data.cursor_key_scope}` : ''}
               </StatusPill>
               <span className="opa-muted" style={{ fontSize: 12 }}>
                 model {scmSettings.data?.cursor_model || 'auto'}
+                {scmSettings.data?.user_id ? <> · user <code>{scmSettings.data.user_id}</code></> : null}
+                {scmSettings.data?.organization_id ? <> · org <code>{scmSettings.data.organization_id}</code></> : null}
               </span>
               <Link to="/settings/account" className="opa-btn ghost" style={{ textDecoration: 'none' }}>
                 Manage in Account
               </Link>
             </div>
             <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
-              Watch-specific <code>ai_review</code> / <code>ai_blocking</code> toggles stay here. API keys live under Account (user → org inheritance).
+              Watch-specific <code>ai_review</code> / <code>ai_blocking</code> toggles stay here. API keys live under Account (user → org inheritance; per signed-in username).
+              {!scmSettings.data?.cursor_key_set && scmSettings.data?.honesty ? (
+                <> {String(scmSettings.data.honesty)}</>
+              ) : null}
             </p>
           </Panel>
         </>
