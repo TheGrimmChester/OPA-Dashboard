@@ -1,9 +1,13 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FiX, FiSearch } from 'react-icons/fi'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import {
+  FiX, FiSearch, FiBarChart2, FiFilter, FiLayers, FiChevronDown, FiChevronRight,
+  FiActivity, FiTrendingUp, FiTrendingDown, FiHash,
+} from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
-  Panel, DataTable, TimeSeriesChart, SegmentedControl, StatusPill, EmptyState,
+  Panel, TimeSeriesChart, SegmentedControl, StatusPill, EmptyState, Badge, KpiTile,
 } from '../components/ui'
 import { fmtNum, fmtBytes, fmtMs, fmtPct, SERIES } from '../theme/format'
 import './MetricsExplorer.css'
@@ -18,8 +22,6 @@ import './MetricsExplorer.css'
 // All state lives in the URL, so a view someone finds interesting is a link they
 // can send.
 
-// The reductions the backend supports. Percentiles are served from the stored
-// t-digest, so they stay correct at every downsample tier rather than only on raw.
 const AGG_OPTIONS = [
   { value: 'avg', label: 'avg' },
   { value: 'max', label: 'max' },
@@ -30,13 +32,23 @@ const AGG_OPTIONS = [
   { value: 'p99', label: 'p99' },
 ]
 
-// Significant-figure formatting for arbitrary magnitudes.
-//
-// fmtNum rounds anything under 1000 to a whole number, which is right for counts
-// and wrong for metrics: a 0.37 CPU ratio or a 2.5ms latency would both render as
-// "0". Metric values span many orders of magnitude, so precision has to follow
-// magnitude — while still delegating to fmtNum's k/M/B abbreviation once the value
-// is large enough for decimals to be noise.
+// Soft ceiling: grouping above this draws a spaghetti chart. Still allowed —
+// the warning is the product, not a hard stop.
+const HIGH_CARDINALITY = 40
+const MAX_LEGEND_SERIES = 12
+const ROW_H = 30
+const GROUP_H = 28
+
+function namespaceOf(name) {
+  const i = String(name || '').indexOf('.')
+  return i > 0 ? name.slice(0, i) : (name || 'other')
+}
+
+function shortName(name, ns) {
+  const prefix = `${ns}.`
+  return name.startsWith(prefix) ? name.slice(prefix.length) : name
+}
+
 function fmtMetric(v) {
   if (v == null || Number.isNaN(v)) return '—'
   const abs = Math.abs(v)
@@ -48,16 +60,10 @@ function fmtMetric(v) {
   return v.toExponential(1)
 }
 
-// Unit "1" is UCUM for dimensionless — both 0–1 ratios (utilization) and
-// unbounded gauges (load average) use it. Only names that are actually ratios
-// should render as percentages; the rest stay plain numbers.
 function isRatioMetric(name) {
   return typeof name === 'string' && /\.(utilization|hit_rate)$/.test(name)
 }
 
-// Format values by the metric's declared unit, so a byte counter reads as "2.1 GiB"
-// rather than 2254857830. Units come from the collector and follow the same
-// UCUM-style convention as the metric names.
 function unitFormatter(unit, name) {
   switch (unit) {
     case 'By':
@@ -68,19 +74,12 @@ function unitFormatter(unit, name) {
       return fmtMs
     case '1':
       if (!isRatioMetric(name)) return fmtMetric
-      // A ratio. Shown as a percentage, because that is how utilization is read.
-      // fmtPct expects an already-scaled percentage, hence the ×100.
       return (v) => (v == null ? '—' : fmtPct(v * 100, 1))
     default:
       return fmtMetric
   }
 }
 
-// Units arrive in the UCUM-style form the metric conventions use, which is right
-// on the wire and unreadable on screen: "By" means bytes, neither of which is
-// obvious. Curly-brace forms like "{packet}" are annotations, so the braces are
-// just noise. Unit "1" only labels as "ratio" when the metric name is a ratio;
-// otherwise it is omitted so load average is not mislabeled.
 const UNIT_LABELS = {
   By: 'bytes',
   s: 'seconds',
@@ -95,13 +94,400 @@ function unitLabel(unit, name) {
   return annotated ? annotated[1] : unit
 }
 
-function unitSuffix(unit, name) {
-  const label = unitLabel(unit, name)
-  return label ? ` · ${label}` : ''
+function parseMatcher(raw) {
+  if (raw.includes('=~')) {
+    const [name, value] = raw.split('=~')
+    return { raw, name, value, op: '=~' }
+  }
+  if (raw.includes('!:')) {
+    const [name, value] = raw.split('!:')
+    return { raw, name, value, op: '≠' }
+  }
+  const [name, value] = raw.split(':')
+  return { raw, name, value, op: '=' }
 }
 
-// Beyond this many lines a legend is noise rather than navigation.
-const MAX_LEGEND_SERIES = 12
+function matcherKey(name, value) {
+  return `${name}:${value}`
+}
+
+function lastNonNull(rows, key) {
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const v = rows[i][key]
+    if (v != null && !Number.isNaN(v)) return v
+  }
+  return null
+}
+
+function extremes(rows, keys) {
+  let min = null
+  let max = null
+  for (const row of rows) {
+    for (const key of keys) {
+      const v = row[key]
+      if (v == null || Number.isNaN(v)) continue
+      if (min == null || v < min) min = v
+      if (max == null || v > max) max = v
+    }
+  }
+  return { min, max }
+}
+
+function MetricCatalogue({
+  metrics, filtered, selected, search, onSearch, onSelect, loading, error, empty,
+}) {
+  const parentRef = useRef(null)
+  const searching = search.trim().length > 0
+
+  // Collapsed namespaces. Search forces groups open so hits stay visible.
+  const [collapsed, setCollapsed] = useState(() => new Set())
+
+  const groups = useMemo(() => {
+    const map = new Map()
+    for (const m of filtered) {
+      const ns = namespaceOf(m.name)
+      if (!map.has(ns)) map.set(ns, [])
+      map.get(ns).push(m)
+    }
+    return Array.from(map, ([name, items]) => ({ name, items }))
+  }, [filtered])
+
+  const groupNames = useMemo(() => groups.map((g) => g.name), [groups])
+
+  // Deep links / selection must not land inside a collapsed group.
+  useEffect(() => {
+    if (!selected) return
+    const ns = namespaceOf(selected)
+    setCollapsed((prev) => {
+      if (!prev.has(ns)) return prev
+      const next = new Set(prev)
+      next.delete(ns)
+      return next
+    })
+  }, [selected])
+
+  const rows = useMemo(() => {
+    const out = []
+    for (const g of groups) {
+      const open = searching || !collapsed.has(g.name)
+      out.push({ kind: 'group', name: g.name, count: g.items.length, open })
+      if (!open) continue
+      for (const m of g.items) {
+        out.push({ kind: 'metric', metric: m, ns: g.name })
+      }
+    }
+    return out
+  }, [groups, collapsed, searching])
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: (i) => (rows[i]?.kind === 'group' ? GROUP_H : ROW_H),
+    getItemKey: (i) => {
+      const r = rows[i]
+      if (!r) return i
+      return r.kind === 'group' ? `g:${r.name}` : r.metric.name
+    },
+    overscan: 20,
+  })
+
+  useEffect(() => {
+    if (!selected || !rows.length) return
+    const idx = rows.findIndex((r) => r.kind === 'metric' && r.metric.name === selected)
+    if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'center' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, rows])
+
+  const toggleGroup = (name) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const expandAll = () => setCollapsed(new Set())
+  const collapseAll = () => setCollapsed(new Set(groupNames))
+  const allExpanded = !searching && collapsed.size === 0
+  const allCollapsed = !searching && groupNames.length > 0 && collapsed.size >= groupNames.length
+
+  return (
+    <Panel
+      className="opa-mx-catalogue"
+      title="Catalogue"
+      icon={<FiHash />}
+      actions={(
+        <div className="opa-mx-cat-actions">
+          <span className="opa-muted opa-tnum">{fmtNum(filtered.length)}/{fmtNum(metrics.length)}</span>
+          {groupNames.length > 1 && !searching && (
+            <>
+              <button
+                type="button"
+                className="opa-btn ghost opa-btn-compact"
+                onClick={expandAll}
+                disabled={allExpanded}
+                title="Expand all groups"
+              >
+                Expand
+              </button>
+              <button
+                type="button"
+                className="opa-btn ghost opa-btn-compact"
+                onClick={collapseAll}
+                disabled={allCollapsed}
+                title="Collapse all groups"
+              >
+                Collapse
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      loading={loading}
+      error={error}
+      empty={empty}
+      emptyText="No metrics reported yet — run opa-collector on a host, or send a metric message over the agent transport."
+      expandable={false}
+    >
+      <div className="opa-mx-search">
+        <FiSearch size={13} aria-hidden />
+        <input
+          value={search}
+          onChange={(e) => onSearch(e.target.value)}
+          placeholder="Filter by name…"
+          aria-label="Filter metrics"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {search && (
+          <button type="button" className="opa-mx-search-clear" onClick={() => onSearch('')} aria-label="Clear search">
+            <FiX size={12} />
+          </button>
+        )}
+      </div>
+
+      {groupNames.length > 0 && (
+        <div className="opa-mx-group-count opa-muted">
+          {fmtNum(groupNames.length)} group{groupNames.length === 1 ? '' : 's'}
+          {searching ? ' · matching' : ''}
+        </div>
+      )}
+
+      <div className="opa-mx-list" ref={parentRef}>
+        {filtered.length === 0 && metrics.length > 0 ? (
+          <div className="opa-mx-list-empty">Nothing matches “{search}”.</div>
+        ) : (
+          <div
+            className="opa-mx-list-inner"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualizer.getVirtualItems().map((virt) => {
+              const row = rows[virt.index]
+              if (row.kind === 'group') {
+                return (
+                  <div
+                    key={`g:${row.name}`}
+                    className="opa-mx-row"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: virt.size,
+                      transform: `translateY(${virt.start}px)`,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={`opa-mx-group-head${row.open ? ' open' : ''}`}
+                      onClick={() => !searching && toggleGroup(row.name)}
+                      aria-expanded={row.open}
+                      disabled={searching}
+                      title={searching ? 'Groups stay open while filtering' : (row.open ? 'Collapse' : 'Expand')}
+                    >
+                      {row.open ? <FiChevronDown size={13} /> : <FiChevronRight size={13} />}
+                      <span className="opa-mx-group-name">{row.name}</span>
+                      <span className="opa-mx-group-n">{fmtNum(row.count)}</span>
+                    </button>
+                  </div>
+                )
+              }
+
+              const m = row.metric
+              const label = shortName(m.name, row.ns)
+              return (
+                <div
+                  key={m.name}
+                  className="opa-mx-row"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: virt.size,
+                    transform: `translateY(${virt.start}px)`,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={`opa-mx-item${m.name === selected ? ' active' : ''}`}
+                    onClick={() => onSelect(m.name)}
+                    title={`${m.name} · ${m.series_count} series · ${m.type}${unitLabel(m.unit, m.name) ? ` · ${unitLabel(m.unit, m.name)}` : ''}`}
+                  >
+                    <span className="opa-mx-name">{label}</span>
+                    <span className="opa-mx-item-meta">
+                      {m.type && <span className="opa-mx-type">{m.type}</span>}
+                      <span className="opa-mx-count">{m.series_count}</span>
+                    </span>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function DimensionPanel({
+  labels, loading, metric, groupBy, matchers, onGroupBy, onToggleFilter,
+}) {
+  const [open, setOpen] = useState('')
+  const [valueQuery, setValueQuery] = useState('')
+  const values = useApi(
+    '/api/metrics/label-values',
+    { metric, label: open },
+    { noRange: true, skip: !metric || !open },
+  )
+  const valueList = values.data?.values || []
+  const filteredValues = useMemo(() => {
+    const q = valueQuery.trim().toLowerCase()
+    if (!q) return valueList
+    return valueList.filter((v) => v.toLowerCase().includes(q))
+  }, [valueList, valueQuery])
+
+  const activeByName = useMemo(() => {
+    const map = new Map()
+    matchers.forEach((raw) => {
+      const m = parseMatcher(raw)
+      if (!m.name) return
+      if (!map.has(m.name)) map.set(m.name, new Set())
+      map.get(m.name).add(m.raw)
+    })
+    return map
+  }, [matchers])
+
+  useEffect(() => {
+    setValueQuery('')
+  }, [open])
+
+  if (!metric) return null
+
+  return (
+    <Panel
+      title="Dimensions"
+      icon={<FiLayers />}
+      loading={loading}
+      empty={!loading && labels.length === 0}
+      emptyText="This metric has no label dimensions yet."
+      actions={<span className="opa-muted">filter · group</span>}
+    >
+      <div className="opa-mx-dims">
+        {labels.map((l) => {
+          const isOpen = open === l.name
+          const isGroup = groupBy === l.name
+          const high = l.value_count > HIGH_CARDINALITY
+          const activeCount = activeByName.get(l.name)?.size || 0
+          return (
+            <div key={l.name} className={`opa-mx-dim${isOpen ? ' open' : ''}${isGroup ? ' grouped' : ''}`}>
+              <div className="opa-mx-dim-head">
+                <button
+                  type="button"
+                  className="opa-mx-dim-toggle"
+                  onClick={() => setOpen(isOpen ? '' : l.name)}
+                  aria-expanded={isOpen}
+                >
+                  {isOpen ? <FiChevronDown size={13} /> : <FiChevronRight size={13} />}
+                  <span className="opa-mx-dim-name">{l.name}</span>
+                  <span className={`opa-mx-dim-n${high ? ' warn' : ''}`} title={high ? 'High cardinality' : undefined}>
+                    {fmtNum(l.value_count)}
+                  </span>
+                  {activeCount > 0 && <Badge>{activeCount} filter{activeCount === 1 ? '' : 's'}</Badge>}
+                </button>
+                <button
+                  type="button"
+                  className={`opa-btn opa-btn-compact${isGroup ? ' primary' : ' ghost'}`}
+                  onClick={() => onGroupBy(isGroup ? '' : l.name)}
+                  title={high ? `${l.value_count} distinct values — chart may be dense` : `Group series by ${l.name}`}
+                >
+                  {isGroup ? 'Grouped' : 'Group'}
+                </button>
+              </div>
+
+              {isOpen && (
+                <div className="opa-mx-dim-body">
+                  {high && (
+                    <div className="opa-mx-dim-warn">
+                      {fmtNum(l.value_count)} values — filtering before grouping keeps the chart readable.
+                    </div>
+                  )}
+                  {(valueList.length > 8 || valueQuery) && (
+                    <div className="opa-mx-search opa-mx-search-sm">
+                      <FiSearch size={12} aria-hidden />
+                      <input
+                        value={valueQuery}
+                        onChange={(e) => setValueQuery(e.target.value)}
+                        placeholder="Filter values…"
+                        aria-label={`Filter ${l.name} values`}
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                    </div>
+                  )}
+                  {values.loading ? (
+                    <div className="opa-muted opa-mx-dim-hint">Loading values…</div>
+                  ) : values.error ? (
+                    <div className="opa-mx-dim-warn">{String(values.error)}</div>
+                  ) : filteredValues.length === 0 ? (
+                    <div className="opa-muted opa-mx-dim-hint">
+                      {valueList.length === 0 ? 'No values found.' : `Nothing matches “${valueQuery}”.`}
+                    </div>
+                  ) : (
+                    <div className="opa-mx-values">
+                      {filteredValues.slice(0, 200).map((v) => {
+                        const key = matcherKey(l.name, v)
+                        const on = matchers.includes(key)
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            className={`opa-mx-value${on ? ' active' : ''}`}
+                            onClick={() => onToggleFilter(key)}
+                            title={on ? 'Remove filter' : `Filter ${l.name}=${v}`}
+                          >
+                            <span>{v}</span>
+                            {on && <FiX size={11} />}
+                          </button>
+                        )
+                      })}
+                      {filteredValues.length > 200 && (
+                        <div className="opa-muted opa-mx-dim-hint">
+                          Showing 200 of {fmtNum(filteredValues.length)} — refine the search.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
 
 export default function MetricsExplorer() {
   const [params, setParams] = useSearchParams()
@@ -118,8 +504,6 @@ export default function MetricsExplorer() {
     setParams(next, { replace: true })
   }
 
-  // The catalogue is not a time series, so noRange keeps it from refetching every
-  // time the global range changes.
   const names = useApi('/api/metrics/names', {}, { noRange: true })
   const allMetrics = names.data?.metrics || []
   const filtered = useMemo(() => {
@@ -129,15 +513,7 @@ export default function MetricsExplorer() {
   }, [allMetrics, search])
 
   const selected = allMetrics.find((m) => m.name === metric)
-  // Tooltips get the full unit-aware format; the y-axis gets a compact one. The
-  // axis is only ~44px wide, so a suffixed tick like "60.0k s" wraps onto two
-  // lines and reads as two separate numbers. The unit is stated in the panel
-  // header, so repeating it per tick buys nothing.
   const fmtValue = unitFormatter(selected?.unit, selected?.name)
-  // Recharts wraps a tick on whitespace when it does not fit the axis, and the
-  // shared chart fixes the y-axis at 44px — so "620 MB" renders as "620" above
-  // "MB", which reads as two unrelated numbers. Axis ticks therefore drop the
-  // space; the tooltip keeps the readable spaced form.
   const fmtAxis = selected?.unit === 'By' ? (v) => fmtBytes(v).replace(/\s+/g, '')
     : selected?.unit === '1' && isRatioMetric(selected?.name) ? (v) => fmtPct(v * 100, 0)
       : fmtMetric
@@ -157,8 +533,6 @@ export default function MetricsExplorer() {
   const series = range.data?.series || []
   const resolution = range.data?.resolution
 
-  // Recharts wants one row per timestamp with a column per series, so the
-  // per-series point lists are pivoted into a single table.
   const { chartData, chartSeries } = useMemo(() => {
     if (!series.length) return { chartData: [], chartSeries: [] }
     const byTs = new Map()
@@ -189,174 +563,276 @@ export default function MetricsExplorer() {
     return { chartData: rows, chartSeries: defs }
   }, [series, metric])
 
+  const stats = useMemo(() => {
+    if (!chartData.length || !chartSeries.length) return null
+    const keys = chartSeries.map((s) => s.key)
+    const { min, max } = extremes(chartData, keys)
+    const latest = chartSeries.length === 1
+      ? lastNonNull(chartData, keys[0])
+      : null
+    return { min, max, latest, series: chartSeries.length, points: chartData.length }
+  }, [chartData, chartSeries])
+
+  const hasQueryState = !!(metric || matchers.length || groupBy || (agg && agg !== 'avg'))
+
   const removeMatcher = (m) => update((n) => {
     const keep = n.getAll('label').filter((x) => x !== m)
     n.delete('label')
     keep.forEach((k) => n.append('label', k))
   })
 
+  const toggleFilter = (key) => update((n) => {
+    const keep = n.getAll('label')
+    n.delete('label')
+    if (keep.includes(key)) {
+      keep.filter((x) => x !== key).forEach((k) => n.append('label', k))
+    } else {
+      keep.forEach((k) => n.append('label', k))
+      n.append('label', key)
+    }
+  })
+
   const selectMetric = (name) => update((n) => {
     n.set('metric', name)
-    // Filters and grouping belong to the previous metric; against a new one they
-    // would silently match nothing.
     n.delete('label')
     n.delete('group_by')
   })
 
+  const clearAll = () => setParams(new URLSearchParams(), { replace: true })
+
+  const setGroupBy = (name) => update((n) => {
+    if (name) n.set('group_by', name)
+    else n.delete('group_by')
+  })
+
+  const unit = unitLabel(selected?.unit, selected?.name)
+  const suggestions = allMetrics.slice(0, 6)
+
   return (
-    <div className="opa-metrics-explorer">
-      <Panel
-        title="Metrics"
-        actions={<span className="opa-muted">{filtered.length}/{allMetrics.length}</span>}
-        loading={names.loading}
-        error={names.error ? String(names.error) : null}
-        empty={!names.loading && !names.error && allMetrics.length === 0}
-        emptyText="No metrics reported yet — run opa-collector on a host, or send a metric message over the agent transport."
-      >
-        <div className="opa-mx-search">
-          <FiSearch size={13} />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter metrics…"
-            aria-label="Filter metrics"
-          />
+    <div className="opa-stack opa-metrics-page">
+      <div className="opa-page-head">
+        <div>
+          <h1 className="opa-page-title">Metrics Explorer</h1>
+          <div className="opa-page-sub">
+            {metric
+              ? <>Charting <span className="opa-mono">{metric}</span>{matchers.length ? ` · ${matchers.length} filter${matchers.length === 1 ? '' : 's'}` : ''}{groupBy ? ` · grouped by ${groupBy}` : ''}</>
+              : <>Browse any collector metric · filter by label · group by dimension{allMetrics.length ? ` · ${fmtNum(allMetrics.length)} available` : ''}</>}
+          </div>
         </div>
-
-        <div className="opa-mx-list">
-          {filtered.map((m) => (
-            <button
-              key={m.name}
-              className={`opa-mx-item${m.name === metric ? ' active' : ''}`}
-              onClick={() => selectMetric(m.name)}
-              title={`${m.name} · ${m.series_count} series · ${m.type}${unitSuffix(m.unit, m.name)}`}
-            >
-              <span className="opa-mx-name">{m.name}</span>
-              <span className="opa-mx-count">{m.series_count}</span>
+        {hasQueryState && (
+          <div className="opa-row">
+            <button type="button" className="opa-btn ghost" onClick={clearAll} title="Clear metric, filters, and grouping">
+              <FiX size={13} /> Clear
             </button>
-          ))}
-          {filtered.length === 0 && allMetrics.length > 0 && (
-            <div className="opa-muted" style={{ padding: '8px 4px', fontSize: 12 }}>
-              Nothing matches “{search}”.
-            </div>
-          )}
-        </div>
-      </Panel>
+          </div>
+        )}
+      </div>
 
-      <div className="opa-mx-main">
-        {!metric ? (
-          <Panel title="Metrics Explorer">
-            <EmptyState
-              title="Pick a metric to chart it"
-              hint="Then filter by label, or group by a dimension to split it into series."
-            />
-          </Panel>
-        ) : (
-          <Panel
-            title={metric}
-            // Only the control goes in the header. Putting the metric metadata
-            // there too overflowed the header row at narrow widths and clipped the
-            // right-hand aggregation buttons; the metadata reads fine in the body.
-            actions={
-              <SegmentedControl
-                options={AGG_OPTIONS}
-                value={agg}
-                onChange={(v) => update((n) => n.set('agg', v))}
-              />
-            }
-            loading={range.loading}
-            error={range.error ? String(range.error) : null}
-          >
-            {selected && (
-              <div className="opa-mx-meta">
-                {selected.type}
-                {unitSuffix(selected.unit, selected.name)}
-                {` · ${selected.series_count} series`}
-              </div>
-            )}
+      <div className="opa-metrics-explorer">
+        <MetricCatalogue
+          metrics={allMetrics}
+          filtered={filtered}
+          selected={metric}
+          search={search}
+          onSearch={setSearch}
+          onSelect={selectMetric}
+          loading={names.loading}
+          error={names.error ? String(names.error) : null}
+          empty={!names.loading && !names.error && allMetrics.length === 0}
+        />
 
-            {matchers.length > 0 && (
-              <div className="opa-mx-chips">
-                {matchers.map((m) => (
-                  <button key={m} className="opa-mx-chip active" onClick={() => removeMatcher(m)} title="Remove this filter">
-                    {m}<FiX size={11} />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {labelList.length > 0 && (
-              <div className="opa-mx-chips">
-                <span className="opa-muted" style={{ fontSize: 11 }}>Group by</span>
-                <button className={`opa-mx-chip${!groupBy ? ' active' : ''}`} onClick={() => update((n) => n.delete('group_by'))}>
-                  none
-                </button>
-                {labelList.map((l) => (
-                  <button
-                    key={l.name}
-                    className={`opa-mx-chip${groupBy === l.name ? ' active' : ''}`}
-                    onClick={() => update((n) => n.set('group_by', l.name))}
-                    // The value count is the warning: grouping by a 400-value
-                    // dimension draws 400 lines.
-                    title={`${l.value_count} distinct values`}
-                  >
-                    {l.name}<span className="opa-mx-chip-n">{l.value_count}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {!range.loading && !range.error && chartData.length === 0 && (
+        <div className="opa-mx-main">
+          {!metric ? (
+            <Panel title="Get started" icon={<FiBarChart2 />} expandable={false}>
               <EmptyState
-                title="No data in this range"
-                hint={range.data?.note || 'Try a wider time range, or check the metric is still being reported.'}
+                icon={<FiActivity />}
+                title="Pick a metric to chart it"
+                hint="Search the catalogue, then filter by any label or group by a dimension. Views are shareable via the URL."
               />
-            )}
+              {suggestions.length > 0 && (
+                <div className="opa-mx-suggest">
+                  <div className="opa-mx-suggest-label">Try one of these</div>
+                  <div className="opa-mx-suggest-list">
+                    {suggestions.map((m) => (
+                      <button
+                        key={m.name}
+                        type="button"
+                        className="opa-mx-suggest-item"
+                        onClick={() => selectMetric(m.name)}
+                      >
+                        <span className="opa-mono">{m.name}</span>
+                        <span className="opa-muted">{m.type} · {m.series_count} series</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Panel>
+          ) : (
+            <>
+              {stats && !range.loading && (
+                <div className="opa-mx-kpis">
+                  <KpiTile
+                    label={stats.latest != null ? 'Latest' : 'Series'}
+                    icon={stats.latest != null ? <FiActivity size={12} /> : <FiLayers size={12} />}
+                    value={stats.latest != null ? fmtValue(stats.latest) : fmtNum(stats.series)}
+                    spark={stats.latest != null && chartSeries.length === 1
+                      ? chartData.map((r) => r[chartSeries[0].key]).filter((v) => v != null)
+                      : undefined}
+                    sparkColor="var(--accent)"
+                  />
+                  <KpiTile
+                    label="Min"
+                    icon={<FiTrendingDown size={12} />}
+                    value={fmtValue(stats.min)}
+                  />
+                  <KpiTile
+                    label="Max"
+                    icon={<FiTrendingUp size={12} />}
+                    value={fmtValue(stats.max)}
+                  />
+                  <KpiTile
+                    label="Points"
+                    icon={<FiHash size={12} />}
+                    value={fmtNum(stats.points)}
+                    footer={stats.series > 1 ? <span className="opa-muted">{stats.series} series</span> : undefined}
+                  />
+                </div>
+              )}
 
-            {chartData.length > 0 && (
-              <>
-                <TimeSeriesChart
-                  brushZoom
-                  data={chartData}
-                  series={chartSeries}
-                  height={280}
-                  valueFmt={fmtValue}
-                  yFmt={fmtAxis}
-                  legend={chartSeries.length > 1 && chartSeries.length <= MAX_LEGEND_SERIES}
-                />
-                {resolution && (
-                  // Say what resolution is on screen. A 90-day chart drawn from
-                  // daily rollups looks identical to a live one, and conflating the
-                  // two is how a flat line gets misread.
-                  <div className="opa-mx-res">
-                    <StatusPill tone={resolution.downsampled ? 'warn' : 'ok'}>
-                      {resolution.downsampled ? `${resolution.tier} rollup` : 'raw'}
-                    </StatusPill>
-                    <span>{resolution.step_secs}s per point</span>
-                    {chartSeries.length > MAX_LEGEND_SERIES && (
-                      <span>· legend hidden ({chartSeries.length} series)</span>
-                    )}
+              <Panel
+                title={metric}
+                icon={<FiBarChart2 />}
+                actions={(
+                  <div className="opa-mx-actions">
+                    <SegmentedControl
+                      options={AGG_OPTIONS}
+                      value={agg}
+                      onChange={(v) => update((n) => n.set('agg', v))}
+                    />
                   </div>
                 )}
-              </>
-            )}
-          </Panel>
-        )}
+                loading={range.loading}
+                error={range.error ? String(range.error) : null}
+              >
+                <div className="opa-mx-toolbar">
+                  <div className="opa-mx-meta-row">
+                    {selected && (
+                      <>
+                        <Badge title="Metric type">{selected.type}</Badge>
+                        {unit && <Badge title="Unit">{unit}</Badge>}
+                        <span className="opa-muted opa-tnum">{fmtNum(selected.series_count)} series in catalogue</span>
+                      </>
+                    )}
+                  </div>
 
-        {metric && labelList.length > 0 && (
-          <Panel title="Dimensions" actions={<span className="opa-muted">click to group</span>}>
-            <DataTable
-              columns={[
-                { key: 'name', header: 'Label', mono: true },
-                { key: 'value_count', header: 'Distinct values', num: true, sortable: true },
-              ]}
-              rows={labelList}
-              rowKey={(r) => r.name}
-              initialSort={{ key: 'value_count', dir: 'desc' }}
-              onRowClick={(r) => update((n) => n.set('group_by', r.name))}
-            />
-          </Panel>
-        )}
+                  <div className="opa-mx-group">
+                    <label className="opa-mx-group-label" htmlFor="opa-mx-groupby">
+                      <FiLayers size={12} /> Group by
+                    </label>
+                    <select
+                      id="opa-mx-groupby"
+                      className="opa-select opa-mono"
+                      value={groupBy}
+                      onChange={(e) => setGroupBy(e.target.value)}
+                      disabled={!labelList.length}
+                    >
+                      <option value="">None (single series)</option>
+                      {labelList.map((l) => (
+                        <option key={l.name} value={l.name}>
+                          {l.name} ({l.value_count}{l.value_count > HIGH_CARDINALITY ? ' · high' : ''})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {(matchers.length > 0 || labelList.length > 0) && (
+                  <div className="opa-mx-filters">
+                    <span className="opa-mx-filters-label"><FiFilter size={12} /> Filters</span>
+                    <div className="opa-mx-chips">
+                      {matchers.length === 0 && (
+                        <span className="opa-muted opa-mx-filters-hint">
+                          Expand a dimension below and click a value to filter
+                        </span>
+                      )}
+                      {matchers.map((raw) => {
+                        const m = parseMatcher(raw)
+                        return (
+                          <button
+                            key={raw}
+                            type="button"
+                            className="opa-mx-chip active"
+                            onClick={() => removeMatcher(raw)}
+                            title="Remove this filter"
+                          >
+                            <span className="opa-mx-chip-k">{m.name}</span>
+                            <span className="opa-mx-chip-op">{m.op}</span>
+                            <span className="opa-mx-chip-v">{m.value}</span>
+                            <FiX size={11} />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {groupBy && labelList.find((l) => l.name === groupBy)?.value_count > HIGH_CARDINALITY && (
+                  <div className="opa-mx-banner">
+                    Grouping by <span className="opa-mono">{groupBy}</span> has{' '}
+                    {fmtNum(labelList.find((l) => l.name === groupBy).value_count)} values.
+                    Filter first if the chart gets noisy.
+                  </div>
+                )}
+
+                {!range.loading && !range.error && chartData.length === 0 && (
+                  <EmptyState
+                    title="No data in this range"
+                    hint={range.data?.note || 'Try a wider time range, or check the metric is still being reported.'}
+                  />
+                )}
+
+                {chartData.length > 0 && (
+                  <>
+                    <TimeSeriesChart
+                      brushZoom
+                      data={chartData}
+                      series={chartSeries}
+                      height={320}
+                      valueFmt={fmtValue}
+                      yFmt={fmtAxis}
+                      legend={chartSeries.length > 1 && chartSeries.length <= MAX_LEGEND_SERIES}
+                    />
+                    {resolution && (
+                      <div className="opa-mx-res">
+                        <StatusPill tone={resolution.downsampled ? 'warn' : 'ok'}>
+                          {resolution.downsampled ? `${resolution.tier} rollup` : 'raw'}
+                        </StatusPill>
+                        <span>{resolution.step_secs}s per point</span>
+                        {chartSeries.length > 1 && (
+                          <span>· {fmtNum(chartSeries.length)} series</span>
+                        )}
+                        {chartSeries.length > MAX_LEGEND_SERIES && (
+                          <span>· legend hidden</span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </Panel>
+
+              <DimensionPanel
+                labels={labelList}
+                loading={labels.loading}
+                metric={metric}
+                groupBy={groupBy}
+                matchers={matchers}
+                onGroupBy={setGroupBy}
+                onToggleFilter={toggleFilter}
+              />
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

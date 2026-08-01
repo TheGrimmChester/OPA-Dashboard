@@ -71,6 +71,8 @@ const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
 const AISettings = lazy(() => import('./pages/AISettings'))
+const Connectors = lazy(() => import('./pages/Connectors'))
+const Account = lazy(() => import('./pages/Account'))
 const Slos = lazy(() => import('./pages/Slos'))
 const Alerts = lazy(() => import('./pages/Alerts'))
 const Anomalies = lazy(() => import('./pages/Anomalies'))
@@ -256,6 +258,22 @@ function App() {
             <Route
               path="/settings/ai"
               element={<AISettings />}
+            />
+            <Route
+              path="/settings/connectors"
+              element={<Connectors />}
+            />
+            <Route
+              path="/settings/account"
+              element={<Account />}
+            />
+            <Route
+              path="/account"
+              element={<Navigate to="/settings/account" replace />}
+            />
+            <Route
+              path="/connectors"
+              element={<Navigate to="/settings/connectors" replace />}
             />
             <Route
               path="/ai"
