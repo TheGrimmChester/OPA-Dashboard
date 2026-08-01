@@ -2,7 +2,14 @@ name: Build and Push Docker Image
 
 on:
   pull_request:
-    branches: [ main, master, develop ]
+  # Any base branch, not just main/master/develop. A stacked PR (wave N+1
+  # targeting wave N) matched no filter here, so CI never ran on it: 22 of 24
+  # open agent PRs and 18 of 19 dashboard PRs had never been built, vetted,
+  # linted or tested by any machine, which made their lack of failures look
+  # like a pass. GitHub resolves the workflow from a PR's merge commit, so this
+  # takes effect for an existing PR once its head carries this change or it is
+  # retargeted onto main.
+    branches: ['**']
   push:
     branches: [ main, master, develop ]
     tags:
