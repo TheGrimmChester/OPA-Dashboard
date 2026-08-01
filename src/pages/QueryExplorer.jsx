@@ -6,11 +6,12 @@ import { Panel, EmptyState, DataTable, Badge } from '../components/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
+// Prefer filters that match typical smoke / demo traffic so Example N → Run shows rows.
 const EXAMPLES = [
-  `SELECT count(), avg(duration_ms) FROM spans WHERE status = 'error' GROUP BY service SINCE 1h`,
-  `SELECT count() FROM logs WHERE level = 'ERROR' GROUP BY service SINCE 24h`,
-  `SELECT count() FROM rum GROUP BY route SINCE 6h LIMIT 25`,
-  `SELECT avg(value) FROM metrics WHERE metric_name = 'http.server.duration' GROUP BY service SINCE 1h`,
+  `SELECT count(), avg(duration_ms) FROM spans GROUP BY service SINCE 1h`,
+  `SELECT count() FROM logs GROUP BY level, service SINCE 24h`,
+  `SELECT count() FROM rum GROUP BY route SINCE 24h LIMIT 25`,
+  `SELECT avg(value) FROM metrics WHERE metric_name = 'nodejs.eventloop.utilization' GROUP BY service SINCE 1h`,
 ]
 
 export default function QueryExplorer() {
@@ -53,7 +54,12 @@ export default function QueryExplorer() {
     header: c,
     render: (r) => <span className="opa-mono">{r[c] == null ? '—' : String(r[c])}</span>,
   }))
-  const errText = typeof result.error === 'string' ? result.error : (result.error?.error || JSON.stringify(result.error))
+  // Guard null/undefined: JSON.stringify(null) === "null" would fake an error state in Panel.
+  const errText = result.error == null
+    ? null
+    : typeof result.error === 'string'
+      ? result.error
+      : (result.error?.error || JSON.stringify(result.error))
 
   return (
     <div className="opa-stack">
@@ -105,7 +111,7 @@ export default function QueryExplorer() {
             <DataTable columns={cols} rows={rows} rowKey={(_, i) => i} maxHeight={420} />
           ) : (
             result.data?.sql && !rows.length
-              ? <Badge>{result.data.dry_run || result.data.row_count === 0 ? 'No rows / dry run' : 'OK'}</Badge>
+              ? <Badge>{result.data.dry_run ? 'Dry run' : 'No matching rows'}</Badge>
               : null
           )}
         </Panel>
