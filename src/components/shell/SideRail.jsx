@@ -2,9 +2,9 @@ import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
-  FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiTarget,
+  FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiUser, FiKey, FiTarget,
   FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield, FiBookOpen,
-  FiChevronsLeft, FiChevronsRight, FiTerminal,
+  FiChevronsLeft, FiChevronsRight, FiTerminal, FiGitBranch,
 } from 'react-icons/fi'
 import { useI18n } from '../../contexts/I18nContext'
 
@@ -68,11 +68,13 @@ export const NAV_GROUPS = [
   {
     labelKey: 'nav.group.admin',
     items: [
-      { to: '/users', labelKey: 'nav.users', icon: FiUsers },
-      { to: '/api-keys', labelKey: 'nav.apiKeys', icon: FiKey },
-      { to: '/settings/ai', labelKey: 'nav.aiSettings', icon: FiCpu },
+      { to: '/users', labelKey: 'nav.users', icon: FiUsers, adminOnly: true },
+      { to: '/settings/account', labelKey: 'nav.account', icon: FiUser },
+      { to: '/api-keys', labelKey: 'nav.apiKeys', icon: FiKey, adminOnly: true },
+      { to: '/settings/ai', labelKey: 'nav.aiSettings', icon: FiCpu, adminOnly: true },
+      { to: '/settings/connectors', labelKey: 'nav.connectors', icon: FiGitBranch },
       { to: '/automation', labelKey: 'nav.automation', icon: FiCpu },
-      { to: '/federation', labelKey: 'nav.federation', icon: FiGlobe },
+      { to: '/federation', labelKey: 'nav.federation', icon: FiGlobe, adminOnly: true },
     ],
   },
 ]
@@ -80,6 +82,9 @@ export const NAV_GROUPS = [
 export default function SideRail({ collapsed, onToggle }) {
   const { pathname } = useLocation()
   const { t } = useI18n()
+  const role = localStorage.getItem('role') || ''
+  // Empty role → auth-off / local smoke: show everything. Otherwise gate admin nav.
+  const isAdmin = role === 'admin' || role === ''
   const isActive = (item) => (item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + '/') || (item.to !== '/' && pathname.startsWith(item.to)))
   return (
     <nav className={`opa-rail ${collapsed ? 'collapsed' : ''}`}>
@@ -92,6 +97,7 @@ export default function SideRail({ collapsed, onToggle }) {
           <div key={g.labelKey}>
             <div className="opa-rail-group-label">{t(g.labelKey)}</div>
             {g.items.map((it) => {
+              if (it.adminOnly && !isAdmin) return null
               const Icon = it.icon
               const label = t(it.labelKey)
               return (

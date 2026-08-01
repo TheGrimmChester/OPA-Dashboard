@@ -42,7 +42,7 @@
 .opa-usermenu-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .opa-usermenu-pop { position: absolute; right: 0; top: calc(100% + 6px); min-width: 180px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); padding: var(--sp-2); z-index: 40; }
 .opa-usermenu-head { padding: var(--sp-2) var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border-subtle); margin-bottom: var(--sp-2); }
-.opa-usermenu-item { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 7px var(--sp-2); border: none; background: none; color: var(--text-secondary); font-size: var(--fs-13); cursor: pointer; border-radius: var(--radius-sm); font-family: var(--font-ui); text-align: left; }
+.opa-usermenu-item { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 7px var(--sp-2); border: none; background: none; color: var(--text-secondary); font-size: var(--fs-13); cursor: pointer; border-radius: var(--radius-sm); font-family: var(--font-ui); text-align: left; text-decoration: none; box-sizing: border-box; }
 .opa-usermenu-item:hover { background: var(--surface-3); color: var(--text-primary); }
 .opa-content { padding: var(--sp-5); flex: 1; min-width: 0; max-width: 1600px; width: 100%; }
 .opa-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); margin-bottom: var(--sp-4); flex-wrap: wrap; }

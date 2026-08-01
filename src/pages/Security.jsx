@@ -3,12 +3,13 @@ import axios from 'axios'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   FiShield, FiAlertTriangle, FiEye, FiEyeOff, FiCrosshair, FiKey, FiSliders,
-  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiTrash2, FiEdit2, FiX,
+  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiX,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { apiUrl } from '../utils/apiBase'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
+import { ConnectorPicker } from '../components/connectors'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { securityRunHref, serviceHref, scmJobHref } from '../utils/entityLinks'
 import './Security.css'
@@ -266,9 +267,7 @@ export default function Security() {
   const connectors = useApi('/api/connectors', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'jobs' })
   const scmJobs = useApi('/api/scm/jobs', { limit: 200 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
   const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' && tab !== 'jobs' })
-  const [patForm, setPatForm] = useState({ token: '', login: '', repos: '' })
-  const [editForm, setEditForm] = useState({ login: '', display_name: '', token: '' })
-  const [editingConnector, setEditingConnector] = useState(false)
+  const [extraRepos, setExtraRepos] = useState('')
   const [watchedRows, setWatchedRows] = useState([])
   const [availableRepos, setAvailableRepos] = useState([])
   const [repoPick, setRepoPick] = useState({})
@@ -277,6 +276,8 @@ export default function Security() {
   const [watchPolicy, setWatchPolicy] = useState({
     checks: { secrets: true, sast: true, iac: true, sbom: true, ai_review: true },
     ai_blocking: false,
+    auto_request_reviewer: true,
+    auto_approve_min_score: 70,
   })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
   const [watchRefresh, setWatchRefresh] = useState(0)
@@ -328,6 +329,17 @@ export default function Security() {
         if (w.repo_full_name) pick[w.repo_full_name] = !!w.enabled
       }
       setRepoPick(pick)
+      if (watched.length) {
+        const sample = watched.find((w) => w.enabled) || watched[0]
+        setWatchPolicy((p) => ({
+          ...p,
+          ai_blocking: !!sample.ai_blocking,
+          auto_request_reviewer: sample.auto_request_reviewer !== undefined ? !!sample.auto_request_reviewer : p.auto_request_reviewer,
+          auto_approve_min_score: sample.auto_approve_min_score !== undefined && sample.auto_approve_min_score !== null
+            ? Number(sample.auto_approve_min_score) || 0
+            : p.auto_approve_min_score,
+        }))
+      }
     }).catch((e) => {
       if (cancelled) return
       setWatchedRows([])
@@ -573,54 +585,8 @@ export default function Security() {
     }
   }
 
-  const connectPAT = async () => {
-    setBusy(true)
-    try {
-      const repos = patForm.repos.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
-      const { data } = await axios.post(apiUrl('/api/connectors/github/pat'), {
-        token: patForm.token,
-        login: patForm.login || 'pat-user',
-        repos,
-      })
-      const id = data.connector?.id
-      if (id) {
-        setActiveConnector(id)
-        setActiveRunId('')
-        setTab('watch')
-        const p = new URLSearchParams(searchParams)
-        p.set('tab', 'watch')
-        p.set('connector', id)
-        p.delete('run')
-        setSearchParams(p, { replace: true })
-      }
-      flash('ok', 'GitHub PAT connected', data.honesty)
-      connectors.reload?.()
-      setPatForm({ token: '', login: patForm.login, repos: patForm.repos })
-      setWatchRefresh((n) => n + 1)
-    } catch (e) {
-      flash('error', 'PAT connect failed', e.response?.data || e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const openGitHubInstall = async () => {
-    try {
-      const { data } = await axios.get(apiUrl('/api/connectors/github/install-url'))
-      if (data.install_url) {
-        window.open(data.install_url, '_blank', 'noopener')
-      } else {
-        flash('warn', 'GitHub App not configured', data.note || 'Use PAT bootstrap or set Agent env')
-      }
-    } catch (e) {
-      flash('error', 'Install URL failed', e.response?.data || e.message)
-    }
-  }
-
   const selectConnector = (id) => {
     setActiveConnector(id)
-    setEditingConnector(false)
-    setEditForm({ login: '', display_name: '', token: '' })
     setTab('watch')
     setActiveRunId('')
     const p = new URLSearchParams(searchParams)
@@ -629,71 +595,6 @@ export default function Security() {
     if (id) p.set('connector', id)
     else p.delete('connector')
     setSearchParams(p, { replace: true })
-  }
-
-  const beginEditConnector = (c) => {
-    if (!c?.id) return
-    selectConnector(c.id)
-    setEditingConnector(true)
-    let display = c.display_name || ''
-    if (!display && c.meta_json) {
-      try {
-        display = JSON.parse(c.meta_json)?.display_name || ''
-      } catch { /* ignore */ }
-    }
-    setEditForm({
-      login: c.account_login || '',
-      display_name: display || '',
-      token: '',
-    })
-  }
-
-  const saveConnectorEdit = async () => {
-    if (!activeConnector) {
-      flash('warn', 'Select a connector first')
-      return
-    }
-    setBusy(true)
-    try {
-      const body = {
-        account_login: editForm.login,
-        display_name: editForm.display_name,
-      }
-      if (editForm.token.trim()) body.token = editForm.token.trim()
-      const { data } = await axios.patch(
-        apiUrl(`/api/connectors/${encodeURIComponent(activeConnector)}`),
-        body,
-      )
-      flash('ok', 'Connector updated', data.connector?.account_login || activeConnector)
-      setEditForm((f) => ({ ...f, token: '' }))
-      setEditingConnector(false)
-      connectors.reload?.()
-      setWatchRefresh((n) => n + 1)
-    } catch (e) {
-      flash('error', 'Connector update failed', e.response?.data || e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const deleteConnector = async (id) => {
-    const cid = id || activeConnector
-    if (!cid) return
-    if (!window.confirm(`Delete connector ${cid}? Watched repos for it will be disabled.`)) return
-    setBusy(true)
-    try {
-      await axios.delete(apiUrl(`/api/connectors/${encodeURIComponent(cid)}`))
-      flash('ok', 'Connector deleted', cid)
-      if (activeConnector === cid) {
-        selectConnector('')
-      }
-      connectors.reload?.()
-      setWatchRefresh((n) => n + 1)
-    } catch (e) {
-      flash('error', 'Delete failed', e.response?.data || e.message)
-    } finally {
-      setBusy(false)
-    }
   }
 
   const toggleRepoPick = (fullName) => {
@@ -770,6 +671,8 @@ export default function Security() {
         checks: defaultChecks,
         min_severity: w.min_severity || minSev,
         ai_blocking: !!watchPolicy.ai_blocking,
+        auto_request_reviewer: !!watchPolicy.auto_request_reviewer,
+        auto_approve_min_score: Number(watchPolicy.auto_approve_min_score) || 0,
       }
     }
     for (const [name, on] of Object.entries(repoPick)) {
@@ -785,12 +688,14 @@ export default function Security() {
           checks: defaultChecks,
           min_severity: minSev,
           ai_blocking: !!watchPolicy.ai_blocking,
+          auto_request_reviewer: !!watchPolicy.auto_request_reviewer,
+          auto_approve_min_score: Number(watchPolicy.auto_approve_min_score) || 0,
         }
       } else if (byName[name]) {
         byName[name].enabled = false
       }
     }
-    for (const name of patForm.repos.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)) {
+    for (const name of extraRepos.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)) {
       byName[name] = {
         ...(byName[name] || {}),
         repo_full_name: name,
@@ -799,6 +704,8 @@ export default function Security() {
         checks: defaultChecks,
         min_severity: minSev,
         ai_blocking: !!watchPolicy.ai_blocking,
+        auto_request_reviewer: !!watchPolicy.auto_request_reviewer,
+        auto_approve_min_score: Number(watchPolicy.auto_approve_min_score) || 0,
       }
     }
     const payload = Object.values(byName)
@@ -825,7 +732,7 @@ export default function Security() {
     setBusy(true)
     try {
       const { data } = await axios.post(apiUrl('/api/scm/simulate'), {
-        repo: patForm.repos.split(/[\s,]+/).filter(Boolean)[0] || 'local/smoke-repo',
+        repo: extraRepos.split(/[\s,]+/).filter(Boolean)[0] || 'local/smoke-repo',
         pr: 1,
         service: form.service || 'node-smoke',
         profile: form.profile || 'auto',
@@ -877,7 +784,7 @@ export default function Security() {
       return
     }
     if (!scmSettings.data?.cursor_key_set && !scmSettings.data?.skip_cursor_ai) {
-      flash('error', 'No OPA Review API key', 'Configure CLI agent under AI settings, or expect ai.status=skipped')
+      flash('error', 'No CLI agent API key', 'Save a personal or org CLI agent key under Account, or expect ai.status=skipped')
     }
     setBusy(true)
     try {
@@ -1555,12 +1462,11 @@ export default function Security() {
 
       {tab === 'watch' && (
         <>
-          <Panel title="Connectors" icon={<FiShield />}
+          <Panel title="Repo Watch" icon={<FiShield />}
             loading={connectors.loading}
             error={connectors.error}
             actions={
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" className="opa-btn ghost" onClick={openGitHubInstall}>Connect GitHub App</button>
                 <button type="button" className="opa-btn ghost" disabled={busy} onClick={simulateJob}>Simulate PR job</button>
                 <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
                   <FiRefreshCw size={12} /> Refresh
@@ -1568,31 +1474,39 @@ export default function Security() {
               </div>
             }>
             <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              GitHub App is production (webhooks + Check Runs). PAT bootstrap is for local/dev.
-              App configured: {connectors.data?.github_app_configured ? 'yes' : 'no'}.
+              Pick an SCM connector, then choose repositories to watch.
+              Connect / edit / delete connectors under{' '}
+              <Link to="/settings/connectors">Settings · Connectors</Link>.
+              {' '}App configured: {connectors.data?.github_app_configured ? 'yes' : 'no'}.
             </p>
-            {!connectors.data?.github_app_configured && (connectors.data?.connectors || []).length === 0 && (
-              <div className="opa-muted" style={{
-                marginBottom: 12, padding: 10, background: 'var(--surface-2)', borderRadius: 6, fontSize: 13,
-              }}>
-                No GitHub App env on the Agent (<code>OPA_GITHUB_APP_ID</code> / private key).
-                Connect with a PAT below, or set App env and use <strong>Connect GitHub App</strong>.
-              </div>
-            )}
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                PAT token
-                <input type="password" className="opa-mono" value={patForm.token} onChange={(e) => setPatForm((f) => ({ ...f, token: e.target.value }))} placeholder="ghp_… (or any token when mock)" />
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Login
-                <input value={patForm.login} onChange={(e) => setPatForm((f) => ({ ...f, login: e.target.value }))} placeholder="github-user" />
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Extra repos (optional)
-                <input className="opa-mono" value={patForm.repos} onChange={(e) => setPatForm((f) => ({ ...f, repos: e.target.value }))} placeholder="org/name … if not in list" />
-              </label>
-            </div>
+
+            <ConnectorPicker
+              connectors={connectorList}
+              loading={connectors.loading}
+              value={activeConnector}
+              onChange={selectConnector}
+              onReload={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}
+              missing={connectorMissing}
+              needsReconnect={connectorNeedsReconnect}
+              reconnectHint={
+                connectorMissing || reposMeta.error === 'connector_not_found'
+                  ? ' is not in Agent memory or ClickHouse.'
+                  : reposMeta.error === 'connector_token_unavailable'
+                    ? ' — stored token is not recoverable (legacy hash or decrypt failed). Replace the token on the Connectors page; new tokens are encrypted and survive Agent restarts.'
+                    : ' — no decryptable PAT. Replace the token or reconnect on the Connectors page.'
+              }
+            />
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, marginBottom: 12, maxWidth: 420 }}>
+              Extra repos (optional)
+              <input
+                className="opa-mono"
+                value={extraRepos}
+                onChange={(e) => setExtraRepos(e.target.value)}
+                placeholder="org/name … if not in list"
+              />
+            </label>
+
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
               {['secrets', 'sast', 'iac', 'sbom', 'ai_review'].map((id) => (
                 <label key={id} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
@@ -1615,103 +1529,33 @@ export default function Security() {
                 />
                 AI blocking
               </label>
+              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={!!watchPolicy.auto_request_reviewer}
+                  onChange={(e) => setWatchPolicy((p) => ({ ...p, auto_request_reviewer: e.target.checked }))}
+                />
+                Auto-request as reviewer
+              </label>
+              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                Min approve score
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  style={{ width: 64 }}
+                  value={watchPolicy.auto_approve_min_score}
+                  onChange={(e) => setWatchPolicy((p) => ({
+                    ...p,
+                    auto_approve_min_score: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                  }))}
+                  title="0 = COMMENT only; 1–100 = APPROVE when confidence ≥ score, else REQUEST_CHANGES"
+                />
+              </label>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" className="opa-btn primary" disabled={busy || !patForm.token} onClick={connectPAT}>Connect PAT</button>
               <button type="button" className="opa-btn primary" disabled={busy || !activeConnector} onClick={saveWatched}>Save watched repos</button>
             </div>
-            <div style={{ marginTop: 16 }}>
-              <div className="cell-strong" style={{ marginBottom: 8 }}>Active connectors</div>
-              {connectorList.length === 0 && (
-                <div className="opa-muted">No connectors yet — connect a PAT or install the GitHub App.</div>
-              )}
-              {connectorList.map((c) => (
-                <div key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 8, marginBottom: 8 }}>
-                  <button
-                    type="button"
-                    className={`opa-btn ${activeConnector === c.id ? 'primary' : 'ghost'}`}
-                    onClick={() => selectConnector(c.id)}
-                    title={c.has_token ? 'Credentials available (memory or decrypted from ClickHouse)' : 'No decryptable token — Replace token or Connect PAT'}
-                  >
-                    {c.display_name || c.kind} · {c.account_login || c.installation_id || c.id.slice(0, 12)}
-                    {c.has_token ? '' : ' · no token'}
-                  </button>
-                  <button
-                    type="button"
-                    className="opa-btn ghost"
-                    title="Edit connector"
-                    disabled={busy}
-                    onClick={() => beginEditConnector(c)}
-                    aria-label={`Edit ${c.id}`}
-                  >
-                    <FiEdit2 size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="opa-btn ghost"
-                    title="Delete connector"
-                    disabled={busy}
-                    onClick={() => deleteConnector(c.id)}
-                    aria-label={`Delete ${c.id}`}
-                  >
-                    <FiTrash2 size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            {editingConnector && activeConnector && (
-              <div style={{
-                marginTop: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 6, fontSize: 13,
-              }}>
-                <div className="cell-strong" style={{ marginBottom: 8 }}>Edit connector</div>
-                <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginBottom: 8 }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                    Login label
-                    <input value={editForm.login} onChange={(e) => setEditForm((f) => ({ ...f, login: e.target.value }))} placeholder="github-user" />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                    Display name
-                    <input value={editForm.display_name} onChange={(e) => setEditForm((f) => ({ ...f, display_name: e.target.value }))} placeholder="optional" />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                    Replace PAT (optional)
-                    <input type="password" className="opa-mono" value={editForm.token} onChange={(e) => setEditForm((f) => ({ ...f, token: e.target.value }))} placeholder="ghp_… leave blank to keep" />
-                  </label>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button type="button" className="opa-btn primary" disabled={busy} onClick={saveConnectorEdit}>Save</button>
-                  <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => setEditingConnector(false)}>Cancel</button>
-                </div>
-              </div>
-            )}
-            {(connectorMissing || connectorNeedsReconnect) && (
-              <div className="opa-banner" role="status" style={{
-                marginTop: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 6, fontSize: 13,
-              }}>
-                <div className="cell-strong" style={{ marginBottom: 4 }}>
-                  {connectorMissing ? 'Connector not found on Agent' : 'Token missing'}
-                </div>
-                <div className="opa-muted" style={{ marginBottom: 8 }}>
-                  Deep-linked connector <code className="opa-mono">{activeConnector}</code>
-                  {connectorMissing || reposMeta.error === 'connector_not_found'
-                    ? ' is not in Agent memory or ClickHouse.'
-                    : reposMeta.error === 'connector_token_unavailable'
-                      ? ' — stored token is not recoverable (legacy hash or decrypt failed). Use Edit → Replace token; new tokens are encrypted and survive Agent restarts.'
-                      : ' — no decryptable PAT. Use Edit → Replace token, or Connect PAT.'}
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
-                    <FiRefreshCw size={12} /> Retry
-                  </button>
-                  {activeConnectorRow && (
-                    <button type="button" className="opa-btn ghost" onClick={() => beginEditConnector(activeConnectorRow)}>
-                      <FiEdit2 size={12} /> Replace token
-                    </button>
-                  )}
-                  <button type="button" className="opa-btn ghost" onClick={() => selectConnector('')}>Clear connector</button>
-                </div>
-              </div>
-            )}
           </Panel>
 
           <Panel title="Available repositories" icon={<FiEye />}
@@ -1724,23 +1568,23 @@ export default function Security() {
               ) : null
             }>
             {!activeConnector && (
-              <div className="opa-muted">Select or connect a connector to load installable repos from <code>GET /api/connectors/{'{id}'}/repos</code>.</div>
+              <div className="opa-muted">Select or <Link to="/settings/connectors">connect a connector</Link> to load installable repos from <code>GET /api/connectors/{'{id}'}/repos</code>.</div>
             )}
             {activeConnector && reposMeta.error && (
               <div className="opa-muted" style={{ marginBottom: 8, fontSize: 13 }}>
                 Could not list repos: <span className="opa-mono">{String(reposMeta.error)}</span>
                 {reposMeta.note ? <> — {reposMeta.note}</> : null}
                 {reposMeta.error === 'connector_not_in_memory' || reposMeta.error === 'connector_token_unavailable' || reposMeta.error === 'connector_not_found' || reposMeta.error === 'connector_token_missing'
-                  ? <> Use Edit → Replace token, or Connect PAT (Agent needs stable JWT_SECRET / OPA_CONNECTOR_SECRET).</>
+                  ? <> <Link to={`/settings/connectors?edit=${encodeURIComponent(activeConnector)}`}>Replace token</Link> on Connectors (Agent needs stable JWT_SECRET / OPA_CONNECTOR_SECRET).</>
                   : String(reposMeta.error).includes('401') || String(reposMeta.error).includes('403')
-                    ? <> Check PAT scopes / org SSO, then Replace token or Connect PAT again.</>
+                    ? <> Check PAT scopes / org SSO, then <Link to={`/settings/connectors?edit=${encodeURIComponent(activeConnector)}`}>replace the token</Link>.</>
                     : <> Use checkboxes after listing, or type extra org/name above and Save.</>}
               </div>
             )}
             {activeConnector && reposMeta.mock && !reposMeta.error && (
               <div className="opa-muted" style={{ marginBottom: 8, fontSize: 12 }}>
                 Mock list (<code>OPA_SCM_MOCK_GITHUB=1</code>) — not calling GitHub.
-                Paste a real <code>ghp_</code> / <code>github_pat_</code> token and Connect PAT to load your repos
+                <Link to="/settings/connectors">Connect a real PAT</Link> to load your repos
                 (smoke mock is bypassed for real tokens).
                 {reposMeta.note ? <> {reposMeta.note}</> : null}
               </div>
@@ -1795,6 +1639,11 @@ export default function Security() {
                     : '—'),
                 },
                 { key: 'ai_blocking', header: 'AI block', render: (r) => (r.ai_blocking ? 'yes' : 'no') },
+                { key: 'auto_request_reviewer', header: 'Auto reviewer', render: (r) => (r.auto_request_reviewer ? 'yes' : 'no') },
+                {
+                  key: 'auto_approve_min_score', header: 'Min score',
+                  render: (r) => (Number(r.auto_approve_min_score) > 0 ? String(r.auto_approve_min_score) : '—'),
+                },
                 {
                   key: 'enabled',
                   header: 'On',
@@ -1822,7 +1671,19 @@ export default function Security() {
               <strong>linked awareness</strong>. Findings post inline (re-runs add/update/resolve); the global PR message is a narrative résumé upserted in place.
               Related repos are shallow-cloned under the job checkout for cross-repo context. Open a job’s findings page from PR Jobs for experimental Auto-fix / Create fix PR (requires OPA-AI-Orchestrator).
               {!scmSettings.data?.cursor_key_set && (
-                <> <span style={{ color: 'var(--danger, #c44)' }}>No OPA Review API key set</span> — manage under <Link to="/settings/ai">AI settings</Link>; jobs still run with <code>ai.status=skipped</code>.</>
+                <>
+                  {' '}
+                  <span style={{ color: 'var(--danger, #c44)' }}>No CLI agent API key</span>
+                  {' '}for user <code>{scmSettings.data?.user_id || '—'}</code>
+                  {' '}in org <code>{scmSettings.data?.organization_id || '—'}</code>
+                  {' '}— manage under <Link to="/settings/account">Account</Link> (personal for this username, or org).
+                  {' '}Keys do not transfer across usernames. Jobs still run with <code>ai.status=skipped</code>.
+                </>
+              )}
+              {scmSettings.data?.cursor_key_set && scmSettings.data?.cursor_key_scope && (
+                <> CLI key scope: <code>{scmSettings.data.cursor_key_scope}</code>
+                  {scmSettings.data?.user_id ? <> · user <code>{scmSettings.data.user_id}</code></> : null}.
+                </>
               )}
               {scmSettings.data?.skip_cursor_ai && <> Agent has OPA Review skipped (<code>SKIP_CURSOR_AI=1</code>).</>}
             </p>
@@ -2016,7 +1877,10 @@ export default function Security() {
               />
             </label>
             {genDraft?.source === 'skipped' && (
-              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>Generate returned empty (skipped) — set OPA Review API key or unset SKIP_CURSOR_AI.</div>
+              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                Generate skipped — {genDraft?.honesty || 'save a CLI agent API key under Account (personal or org), or unset SKIP_CURSOR_AI'}.
+                {' '}Routing “auto” still uses Cursor when a CLI key is set.
+              </div>
             )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
               <button type="button" className="opa-btn primary" disabled={busy} onClick={saveContext}>
@@ -2114,12 +1978,12 @@ export default function Security() {
               <span className="opa-muted" style={{ fontSize: 12 }}>
                 model {scmSettings.data?.cursor_model || 'auto'}
               </span>
-              <Link to="/settings/ai" className="opa-btn ghost" style={{ textDecoration: 'none' }}>
-                Manage in AI settings
+              <Link to="/settings/account" className="opa-btn ghost" style={{ textDecoration: 'none' }}>
+                Manage in Account
               </Link>
             </div>
             <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
-              Watch-specific <code>ai_review</code> / <code>ai_blocking</code> toggles stay here. API keys live under AI settings.
+              Watch-specific <code>ai_review</code> / <code>ai_blocking</code> toggles stay here. API keys live under Account (user → org inheritance).
             </p>
           </Panel>
         </>

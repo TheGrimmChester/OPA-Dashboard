@@ -18,6 +18,7 @@ import {
   securityRunHref,
   scmJobHref,
   securityJobsHref,
+  connectorsHref,
   syntheticsHref,
 } from './entityLinks.js'
 
@@ -51,6 +52,8 @@ describe('entityLinks', () => {
     expect(securityJobsHref({ status: 'running', q: 'smoke' })).toBe(
       '/security?tab=jobs&status=running&q=smoke',
     )
+    expect(connectorsHref()).toBe('/settings/connectors')
+    expect(connectorsHref({ edit: 'conn-1' })).toBe('/settings/connectors?edit=conn-1')
     expect(syntheticsHref('chk-1')).toBe('/synthetics?check=chk-1')
     expect(traceReplayHref('abc', 'waterfall')).toBe('/traces/abc?replay=waterfall')
     expect(truncateId('abcdefghijklmnop', 8)).toBe('abcdefgh…')
