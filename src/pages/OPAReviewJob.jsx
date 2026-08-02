@@ -5,6 +5,8 @@ import { FiChevronLeft, FiGitPullRequest, FiRefreshCw, FiShield, FiX } from 'rea
 import { apiUrl } from '../utils/apiBase'
 import { Panel, EntityHeader, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
+import { scmJobHref } from '../utils/entityLinks'
+import { agentKindLabel } from '../utils/scmRuns'
 import './OPAReviewJob.css'
 
 const SEV_RANK = { blocker: 5, critical: 4, high: 3, medium: 2, low: 1, info: 0 }
@@ -216,6 +218,39 @@ export default function OPAReviewJob() {
   const rHref = repoHref(job, connectors)
   const pHref = prHref(job, connectors)
 
+  const children = useMemo(() => {
+    const list = job?.children
+    return Array.isArray(list) ? list : []
+  }, [job])
+  const childStatus = job?.child_status || job?.summary?.child_status || {}
+  const runKind = String(job?.kind || job?.summary?.kind || '')
+  const isRunCentric = !!(runKind || children.length || job?.run_id)
+  const frozenPrefs = job?.summary?.prefs || null
+  const prefsSources = job?.summary?.prefs_sources || {}
+  const ledger = Array.isArray(job?.summary?.ledger) ? job.summary.ledger : []
+  const riskScore = job?.summary?.risk_score
+  const riskFactors = Array.isArray(job?.summary?.risk_factors) ? job.summary.risk_factors : []
+  const approvalReasons = Array.isArray(job?.summary?.approval_reasons) ? job.summary.approval_reasons : []
+  const approvalHonesty = job?.summary?.approval_honesty || ''
+  const degraded = Array.isArray(job?.summary?.degraded) ? job.summary.degraded : []
+
+  const dagRows = useMemo(() => {
+    if (children.length) {
+      return children.map((c) => ({
+        id: c.id,
+        kind: c.kind,
+        status: c.status,
+        attempt: c.attempt,
+      }))
+    }
+    return Object.keys(childStatus).map((k) => ({
+      id: k,
+      kind: k,
+      status: childStatus[k],
+      attempt: '',
+    }))
+  }, [children, childStatus])
+
   return (
     <div className="opa-stack opa-review-job">
       <EntityHeader
@@ -240,7 +275,8 @@ export default function OPAReviewJob() {
             {gate.aiStatus && gate.aiStatus !== 'findings' ? (
               <StatusPill tone={gate.aiStatus === 'skipped' ? 'neutral' : 'ok'}>{gate.aiStatus}</StatusPill>
             ) : null}
-            <Badge>OPA Review</Badge>
+            {runKind ? <Badge>{agentKindLabel(runKind)}</Badge> : <Badge>OPA Review</Badge>}
+            {typeof riskScore === 'number' ? <Badge title="Risk score">risk {riskScore}</Badge> : null}
           </>
         }
         meta={
@@ -297,6 +333,102 @@ export default function OPAReviewJob() {
           <span className="opa-mono">{findings.length}</span>
         </div>
       </div>
+
+      {isRunCentric && dagRows.length > 0 ? (
+        <Panel title="Run children" icon={<FiShield />} empty={false}>
+          <div className="opa-review-run-dag">
+            {dagRows.map((c) => (
+              <div key={c.id} className="opa-review-run-node">
+                <Badge>{agentKindLabel(c.kind)}</Badge>
+                <StatusPill tone={statusTone(c.status)}>{c.status || '—'}</StatusPill>
+                {c.id && c.id !== c.kind ? (
+                  <Link to={scmJobHref(c.id)} className="opa-mono" style={{ fontSize: 11 }}>
+                    {String(c.id).slice(0, 16)}
+                  </Link>
+                ) : null}
+                {c.attempt ? <span className="opa-muted" style={{ fontSize: 11 }}>attempt {c.attempt}</span> : null}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+
+      {degraded.length > 0 ? (
+        <div className="opa-review-degraded" role="status">
+          <strong>Degraded</strong>
+          {' — '}
+          {degraded.join('; ')}
+        </div>
+      ) : null}
+
+      {(frozenPrefs || riskFactors.length || approvalReasons.length || ledger.length) ? (
+        <div className="opa-review-run-meta-grid">
+          {frozenPrefs ? (
+            <Panel title="Frozen prefs" icon={<FiShield />}>
+              <ul className="opa-review-prefs-list">
+                {Object.keys(frozenPrefs).sort().map((field) => (
+                  <li key={field}>
+                    <span className="opa-mono">{field}</span>
+                    <span>
+                      {typeof frozenPrefs[field] === 'boolean'
+                        ? (frozenPrefs[field] ? 'On' : 'Off')
+                        : String(frozenPrefs[field] ?? '—')}
+                    </span>
+                    {prefsSources[field] ? <Badge>{prefsSources[field]}</Badge> : null}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          ) : null}
+          {(typeof riskScore === 'number' || riskFactors.length > 0) ? (
+            <Panel title="Risk" icon={<FiShield />}>
+              {typeof riskScore === 'number' ? (
+                <div style={{ marginBottom: 8 }}>
+                  Score <span className="opa-mono cell-strong">{riskScore}</span>
+                </div>
+              ) : null}
+              {riskFactors.length ? (
+                <ul className="opa-review-prefs-list">
+                  {riskFactors.map((f, i) => (
+                    <li key={i}>
+                      <span>{typeof f === 'string' ? f : (f?.name || f?.factor || JSON.stringify(f))}</span>
+                      {f?.points != null ? <Badge>{f.points}</Badge> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </Panel>
+          ) : null}
+          {(approvalReasons.length || approvalHonesty) ? (
+            <Panel title="Approval" icon={<FiShield />}>
+              {approvalHonesty ? <p className="opa-muted" style={{ fontSize: 12, marginTop: 0 }}>{approvalHonesty}</p> : null}
+              {approvalReasons.length ? (
+                <ul className="opa-review-prefs-list">
+                  {approvalReasons.map((r, i) => (
+                    <li key={i}><span>{String(r)}</span></li>
+                  ))}
+                </ul>
+              ) : null}
+            </Panel>
+          ) : null}
+          {ledger.length ? (
+            <Panel title="Findings ledger" icon={<FiShield />}>
+              <ul className="opa-review-prefs-list">
+                {ledger.slice(0, 40).map((f, i) => (
+                  <li key={f.key || f.finding_key || i}>
+                    <StatusPill tone={sevTone(f.severity)}>{f.severity || '—'}</StatusPill>
+                    <span className="opa-mono" style={{ fontSize: 11 }}>{f.source || f.agent || ''}</span>
+                    <span>{f.rule || f.message || f.key || '—'}</span>
+                  </li>
+                ))}
+              </ul>
+              {ledger.length > 40 ? (
+                <p className="opa-muted" style={{ fontSize: 11 }}>+{ledger.length - 40} more</p>
+              ) : null}
+            </Panel>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="opa-review-job-actions">
         <button

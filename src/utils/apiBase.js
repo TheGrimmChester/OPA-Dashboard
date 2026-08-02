@@ -1,7 +1,7 @@
 /**
  * Resolve API base URL by path prefix.
  * - /api/perf/* → VITE_PERF_LAB_URL (fallback Agent URL)
- * - /api/scm/*, /api/connectors/*, /api/ai/*, /api/security/runs*, /api/security/profiles, /v1/scm/*
+ * - /api/scm/*, /api/connectors/*, /api/ai/*, /api/agents/*, /api/security/runs*, /api/security/profiles, /v1/scm/*
  *   → VITE_ORCHESTRATOR_URL (fallback Agent URL)
  * - everything else (incl. /api/security/secrets|sast|iac|policies) → VITE_API_URL
  *
@@ -32,6 +32,9 @@ export function apiBaseForPath(path = '') {
     p === '/api/ai' ||
     p.startsWith('/api/ai/') ||
     p.startsWith('/api/ai?') ||
+    p === '/api/agents' ||
+    p.startsWith('/api/agents/') ||
+    p.startsWith('/api/agents?') ||
     p === '/api/security/profiles' ||
     p.startsWith('/api/security/profiles?') ||
     p.startsWith('/api/security/runs') ||

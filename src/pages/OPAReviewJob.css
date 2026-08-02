@@ -160,3 +160,55 @@
 .opa-review-fix-err {
   color: var(--danger, #c44);
 }
+
+.opa-review-run-dag {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 14px;
+}
+
+.opa-review-run-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: var(--fs-12);
+}
+
+.opa-review-degraded {
+  padding: 10px 12px;
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-12);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.opa-review-run-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: var(--sp-3);
+}
+
+.opa-review-prefs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-12);
+}
+
+.opa-review-prefs-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+

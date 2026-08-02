@@ -3,15 +3,18 @@ import axios from 'axios'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   FiShield, FiAlertTriangle, FiEye, FiEyeOff, FiCrosshair, FiKey, FiSliders,
-  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiX,
+  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiX, FiGitPullRequest,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { apiUrl } from '../utils/apiBase'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { ConnectorPicker } from '../components/connectors'
+import AgentsTab from '../components/security/AgentsTab'
+import { useTenant } from '../contexts/TenantContext'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { securityRunHref, serviceHref, scmJobHref } from '../utils/entityLinks'
+import { agentKindLabel, groupScmJobsForDisplay } from '../utils/scmRuns'
 import './Security.css'
 
 const SEV_KEY = 'opa.security.min_severity'
@@ -74,6 +77,16 @@ function sevTone(sev) {
   return 'neutral'
 }
 
+function scmWebhookOutcomeTone(outcome) {
+  switch (String(outcome || '').toLowerCase()) {
+    case 'queued': case 'ok': return 'ok'
+    case 'ping': return 'neutral'
+    case 'skipped': case 'ignored': case 'duplicate': return 'warn'
+    case 'error': return 'error'
+    default: return 'neutral'
+  }
+}
+
 function scmJobStatusTone(status) {
   switch (String(status || '').toLowerCase()) {
     case 'completed': return 'ok'
@@ -88,6 +101,8 @@ function scmJobStatusTone(status) {
 }
 
 function scmJobKindLabel(job) {
+  const kind = String(job?.kind || job?.summary?.kind || '').toLowerCase()
+  if (kind) return agentKindLabel(kind)
   const ev = String(job?.event || '').toLowerCase()
   if (ev.includes('ai_only') || ev.includes('ai_review') || ev.includes('opa_review')) return 'OPA Review'
   if (ev.includes('simulate')) return 'Simulate'
@@ -220,6 +235,8 @@ function MultiSelectActions({ onSelectAll, onClear, disabled = false, selectLabe
 /** Wave 19 + Wave 30 + Wave 33: Vulns / IAST / Secrets / SAST / IaC / Scans / Inventory / Policies / PR-check. */
 export default function Security() {
   const toast = useToast()
+  const { organizationId } = useTenant()
+  const orgAll = !organizationId || organizationId === 'all'
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState(() => resolveSecurityTab(searchParams))
   const [minSev, setMinSev] = useState(() => localStorage.getItem(SEV_KEY) || 'high')
@@ -264,9 +281,11 @@ export default function Security() {
   const runs = useApi('/api/security/runs', { limit: 50 }, { noRange: true, skip: tab !== 'scans' && !activeRunId })
   const profiles = useApi('/api/security/profiles', {}, { noRange: true, skip: tab !== 'scans' })
   const services = useApi('/api/services', {}, { noRange: true, skip: tab !== 'scans' })
-  const connectors = useApi('/api/connectors', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'jobs' })
+  const connectors = useApi('/api/connectors', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'jobs' && tab !== 'agents' })
   const scmJobs = useApi('/api/scm/jobs', { limit: 200 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
-  const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' && tab !== 'jobs' })
+  const scmWebhooks = useApi('/api/scm/webhooks', { limit: 200 }, { noRange: true, skip: tab !== 'webhooks' })
+  const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' && tab !== 'jobs' && tab !== 'webhooks' && tab !== 'agents' })
+  const [webhookDetailId, setWebhookDetailId] = useState('')
   const [extraRepos, setExtraRepos] = useState('')
   const [watchedRows, setWatchedRows] = useState([])
   const [availableRepos, setAvailableRepos] = useState([])
@@ -421,6 +440,12 @@ export default function Security() {
   useEffect(() => {
     if (tab !== 'jobs') return undefined
     const id = setInterval(() => { scmJobs.reload?.() }, 4000)
+    return () => clearInterval(id)
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (tab !== 'webhooks') return undefined
+    const id = setInterval(() => { scmWebhooks.reload?.() }, 8000)
     return () => clearInterval(id)
   }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1009,14 +1034,15 @@ export default function Security() {
   }
 
   const scmJobRows = useMemo(() => {
-    const rows = [...(scmJobs.data?.jobs || [])]
-    rows.sort((a, b) => {
+    const raw = [...(scmJobs.data?.jobs || [])]
+    raw.sort((a, b) => {
       const ra = scmJobStatusRank(a.status)
       const rb = scmJobStatusRank(b.status)
       if (ra !== rb) return ra - rb
       return String(b.started_at || '').localeCompare(String(a.started_at || ''))
     })
-    return rows
+    // Run-centric when kind/run_id present; legacy rows (no run_id) unchanged.
+    return groupScmJobsForDisplay(raw)
   }, [scmJobs.data])
 
   const jobStatusFilter = tab === 'jobs' ? resolveJobStatusFilter(searchParams) : ''
@@ -1046,6 +1072,9 @@ export default function Security() {
           j.repo_full_name,
           j.pr_number,
           j.summary?.stack_id,
+          j.kind,
+          j.run_id,
+          ...(j._runChildren || []).map((c) => c.kind),
         ].map((x) => String(x ?? '').toLowerCase()).join(' ')
         if (!hay.includes(q)) return false
       }
@@ -1065,6 +1094,26 @@ export default function Security() {
   }, [scmJobs.data, scmJobRows])
 
   const scmJobTotal = scmJobs.data?.total ?? scmJobRows.length
+
+  const scmWebhookRows = useMemo(() => {
+    const rows = scmWebhooks.data?.webhooks || []
+    return Array.isArray(rows) ? rows : []
+  }, [scmWebhooks.data])
+  const scmWebhookCounts = useMemo(() => {
+    const c = { ...(scmWebhooks.data?.counts || {}) }
+    if (Object.keys(c).length) return c
+    const out = {}
+    for (const w of scmWebhookRows) {
+      const o = String(w.outcome || 'unknown')
+      out[o] = (out[o] || 0) + 1
+    }
+    return out
+  }, [scmWebhooks.data, scmWebhookRows])
+  const scmWebhookTotal = scmWebhooks.data?.total ?? scmWebhookRows.length
+  const webhookDetail = useMemo(
+    () => scmWebhookRows.find((w) => w.id === webhookDetailId) || null,
+    [scmWebhookRows, webhookDetailId],
+  )
 
   const ExtLink = ({ href, children, className, style, title }) => (
     href
@@ -1226,6 +1275,8 @@ export default function Security() {
         <button type="button" className={`opa-tab ${tab === 'scans' ? 'active' : ''}`} onClick={() => selectTab('scans')}>Scans</button>
         <button type="button" className={`opa-tab ${tab === 'watch' ? 'active' : ''}`} onClick={() => selectTab('watch')}>Repo Watch</button>
         <button type="button" className={`opa-tab ${tab === 'jobs' ? 'active' : ''}`} onClick={() => selectTab('jobs')}>PR Jobs</button>
+        <button type="button" className={`opa-tab ${tab === 'agents' ? 'active' : ''}`} onClick={() => selectTab('agents')}>Agents</button>
+        <button type="button" className={`opa-tab ${tab === 'webhooks' ? 'active' : ''}`} onClick={() => selectTab('webhooks')}>Webhooks</button>
         <button type="button" className={`opa-tab ${tab === 'inventory' ? 'active' : ''}`} onClick={() => selectTab('inventory')}>Inventory</button>
         <button type="button" className={`opa-tab ${tab === 'policies' ? 'active' : ''}`} onClick={() => selectTab('policies')}>Policies</button>
         <button type="button" className={`opa-tab ${tab === 'pr' ? 'active' : ''}`} onClick={() => selectTab('pr')}>Gate</button>
@@ -2005,8 +2056,16 @@ export default function Security() {
       {tab === 'jobs' && (
         <Panel title="SCM / PR jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading && !scmJobRows.length} error={scmJobs.error}
           empty={!scmJobs.loading && !scmJobRows.length}
-          emptyText="No jobs yet — open a PR on a watched repo, or run an OPA Review stack from Repo Watch"
+          emptyText={
+            scmJobs.data?.honesty
+              || (orgAll
+                ? 'No jobs visible — with tenant All, admins see every org; pick an organization if you still see nothing after a stack queue'
+                : `No jobs for org ${organizationId} — stacks inherit the watched repo’s organization (often default-org). Try tenant All or that org.`)
+          }
           actions={<button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}>
+          {!scmJobs.loading && scmJobRows.length > 0 && scmJobs.data?.honesty && (
+            <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>{String(scmJobs.data.honesty)}</p>
+          )}
           <div className="opa-jobs-summary">
             <span className="opa-muted">{fmtNum(scmJobTotal)} total</span>
             {['running', 'queued', 'waiting', 'completed', 'cancelled', 'failed', 'error'].map((st) => (
@@ -2152,9 +2211,23 @@ export default function Security() {
                 key: 'event', header: 'Event',
                 render: (r) => {
                   const kind = scmJobKindLabel(r)
+                  const kids = r._runChildren || []
+                  const childStatus = r._childStatus || {}
+                  const childKinds = kids.length
+                    ? kids
+                    : Object.keys(childStatus).map((k) => ({ kind: k, status: childStatus[k] }))
                   return (
-                    <span title={r.event || ''}>
+                    <span title={r.event || ''} style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                       <Badge>{kind || r.event || '—'}</Badge>
+                      {childKinds.map((c) => (
+                        <StatusPill
+                          key={c.kind || c.id}
+                          tone={scmJobStatusTone(c.status)}
+                          title={`${agentKindLabel(c.kind)} · ${c.status || ''}`}
+                        >
+                          {agentKindLabel(c.kind)}
+                        </StatusPill>
+                      ))}
                     </span>
                   )
                 },
@@ -2274,6 +2347,151 @@ export default function Security() {
             maxHeight={480}
           />
           )}
+        </Panel>
+      )}
+
+      {tab === 'agents' && (
+        <AgentsTab
+          connectors={connectorList}
+          toast={toast}
+          activeConnector={activeConnector}
+          onConnectorChange={setActiveConnector}
+        />
+      )}
+
+      {tab === 'webhooks' && (
+        <Panel
+          title="GitHub webhooks"
+          icon={<FiGitPullRequest />}
+          flush
+          loading={scmWebhooks.loading && !scmWebhookRows.length}
+          error={scmWebhooks.error}
+          empty={!scmWebhooks.loading && !scmWebhookRows.length}
+          emptyText={
+            scmWebhooks.data?.honesty
+              || (orgAll
+                ? 'No webhook deliveries yet — live captures start after orchestrator deploy; historical PR/push jobs are backfilled on boot'
+                : `No webhooks for org ${organizationId}`)
+          }
+          actions={<button type="button" className="opa-btn ghost" onClick={() => scmWebhooks.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}
+        >
+          {!scmWebhooks.loading && scmWebhookRows.length > 0 && scmWebhooks.data?.honesty && (
+            <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>{String(scmWebhooks.data.honesty)}</p>
+          )}
+          <div className="opa-jobs-summary">
+            <span className="opa-muted">{fmtNum(scmWebhookTotal)} total</span>
+            {['queued', 'ok', 'ignored', 'skipped', 'duplicate', 'ping', 'error'].map((st) => (
+              scmWebhookCounts[st] ? (
+                <span key={st} className="opa-jobs-count-chip" title={st}>
+                  <StatusPill tone={scmWebhookOutcomeTone(st)}>{st}</StatusPill>
+                  <span className="opa-mono">{scmWebhookCounts[st]}</span>
+                </span>
+              ) : null
+            ))}
+            <span className="opa-muted">· auto-refresh 8s</span>
+          </div>
+          <DataTable
+            columns={[
+              {
+                key: 'received_at', header: 'When',
+                render: (r) => (
+                  <span title={r.received_at || ''}>{r.received_at ? fmtAgo(r.received_at) : '—'}</span>
+                ),
+              },
+              {
+                key: 'event', header: 'Event',
+                render: (r) => (
+                  <span title={r.delivery_id || ''}>
+                    <Badge>{r.event || '—'}</Badge>
+                    {r.action ? <span className="opa-muted" style={{ marginLeft: 4 }}>{r.action}</span> : null}
+                  </span>
+                ),
+              },
+              {
+                key: 'repo_full_name', header: 'Repo',
+                render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{r.repo_full_name || '—'}</span>,
+              },
+              {
+                key: 'pr_number', header: 'PR / SHA',
+                render: (r) => {
+                  if (r.pr_number) return <span className="opa-mono">#{r.pr_number}</span>
+                  if (r.commit_sha) return <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.commit_sha).slice(0, 10)}</span>
+                  return '—'
+                },
+              },
+              {
+                key: 'outcome', header: 'Action taken',
+                render: (r) => (
+                  <span title={r.honesty || ''}>
+                    <StatusPill tone={scmWebhookOutcomeTone(r.outcome)}>{r.outcome || '—'}</StatusPill>
+                  </span>
+                ),
+              },
+              {
+                key: 'job_id', header: 'Job',
+                render: (r) => (r.job_id
+                  ? <Link to={scmJobHref(r.job_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.job_id).slice(0, 16)}</Link>
+                  : '—'),
+              },
+              {
+                key: 'signature_valid', header: 'Sig',
+                render: (r) => (
+                  <StatusPill tone={r.signature_valid ? 'ok' : 'error'}>
+                    {r.signature_valid ? 'ok' : 'bad'}
+                  </StatusPill>
+                ),
+              },
+              {
+                key: 'source', header: 'Src',
+                render: (r) => (r.source === 'backfill'
+                  ? <Badge title="Synthesized from scm job">backfill</Badge>
+                  : <span className="opa-muted">live</span>),
+              },
+              {
+                key: 'honesty', header: 'Reason',
+                render: (r) => (
+                  <span className="opa-muted" style={{ fontSize: 12 }} title={r.honesty || ''}>
+                    {r.honesty ? String(r.honesty).slice(0, 64) : '—'}
+                    {r.honesty && String(r.honesty).length > 64 ? '…' : ''}
+                  </span>
+                ),
+              },
+              {
+                key: 'detail', header: '',
+                render: (r) => (
+                  <button type="button" className="opa-btn ghost" onClick={() => setWebhookDetailId(r.id === webhookDetailId ? '' : r.id)}>
+                    {r.id === webhookDetailId ? 'Hide' : 'Detail'}
+                  </button>
+                ),
+              },
+            ]}
+            rows={scmWebhookRows}
+            rowKey={(r) => r.id}
+            maxHeight={480}
+          />
+          {webhookDetail ? (
+            <div className="opa-jobs-summary" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, margin: '8px 12px 12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <strong className="opa-mono" style={{ fontSize: 12 }}>{webhookDetail.id}</strong>
+                <button type="button" className="opa-btn ghost" onClick={() => setWebhookDetailId('')}><FiX size={12} /> Close</button>
+              </div>
+              <p className="opa-muted" style={{ margin: 0, fontSize: 12 }}>{webhookDetail.honesty || '—'}</p>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12 }}>
+                <span>Delivery: <code>{webhookDetail.delivery_id || '—'}</code></span>
+                <span>Installation: <code>{webhookDetail.installation_id || '—'}</code></span>
+                <span>HTTP: <code>{webhookDetail.http_status || '—'}</code></span>
+                <span>Org: <code>{webhookDetail.organization_id || '—'}</code></span>
+                {webhookDetail.stack_id ? <span>Stack: <code>{webhookDetail.stack_id}</code></span> : null}
+                {webhookDetail.error ? <span className="opa-muted">Error: {webhookDetail.error}</span> : null}
+              </div>
+              {webhookDetail.job_id ? (
+                <div>
+                  <Link to={scmJobHref(webhookDetail.job_id)} className="opa-btn ghost">Open related job</Link>
+                  <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>PR Jobs</button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </Panel>
       )}
     </div>
