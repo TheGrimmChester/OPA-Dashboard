@@ -2,7 +2,7 @@
 
 **Project:** `designs/repo-watch-pr-jobs/`  
 **Fidelity:** Hi-fi interactive prototype (baoyu-design)  
-**Design context:** OPA-Dashboard Security SCM (`wave28-30-verticals`) tokens + product fields.
+**Design context:** OPA-Dashboard Security SCM (Security SCM verticals) tokens + product fields.
 
 ## Problem
 Dense Security → PR Jobs / Watch UI. Operators need “why did this run / what happened / what do I trust?” without a 12-column wall.

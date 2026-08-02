@@ -18,7 +18,7 @@ const TimeRangeContext = createContext(null)
 
 export function TimeRangeProvider({ children }) {
   const [range, setRange] = useState(() => localStorage.getItem('opa_range') || '24h')
-  // Wave 14-3: optional absolute window from brush-to-zoom.
+  // Dashboards: optional absolute window from brush-to-zoom.
   const [custom, setCustom] = useState(null) // { fromMs, toMs } | null
   const [tick, setTick] = useState(0)
 

@@ -29,7 +29,7 @@ function Tabs({ tabs = [], value, onChange, t }) {
   )
 }
 
-/** Wave 26: Collaboration & stakeholder surfaces. */
+/** Collaboration & stakeholder surfaces. */
 export default function Collaborate() {
   const { t } = useI18n()
   const [tab, setTab] = useState('notebooks')
@@ -60,7 +60,7 @@ export default function Collaborate() {
     try {
       const { data } = await axios.post(`${API}/api/notebooks`, {
         title: nbTitle,
-        description: 'Wave 26 notebook',
+        description: 'Collaboration notebook',
         cells: [
           { type: 'prose', body: '## Context\nWhat we know so far…' },
           { type: 'tql', query: 'SELECT count() FROM spans SINCE 1h' },

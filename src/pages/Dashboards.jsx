@@ -91,7 +91,7 @@ export default function Dashboards() {
     try {
       const res = await axios.post(`${API}/api/dashboards`, {
         name: tpl.name,
-        description: 'Wave 14 template',
+        description: 'Dashboards template',
         config,
         user_id: 'me',
         is_shared: true,

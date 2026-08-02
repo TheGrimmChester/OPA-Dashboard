@@ -6,7 +6,7 @@ import { Badge } from './index'
 const API = import.meta.env.VITE_API_URL || ''
 
 /**
- * Wave 14-2: faceted sidebar with include/exclude chips.
+ * Dashboards: faceted sidebar with include/exclude chips.
  * onChange({ include: {field:[values]}, exclude: {field:[values]} })
  */
 export default function FacetSidebar({

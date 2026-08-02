@@ -74,7 +74,7 @@ export default function CommandPalette() {
     return [...routeSections, actions]
   }, [refresh, t])
 
-  // Wave 14-4: entity search via /api/search
+  // Dashboards: entity search via /api/search
   useEffect(() => {
     if (!open || query.trim().length < 2) { setEntities([]); return undefined }
     const ctrl = new AbortController()

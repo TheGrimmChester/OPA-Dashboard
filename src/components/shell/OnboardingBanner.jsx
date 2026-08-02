@@ -19,7 +19,7 @@ function hasIngestedTraces(data) {
   return Array.isArray(list) && list.length > 0
 }
 
-/** Wave 14-5: first-run onboarding until dismissed or traces arrive. */
+/** Dashboards: first-run onboarding until dismissed or traces arrive. */
 export default function OnboardingBanner() {
   const [open, setOpen] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) !== '1' } catch { return true }
