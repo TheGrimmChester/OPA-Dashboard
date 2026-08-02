@@ -11,6 +11,9 @@ import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { ConnectorPicker } from '../components/connectors'
 import AgentsTab from '../components/security/AgentsTab'
+import CheckWithHint from '../components/security/CheckWithHint'
+import JobEvidencePanel, { findingsFromJob } from '../components/security/JobEvidencePanel'
+import PrefRow from '../components/security/PrefRow'
 import { useTenant } from '../contexts/TenantContext'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { securityRunHref, serviceHref, scmJobHref } from '../utils/entityLinks'
@@ -286,6 +289,10 @@ export default function Security() {
   const scmWebhooks = useApi('/api/scm/webhooks', { limit: 200 }, { noRange: true, skip: tab !== 'webhooks' })
   const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' && tab !== 'jobs' && tab !== 'webhooks' && tab !== 'agents' })
   const [webhookDetailId, setWebhookDetailId] = useState('')
+  const [selectedJobId, setSelectedJobId] = useState('')
+  const [selectedJobDetail, setSelectedJobDetail] = useState(null)
+  const [selectedJobDetailLoading, setSelectedJobDetailLoading] = useState(false)
+  const [jobActionBusy, setJobActionBusy] = useState(false)
   const [extraRepos, setExtraRepos] = useState('')
   const [watchedRows, setWatchedRows] = useState([])
   const [availableRepos, setAvailableRepos] = useState([])
@@ -846,16 +853,106 @@ export default function Security() {
 
   const rerunAiOnly = async (job) => {
     if (!job?.id || !job.pr_number) return
+    setJobActionBusy(true)
     try {
       const { data } = await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(job.id)}/ai-review`), {
         force: true,
         ai_only: true,
       })
       setLastAiJobId(data.job_id || '')
-      flash('ok', 'OPA Review-only re-run queued', data.job_id)
+      flash('ok', 'Bugbot re-run queued', data.job_id || data.honesty || '')
       scmJobs.reload?.()
     } catch (e) {
-      flash('error', 'OPA Review re-run failed', e.response?.data || e.message)
+      flash('error', 'Bugbot re-run failed', e.response?.data || e.message)
+    } finally {
+      setJobActionBusy(false)
+    }
+  }
+
+  const rerunFullReview = async (job) => {
+    if (!job?.id || !job.pr_number) return
+    setJobActionBusy(true)
+    try {
+      const { data } = await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(job.id)}/ai-review`), {
+        force: true,
+        ai_only: false,
+      })
+      setLastAiJobId(data.job_id || '')
+      flash('ok', 'Full OPA Review queued', data.job_id || '')
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'Full OPA Review failed', e.response?.data || e.message)
+    } finally {
+      setJobActionBusy(false)
+    }
+  }
+
+  const requestCloudAutofix = async (job, { createPr = true } = {}) => {
+    if (!job?.id) return
+    setJobActionBusy(true)
+    try {
+      let detail = selectedJobDetail && String(selectedJobDetail.id) === String(job.id)
+        ? selectedJobDetail
+        : null
+      if (!detail) {
+        const { data } = await axios.get(apiUrl(`/api/scm/jobs/${encodeURIComponent(job.id)}`))
+        detail = data
+        setSelectedJobDetail(data || null)
+      }
+      const findings = findingsFromJob(detail || job)
+      const keys = findings
+        .map((f) => f.finding_key || f.key || '')
+        .map((k) => String(k || '').trim())
+        .filter(Boolean)
+      if (!keys.length) {
+        flash('error', 'Cloud autofix needs finding keys', 'Open the job page or wait for findings to hydrate on the detail GET.')
+        return
+      }
+      const { data } = await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(job.id)}/auto-fix`), {
+        finding_keys: keys,
+        create_pr: !!createPr,
+      })
+      flash('ok', createPr ? 'Cloud fix PR queued' : 'Cloud autofix queued', data.auto_fix_id || data.honesty || '')
+      scmJobs.reload?.()
+    } catch (e) {
+      const raw = e.response?.data
+      const detail = typeof raw === 'string' ? raw : (raw?.error || e.message)
+      flash('error', 'Cloud autofix failed', detail)
+    } finally {
+      setJobActionBusy(false)
+    }
+  }
+
+  const resumeStalledJobs = async () => {
+    setJobActionBusy(true)
+    try {
+      const { data } = await axios.post(apiUrl('/api/scm/jobs/resume'))
+      flash(
+        'ok',
+        'Resume kicked',
+        `${data.stacks_resumed ?? 0} stack(s) · ${data.queued_dispatched ?? 0} queued · ${data.honesty || ''}`,
+      )
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'Resume failed', e.response?.data || e.message)
+    } finally {
+      setJobActionBusy(false)
+    }
+  }
+
+  const cancelReviewStack = async () => {
+    if (!lastStackId) return
+    if (!window.confirm(`Cancel OPA Review stack ${String(lastStackId).slice(0, 18)}…?`)) return
+    setJobActionBusy(true)
+    try {
+      const { data } = await axios.post(apiUrl(`/api/scm/opa-review/stacks/${encodeURIComponent(lastStackId)}/cancel`))
+      setStackStatus(data)
+      flash('ok', 'Stack cancel requested', `${data.cancelled ?? 0} job(s) cancelled`)
+      scmJobs.reload?.()
+    } catch (e) {
+      flash('error', 'Stack cancel failed', e.response?.data || e.message)
+    } finally {
+      setJobActionBusy(false)
     }
   }
 
@@ -1081,6 +1178,60 @@ export default function Security() {
       return true
     })
   }, [scmJobRows, jobStatusFilter, jobSeverityFilter, jobRepoFilter, jobQFilter])
+
+  useEffect(() => {
+    if (tab !== 'jobs') return undefined
+    if (!filteredScmJobRows.length) {
+      if (selectedJobId) setSelectedJobId('')
+      return undefined
+    }
+    const stillVisible = filteredScmJobRows.some((r) => String(r.id) === String(selectedJobId))
+    if (!selectedJobId || !stillVisible) {
+      setSelectedJobId(String(filteredScmJobRows[0].id))
+    }
+    return undefined
+  }, [tab, filteredScmJobRows, selectedJobId])
+
+  useEffect(() => {
+    if (tab !== 'jobs' || !selectedJobId) {
+      setSelectedJobDetail(null)
+      setSelectedJobDetailLoading(false)
+      return undefined
+    }
+    let cancelled = false
+    setSelectedJobDetailLoading(true)
+    axios.get(apiUrl(`/api/scm/jobs/${encodeURIComponent(selectedJobId)}`))
+      .then(({ data }) => {
+        if (!cancelled) setSelectedJobDetail(data || null)
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedJobDetail(null)
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedJobDetailLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [tab, selectedJobId, scmJobs.data])
+
+  const selectedJobRow = useMemo(() => {
+    const listRow = filteredScmJobRows.find((r) => String(r.id) === String(selectedJobId))
+      || scmJobRows.find((r) => String(r.id) === String(selectedJobId))
+      || null
+    if (!listRow) return selectedJobDetail
+    if (!selectedJobDetail || String(selectedJobDetail.id) !== String(selectedJobId)) return listRow
+    return {
+      ...listRow,
+      ...selectedJobDetail,
+      summary: {
+        ...(listRow.summary || {}),
+        ...(selectedJobDetail.summary || {}),
+      },
+      _runChildren: listRow._runChildren || selectedJobDetail.children,
+      findings: findingsFromJob(selectedJobDetail).length
+        ? findingsFromJob(selectedJobDetail)
+        : findingsFromJob(listRow),
+    }
+  }, [filteredScmJobRows, scmJobRows, selectedJobId, selectedJobDetail])
 
   const scmJobCounts = useMemo(() => {
     const fromApi = scmJobs.data?.counts
@@ -1565,38 +1716,61 @@ export default function Security() {
               />
             </label>
 
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
-              {['secrets', 'sast', 'iac', 'sbom', 'ai_review'].map((id) => (
-                <label key={id} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={!!watchPolicy.checks[id]}
-                    onChange={(e) => setWatchPolicy((p) => ({
-                      ...p,
-                      checks: { ...p.checks, [id]: e.target.checked },
-                    }))}
-                  />
-                  {id === 'ai_review' ? 'OPA Review' : id.toUpperCase()}
-                </label>
+            <div className="opa-watch-checks">
+              <div className="opa-watch-checks-title">Checks included in each PR job</div>
+              {[
+                { id: 'secrets', label: 'Secrets', hint: 'Scan the PR diff for leaked credentials and API keys before merge.' },
+                { id: 'sast', label: 'SAST', hint: 'Static analysis for common insecure patterns in changed files.' },
+                { id: 'iac', label: 'IaC', hint: 'Check Terraform / K8s / CloudFormation diffs for misconfigurations.' },
+                { id: 'sbom', label: 'SBOM', hint: 'Generate or update dependency inventory for this PR’s lockfiles.' },
+                { id: 'ai_review', label: 'OPA Review (AI)', hint: 'Enqueue the Bugbot AI review child when this repo is watched.' },
+              ].map((c) => (
+                <CheckWithHint
+                  key={c.id}
+                  id={`watch-check-${c.id}`}
+                  label={c.label}
+                  hint={c.hint}
+                  checked={!!watchPolicy.checks[c.id]}
+                  onChange={(checked) => setWatchPolicy((p) => ({
+                    ...p,
+                    checks: { ...p.checks, [c.id]: checked },
+                  }))}
+                />
               ))}
-              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            </div>
+            <div className="opa-watch-toggles">
+              <PrefRow
+                label="AI blocking"
+                hint="Whether a failing Bugbot/approval child fails the GitHub Check Run and blocks merge."
+                on={!!watchPolicy.ai_blocking}
+                effectOn="OPA Review check fails when AI or approval blocks the PR."
+                effectOff="Findings stay advisory — gate can still pass independently."
+                as="label"
+              >
                 <input
                   type="checkbox"
                   checked={!!watchPolicy.ai_blocking}
                   onChange={(e) => setWatchPolicy((p) => ({ ...p, ai_blocking: e.target.checked }))}
                 />
-                AI blocking
-              </label>
-              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              </PrefRow>
+              <PrefRow
+                label="Auto-request as reviewer"
+                hint="Ask GitHub to request the OPA Review bot as a reviewer when a PR opens."
+                on={!!watchPolicy.auto_request_reviewer}
+                effectOn="Bot is requested on open/reopen so humans see it in the reviewers list."
+                effectOff="Reviews still run via checks/comments — no reviewer request."
+                as="label"
+              >
                 <input
                   type="checkbox"
                   checked={!!watchPolicy.auto_request_reviewer}
                   onChange={(e) => setWatchPolicy((p) => ({ ...p, auto_request_reviewer: e.target.checked }))}
                 />
-                Auto-request as reviewer
-              </label>
-              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                Min approve score
+              </PrefRow>
+              <PrefRow
+                label="Min approve score"
+                hint="Lowest score that auto-approval may grant without a human (0 = COMMENT only)."
+              >
                 <input
                   type="number"
                   min={0}
@@ -1609,7 +1783,7 @@ export default function Security() {
                   }))}
                   title="0 = COMMENT only; 1–100 = APPROVE when confidence ≥ score, else REQUEST_CHANGES"
                 />
-              </label>
+              </PrefRow>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="opa-btn primary" disabled={busy || !activeConnector} onClick={saveWatched}>Save watched repos</button>
@@ -1883,6 +2057,11 @@ export default function Security() {
                 Run OPA Review stack
               </button>
               {lastStackId && (
+                <button type="button" className="opa-btn ghost" disabled={busy || jobActionBusy} onClick={cancelReviewStack}>
+                  Cancel stack
+                </button>
+              )}
+              {lastStackId && (
                 <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>
                   Stack {String(lastStackId).slice(0, 16)}…
                 </button>
@@ -2062,7 +2241,19 @@ export default function Security() {
                 ? 'No jobs visible — with tenant All, admins see every org; pick an organization if you still see nothing after a stack queue'
                 : `No jobs for org ${organizationId} — stacks inherit the watched repo’s organization (often default-org). Try tenant All or that org.`)
           }
-          actions={<button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}>
+          actions={(
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="opa-btn ghost" disabled={jobActionBusy} onClick={resumeStalledJobs} title="POST /api/scm/jobs/resume — kick stalled stacks and orphaned queued jobs">
+                Resume stalled
+              </button>
+              {lastStackId ? (
+                <button type="button" className="opa-btn ghost" disabled={jobActionBusy} onClick={cancelReviewStack} title={`Cancel stack ${lastStackId}`}>
+                  Cancel stack
+                </button>
+              ) : null}
+              <button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>
+            </div>
+          )}>
           {!scmJobs.loading && scmJobRows.length > 0 && scmJobs.data?.honesty && (
             <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>{String(scmJobs.data.honesty)}</p>
           )}
@@ -2164,6 +2355,8 @@ export default function Security() {
               <button type="button" className="opa-btn ghost" onClick={clearJobFilters}>Clear filters</button>
             </div>
           ) : (
+          <div className="opa-jobs-master">
+            <div className="opa-jobs-master-list">
           <DataTable
             columns={[
               { key: 'id', header: 'Job', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.id).slice(0, 18)}</span> },
@@ -2185,29 +2378,6 @@ export default function Security() {
                 )
               } },
               {
-                key: 'stack', header: 'Stack',
-                render: (r) => {
-                  const sid = r.summary?.stack_id || ''
-                  return sid
-                    ? <span className="opa-mono" style={{ fontSize: 11 }} title={sid}>{String(sid).slice(0, 14)}</span>
-                    : '—'
-                },
-              },
-              {
-                key: 'commit_sha', header: 'SHA',
-                render: (r) => {
-                  const sha = r.summary?.analyzed_sha || r.analyzed_sha || r.commit_sha || r.summary?.worktree?.resolved_sha || ''
-                  const prev = r.summary?.previous_analyzed_sha || ''
-                  if (!sha) return '—'
-                  return (
-                    <span className="opa-mono" style={{ fontSize: 11 }} title={prev ? `${sha} (prev ${prev})` : sha}>
-                      {String(sha).slice(0, 10)}
-                      {prev && !String(prev).startsWith(String(sha).slice(0, 10)) ? ' ·↑' : ''}
-                    </span>
-                  )
-                },
-              },
-              {
                 key: 'event', header: 'Event',
                 render: (r) => {
                   const kind = scmJobKindLabel(r)
@@ -2219,7 +2389,7 @@ export default function Security() {
                   return (
                     <span title={r.event || ''} style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                       <Badge>{kind || r.event || '—'}</Badge>
-                      {childKinds.map((c) => (
+                      {childKinds.slice(0, 3).map((c) => (
                         <StatusPill
                           key={c.kind || c.id}
                           tone={scmJobStatusTone(c.status)}
@@ -2286,56 +2456,29 @@ export default function Security() {
                 },
               },
               {
-                key: 'security_run_id', header: 'Scan',
-                render: (r) => (r.security_run_id
-                  ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
-                  : '—'),
-              },
-              {
-                key: 'checkout', header: 'Worktree',
-                render: (r) => {
-                  const path = r.summary?.checkout_path || r.summary?.checkout_rel || r.summary?.worktree?.worktree_rel || ''
-                  const mock = r.summary?.worktree?.mock
-                  if (!path) return '—'
-                  return (
-                    <span className="opa-mono" style={{ fontSize: 11 }} title={String(path)}>
-                      {mock ? 'mock · ' : ''}{String(path).replace(/^.*\/worktrees\//, 'worktrees/').slice(0, 28)}
-                    </span>
-                  )
-                },
-              },
-              {
-                key: 'check_run_ids', header: 'Checks',
-                render: (r) => {
-                  const ids = r.check_run_ids || {}
-                  const chips = []
-                  if (ids.appsec) chips.push(`Gate:${ids.appsec}`)
-                  if (ids.ai) chips.push(`OPA:${ids.ai}`)
-                  return chips.length
-                    ? <span className="opa-muted" style={{ fontSize: 11 }}>{chips.join(' · ')}</span>
-                    : '—'
-                },
-              },
-              {
                 key: 'actions', header: '',
+                sortable: false,
                 render: (r) => {
                   const findings = Array.isArray(r.summary?.ai?.findings) ? r.summary.ai.findings : []
                   const n = findings.length
                   return (
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
                       {['queued', 'waiting', 'running'].includes(String(r.status || '').toLowerCase()) ? (
                         <button type="button" className="opa-btn ghost" onClick={() => cancelJob(r.id)}>Cancel</button>
                       ) : null}
                       <button type="button" className="opa-btn ghost" onClick={() => retryJob(r.id)}>Retry</button>
                       {r.pr_number ? (
-                        <button type="button" className="opa-btn ghost" onClick={() => rerunAiOnly(r)}>Re-run OPA Review</button>
+                        <button type="button" className="opa-btn ghost" onClick={() => rerunAiOnly(r)} title="Bugbot only (ai_only)">Re-run Bugbot</button>
+                      ) : null}
+                      {r.pr_number ? (
+                        <button type="button" className="opa-btn ghost" onClick={() => rerunFullReview(r)} title="Security + Bugbot (+ Cloud)">Full review</button>
                       ) : null}
                       <Link
                         to={scmJobHref(r.id)}
                         className="opa-btn ghost"
                         title="Open findings and Auto-fix actions"
                       >
-                        Open findings{n ? ` (${n})` : ''}
+                        Open{n ? ` (${n})` : ''}
                       </Link>
                     </div>
                   )
@@ -2344,8 +2487,25 @@ export default function Security() {
             ]}
             rows={filteredScmJobRows}
             rowKey={(r) => r.id}
+            selectedKey={selectedJobId}
+            onRowClick={(r) => setSelectedJobId(String(r.id))}
             maxHeight={480}
           />
+            </div>
+            <aside className="opa-jobs-master-detail" aria-label="Job evidence">
+              <JobEvidencePanel
+                job={selectedJobRow}
+                honesty={scmJobs.data?.honesty}
+                detailLoading={selectedJobDetailLoading}
+                actionBusy={jobActionBusy}
+                onCancel={cancelJob}
+                onRetry={retryJob}
+                onRerunBugbot={rerunAiOnly}
+                onRerunFull={rerunFullReview}
+                onCloudAutofix={requestCloudAutofix}
+              />
+            </aside>
+          </div>
           )}
         </Panel>
       )}

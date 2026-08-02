@@ -5,6 +5,7 @@ import { Panel, Badge, StatusPill, DataTable } from '../ui'
 import { connectorLabel } from '../../hooks/useConnectors'
 import { apiUrl } from '../../utils/apiBase'
 import TriStateSelect from './TriStateSelect'
+import PrefRow from './PrefRow'
 import { inheritOptionLabel } from '../../utils/scmRuns'
 
 const LEVELS = [
@@ -34,18 +35,6 @@ const SEV_OPTS = [
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
 ]
-
-function PrefRow({ label, hint, children }) {
-  return (
-    <label className="opa-agents-pref-row">
-      <span className="opa-agents-pref-label">
-        <span className="cell-strong">{label}</span>
-        {hint ? <span className="opa-muted" style={{ fontSize: 11 }}>{hint}</span> : null}
-      </span>
-      <span className="opa-agents-pref-control">{children}</span>
-    </label>
-  )
-}
 
 function storedTri(prefs, field) {
   if (!prefs || !(field in prefs)) return null
@@ -329,28 +318,64 @@ export default function AgentsTab({
             <p className="opa-muted" style={{ fontSize: 12, marginTop: 0 }}>
               AI code review on pull requests — findings, summaries, and incremental re-review.
             </p>
-            <PrefRow label="Trigger Mode" hint="When Bugbot runs on watched repos">
+            <PrefRow label="Trigger Mode" hint="When Bugbot starts relative to PR activity on watched repos.">
               {stringSelect('trigger_mode', TRIGGER_OPTS)}
             </PrefRow>
-            <PrefRow label="Review Draft PRs">
+            <PrefRow
+              label="Review Draft PRs"
+              hint="Include draft pull requests in automatic Bugbot runs."
+              on={!!effective.review_draft_prs}
+              effectOn="Draft PRs enqueue Bugbot like ready PRs."
+              effectOff="Drafts are skipped until marked ready for review."
+            >
               {boolSelect('review_draft_prs')}
             </PrefRow>
-            <PrefRow label="PR Summaries">
+            <PrefRow
+              label="PR Summaries"
+              hint="Post a résumé comment summarizing findings and gate status."
+              on={!!effective.pr_summaries}
+              effectOn="A summary comment is updated on each completed run."
+              effectOff="Only check runs / inline comments (if enabled) are used."
+            >
               {boolSelect('pr_summaries')}
             </PrefRow>
-            <PrefRow label="Post PR risk score">
+            <PrefRow
+              label="Post PR risk score"
+              hint="Publish the numeric risk score on the check summary and résumé."
+              on={!!effective.post_pr_risk_score}
+              effectOn="Risk score and factors are visible on the PR check."
+              effectOff="Score stays internal to the Dashboard job detail."
+            >
               {boolSelect('post_pr_risk_score')}
             </PrefRow>
-            <PrefRow label="Incremental Review">
+            <PrefRow
+              label="Incremental Review"
+              hint="Re-review only files changed since the last successful Bugbot SHA."
+              on={!!effective.incremental_review}
+              effectOn="Faster follow-up pushes — prior clean files are skipped."
+              effectOff="Every synchronize re-analyzes the full PR diff."
+            >
               {boolSelect('incremental_review')}
             </PrefRow>
-            <PrefRow label="Context-Aware Analysis">
+            <PrefRow
+              label="Context-Aware Analysis"
+              hint="Pull related symbols/files beyond the raw diff for higher-signal findings."
+              on={!!effective.context_aware_analysis}
+              effectOn="Uses extra context units from the review budget."
+              effectOff="Review stays strictly within the PR patch."
+            >
               {boolSelect('context_aware_analysis')}
             </PrefRow>
-            <PrefRow label="AI Reviewer Aware">
+            <PrefRow
+              label="AI Reviewer Aware"
+              hint="Treat existing AI review comments as context to avoid duplicate noise."
+              on={!!effective.ai_reviewer_aware}
+              effectOn="Dedupes against prior OPA / bot threads on the PR."
+              effectOff="May restate findings already discussed on the PR."
+            >
               {boolSelect('ai_reviewer_aware')}
             </PrefRow>
-            <PrefRow label="Max review units" hint="Budget per run (not billing)">
+            <PrefRow label="Max review units" hint="Soft budget per Bugbot run (not a billing meter).">
               <input
                 className="opa-input"
                 type="number"
@@ -372,16 +397,40 @@ export default function AgentsTab({
             <p className="opa-muted" style={{ fontSize: 12, marginTop: 0 }}>
               Secrets, SAST-lite, and gate checks — separate from Bugbot so scanners always run.
             </p>
-            <PrefRow label="Automated PR Reviews">
+            <PrefRow
+              label="Automated PR Reviews"
+              hint="Run the Security / AppSec gate child on watched PR events."
+              on={!!effective.security_auto_pr_reviews}
+              effectOn="Prepare → security gate runs on each eligible PR job."
+              effectOff="Security child is skipped — only AI/manual paths remain."
+            >
               {boolSelect('security_auto_pr_reviews')}
             </PrefRow>
-            <PrefRow label="Inline Findings" hint="Off by default — posts comments on real PRs">
+            <PrefRow
+              label="Inline Findings"
+              hint="Post line comments on the real GitHub PR (off by default)."
+              on={!!effective.inline_findings}
+              effectOn="Findings appear as review comments at file:line."
+              effectOff="Findings stay in Dashboard + check summary only."
+            >
               {boolSelect('inline_findings')}
             </PrefRow>
-            <PrefRow label="Repository Rules — project">
+            <PrefRow
+              label="Repository Rules — project"
+              hint="Apply project-authored reviewer context / policy rules."
+              on={!!effective.repository_rules}
+              effectOn="Promoted context rules influence routing and severity."
+              effectOff="Only built-in scanners and Bugbot heuristics apply."
+            >
               {boolSelect('repository_rules')}
             </PrefRow>
-            <PrefRow label="Repository Rules — automatic learned" hint="Candidates only; promote to activate">
+            <PrefRow
+              label="Repository Rules — automatic learned"
+              hint="Allow auto-learned candidate rules (still need promote to activate)."
+              on={!!effective.learned_rules}
+              effectOn="Candidates can be suggested from recurring findings."
+              effectOff="No automatic learning — only manually authored rules."
+            >
               {boolSelect('learned_rules')}
             </PrefRow>
           </section>
@@ -391,13 +440,25 @@ export default function AgentsTab({
             <p className="opa-muted" style={{ fontSize: 12, marginTop: 0 }}>
               Deterministic approve / comment from the shared findings ledger — never from model confidence alone.
             </p>
-            <PrefRow label="Automated PR Approval">
+            <PrefRow
+              label="Automated PR Approval"
+              hint="Let the approval child auto-approve when score and policy allow."
+              on={!!effective.auto_approve}
+              effectOn="Eligible PRs complete approval without a human click."
+              effectOff="Approval stays waiting / blocked for an operator."
+            >
               {boolSelect('auto_approve')}
             </PrefRow>
-            <PrefRow label="Reviewer Routing">
+            <PrefRow
+              label="Reviewer Routing"
+              hint="Route to human reviewer groups from linked contexts when policy asks."
+              on={!!effective.reviewer_routing}
+              effectOn="Matching groups are requested on GitHub when needed."
+              effectOff="No automatic human reviewer requests from OPA."
+            >
               {boolSelect('reviewer_routing')}
             </PrefRow>
-            <PrefRow label="Policy-Aware Decisions" hint="Base-ref policy path">
+            <PrefRow label="Policy-Aware Decisions" hint="Path on the base ref for the approval policy document.">
               <input
                 className="opa-input"
                 type="text"
@@ -407,7 +468,7 @@ export default function AgentsTab({
                 onChange={(e) => setField('policy_file_path', e.target.value === '' ? null : e.target.value)}
               />
             </PrefRow>
-            <PrefRow label="Zero Workflow Changes">
+            <PrefRow label="Zero Workflow Changes" hint="Hard guard: never edit .github workflows; keep legacy check names.">
               <Badge title="Enforced: legacy check names, .github/** deny, workflows never requested">
                 Enforced
               </Badge>
@@ -419,19 +480,37 @@ export default function AgentsTab({
             <p className="opa-muted" style={{ fontSize: 12, marginTop: 0 }}>
               Autofix proposals and optional fix branches — gated patch, never trusts the agent working tree.
             </p>
-            <PrefRow label="Cloud enabled" hint="Capability — inherit fails closed">
+            <PrefRow
+              label="Cloud enabled"
+              hint="Capability flag — unset/inherit fails closed (no cloud child)."
+              on={!!effective.cloud_enabled}
+              effectOn="Cloud child may run after Bugbot when autofix mode allows."
+              effectOff="Cloud/autofix actions are disabled for this scope."
+            >
               {boolSelect('cloud_enabled')}
             </PrefRow>
-            <PrefRow label="Autofix Mode">
+            <PrefRow label="Autofix Mode" hint="off = never · suggest = proposal only · branch = open a fix PR.">
               {stringSelect('autofix_mode', AUTOFIX_OPTS)}
             </PrefRow>
-            <PrefRow label="Autofix Severity Threshold">
+            <PrefRow label="Autofix Severity Threshold" hint="Minimum finding severity that may trigger autofix work.">
               {stringSelect('autofix_severity_threshold', SEV_OPTS)}
             </PrefRow>
-            <PrefRow label="Run tests before land" hint="Requires docker sandbox">
+            <PrefRow
+              label="Run tests before land"
+              hint="Execute project tests in the docker sandbox before proposing a land."
+              on={!!effective.cloud_run_tests}
+              effectOn="Autofix waits on sandbox tests — slower, safer."
+              effectOff="Patches proposed without the extra test gate."
+            >
               {boolSelect('cloud_run_tests')}
             </PrefRow>
-            <PrefRow label="Checkup enabled" hint="AI-planned repo tests — capability">
+            <PrefRow
+              label="Checkup enabled"
+              hint="Allow AI-planned repository health tests (separate from PR autofix)."
+              on={!!effective.checkup_enabled}
+              effectOn="Checkup jobs can be scheduled for this scope."
+              effectOff="No checkup planning runs."
+            >
               {boolSelect('checkup_enabled')}
             </PrefRow>
           </section>
