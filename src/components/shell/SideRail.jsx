@@ -59,6 +59,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/live', label: 'Live', icon: FiRadio },
       { to: '/serverless', label: 'Serverless', icon: FiZap },
+      { to: '/collaborate', label: 'Collaborate', icon: FiBookOpen },
       { to: '/system', label: 'System', icon: FiHardDrive },
     ],
   },
