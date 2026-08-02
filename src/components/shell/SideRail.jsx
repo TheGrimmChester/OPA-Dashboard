@@ -4,7 +4,7 @@ import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
   FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiKey, FiGrid, FiTarget,
   FiBell, FiZap, FiColumns, FiFileText, FiBarChart2,
-  FiChevronsLeft, FiChevronsRight,
+  FiChevronsLeft, FiChevronsRight, FiTerminal,
 } from 'react-icons/fi'
 
 export const NAV_GROUPS = [
@@ -14,6 +14,7 @@ export const NAV_GROUPS = [
       { to: '/', label: 'Overview', icon: FiGrid, exact: true },
       { to: '/services', label: 'Services', icon: FiServer },
       { to: '/key-transactions', label: 'Key Transactions', icon: FiTarget },
+      { to: '/commands', label: 'Commands', icon: FiTerminal },
       { to: '/traces', label: 'Traces', icon: FiActivity },
       { to: '/profiling', label: 'Profiling', icon: FiCpu },
       { to: '/errors', label: 'Errors', icon: FiAlertCircle },
