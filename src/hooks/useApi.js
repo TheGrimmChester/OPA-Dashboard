@@ -10,6 +10,14 @@ export function formatApiError(e) {
   if (d && typeof d === 'object') {
     const code = d.error != null ? String(d.error) : ''
     const honesty = d.honesty != null ? String(d.honesty) : ''
+    const service = d.service != null ? String(d.service) : ''
+    // Agent 410 stubs — dashboard nginx must proxy these to Orchestrator / Perf Lab.
+    if (code === 'moved' && (service === 'opa-ai-orchestrator' || /OPA-AI-Orchestrator/i.test(honesty))) {
+      return 'Security runs and SCM are served by OPA-AI-Orchestrator (:8091). This request hit the Agent instead of the Orchestrator proxy.'
+    }
+    if (code === 'moved' && (service === 'opa-perf-lab' || /OPA-Perf-Lab/i.test(honesty))) {
+      return 'Perf Lab APIs are served by OPA-Perf-Lab (:8092). This request hit the Agent instead of the Perf Lab proxy.'
+    }
     if (code === 'moved' && honesty) return honesty
     if (honesty && code) return `${code}: ${honesty}`
     if (honesty) return honesty
