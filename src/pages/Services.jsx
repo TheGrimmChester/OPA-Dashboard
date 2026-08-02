@@ -1,26 +1,34 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiActivity, FiClock, FiAlertTriangle, FiZap, FiServer, FiDatabase, FiCpu } from 'react-icons/fi'
+import { FiActivity, FiClock, FiAlertTriangle, FiZap, FiServer } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
   Panel, KpiTile, DataTable, TimeSeriesChart, InlineBar, HealthDot, LanguageBadge,
 } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtBytes, latencyStatus, errorRateStatus } from '../theme/format'
 
-export default function Overview() {
+/** Service inventory + golden signals (canonical home; formerly also labeled Overview). */
+export default function Services() {
   const navigate = useNavigate()
   // (No /api/stats call here: its result was never read, so it was a wasted
-  // request on every Overview load — the KPIs come from /api/services.)
+  // request on every load — the KPIs come from /api/services.)
   const services = useApi('/api/services')
   const perf = useApi('/api/metrics/performance')
 
   const g = services.data?.global_totals || {}
   const svc = services.data?.services || []
-  const metrics = (perf.data?.metrics || []).map((m) => ({
-    time: (m.time || '').slice(5, 16),
-    throughput: m.throughput, error_rate: m.error_rate,
-    p50: m.p50_duration, p95: m.p95_duration, p99: m.p99_duration,
-  }))
+  const metrics = (perf.data?.metrics || []).map((m) => {
+    const raw = m.time || ''
+    const timeMs = /^\d{4}-\d{2}-\d{2}/.test(raw)
+      ? Date.parse(raw.replace(' ', 'T') + (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? '' : 'Z'))
+      : 0
+    return {
+      time: raw.slice(5, 16),
+      timeMs: Number.isFinite(timeMs) ? timeMs : 0,
+      throughput: m.throughput, error_rate: m.error_rate,
+      p50: m.p50_duration, p95: m.p95_duration, p99: m.p99_duration,
+    }
+  })
 
   const spark = (k) => metrics.map((m) => m[k])
   const firstLast = (k) => { const a = metrics.filter((m) => m[k] != null); return a.length ? [a[0][k], a[a.length - 1][k]] : [null, null] }
@@ -56,7 +64,7 @@ export default function Overview() {
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
-          <h1 className="opa-page-title">Overview</h1>
+          <h1 className="opa-page-title">Service</h1>
           <div className="opa-page-sub">Golden signals across {svc.length} service{svc.length === 1 ? '' : 's'}</div>
         </div>
       </div>
@@ -77,13 +85,13 @@ export default function Overview() {
       {/* Charts */}
       <div className="opa-grid cols-2">
         <Panel title="Throughput & errors" icon={<FiActivity />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart data={metrics} series={[
+          <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'throughput', name: 'Throughput', color: 'var(--accent)', type: 'bar' },
             { key: 'error_rate', name: 'Error %', color: 'var(--error)', type: 'line' },
           ]} valueFmt={(v) => fmtNum(v)} height={230} />
         </Panel>
         <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart data={metrics} series={[
+          <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'p50', name: 'p50', color: 'var(--p50)', type: 'line' },
             { key: 'p95', name: 'p95', color: 'var(--p95)', type: 'line' },
             { key: 'p99', name: 'p99', color: 'var(--p99)', type: 'line' },

@@ -4,6 +4,7 @@ import { FiArrowLeft, FiShuffle, FiDownload, FiRefreshCw, FiGitBranch, FiClock }
 import axios from 'axios'
 import ProfileComparison from '../components/ProfileComparison'
 import CohortCompare from '../components/CohortCompare'
+import CallgraphWindowCompare from '../components/CallgraphWindowCompare'
 import CopyToClipboard from '../components/CopyToClipboard'
 import ShareButton from '../components/ShareButton'
 import { useApi } from '../hooks/useApi'
@@ -52,7 +53,11 @@ export default function CompareTraces() {
   const [error1, setError1] = useState(null)
   const [error2, setError2] = useState(null)
   const [viewMode, setViewMode] = useState(searchParams.get('mode') || 'diff')
-  const [compareMode, setCompareMode] = useState(searchParams.get('cmp') === 'cohort' ? 'cohort' : 'trace')
+  const [compareMode, setCompareMode] = useState(
+    searchParams.get('cmp') === 'cohort' ? 'cohort'
+      : searchParams.get('cmp') === 'callgraph' ? 'callgraph'
+        : 'trace'
+  )
 
   // Recent traces for input suggestions (same endpoint + params as before).
   const recent = useApi('/api/traces', { limit: 20 }, { noRange: true })
@@ -114,6 +119,7 @@ export default function CompareTraces() {
     if (viewMode && viewMode !== 'diff') params.set('mode', viewMode)
     else params.delete('mode')
     if (compareMode === 'cohort') params.set('cmp', 'cohort')
+    else if (compareMode === 'callgraph') params.set('cmp', 'callgraph')
     else params.delete('cmp')
     setSearchParams(params, { replace: true })
   }, [trace1Id, trace2Id, viewMode, compareMode, searchParams, setSearchParams])
@@ -225,7 +231,9 @@ export default function CompareTraces() {
           <div className="opa-page-sub">
             {compareMode === 'cohort'
               ? 'Compare a transaction’s speed across runtimes, versions or services'
-              : 'Side-by-side profile diff between two traces'}
+              : compareMode === 'callgraph'
+                ? 'Population call-graph diff across two halves of the time range'
+                : 'Side-by-side profile diff between two traces'}
           </div>
         </div>
         <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
@@ -233,6 +241,7 @@ export default function CompareTraces() {
             options={[
               { value: 'trace', label: 'By trace' },
               { value: 'cohort', label: 'By cohort' },
+              { value: 'callgraph', label: 'Call graph' },
             ]}
             value={compareMode}
             onChange={setCompareMode}
@@ -244,6 +253,8 @@ export default function CompareTraces() {
 
       {compareMode === 'cohort' ? (
         <CohortCompare />
+      ) : compareMode === 'callgraph' ? (
+        <CallgraphWindowCompare />
       ) : (
       <>
       <div className="opa-grid cols-2">

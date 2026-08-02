@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { useTimeRange } from '../contexts/TimeRangeContext'
 import { useTenant } from '../contexts/TenantContext'
-
-const API = import.meta.env.VITE_API_URL || ''
+import { apiUrl } from '../utils/apiBase'
 
 // Fetch a JSON endpoint, auto-merging the global time range (from/to) and
 // re-fetching when the range, the selected tenant, the manual refresh tick, or
@@ -25,7 +24,7 @@ export function useApi(path, params = {}, opts = {}) {
       // handlers ignore the unknown param, so injecting it globally is safe and
       // keeps short-range charts dense.
       const merged = opts.noRange ? params : { from, to, interval, ...params }
-      const res = await axios.get(`${API}${path}`, { params: merged, signal })
+      const res = await axios.get(apiUrl(path), { params: merged, signal })
       setState({ data: res.data, loading: false, error: null })
     } catch (e) {
       if (axios.isCancel?.(e) || e.name === 'CanceledError') return
@@ -53,7 +52,7 @@ export function usePolling(path, intervalMs, params = {}, opts = {}) {
     let alive = true
     const fetchOnce = async () => {
       try {
-        const res = await axios.get(`${API}${path}`, { params })
+        const res = await axios.get(apiUrl(path), { params })
         if (alive) setState({ data: res.data, loading: false, error: null })
       } catch (e) {
         if (alive) setState((s) => ({ ...s, loading: false, error: e.message }))

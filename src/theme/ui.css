@@ -35,14 +35,14 @@
 .opa-breadcrumb a:hover { color: var(--text-primary); }
 .opa-breadcrumb .crumb-sep { color: var(--text-disabled); flex: 0 0 auto; }
 .opa-breadcrumb .crumb-current { color: var(--text-primary); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.opa-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); flex: 0 0 auto; }
+.opa-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
 
 /* user menu */
 .opa-usermenu { position: relative; }
 .opa-usermenu-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .opa-usermenu-pop { position: absolute; right: 0; top: calc(100% + 6px); min-width: 180px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); padding: var(--sp-2); z-index: 40; }
 .opa-usermenu-head { padding: var(--sp-2) var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border-subtle); margin-bottom: var(--sp-2); }
-.opa-usermenu-item { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 7px var(--sp-2); border: none; background: none; color: var(--text-secondary); font-size: var(--fs-13); cursor: pointer; border-radius: var(--radius-sm); font-family: var(--font-ui); text-align: left; }
+.opa-usermenu-item { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 7px var(--sp-2); border: none; background: none; color: var(--text-secondary); font-size: var(--fs-13); cursor: pointer; border-radius: var(--radius-sm); font-family: var(--font-ui); text-align: left; text-decoration: none; box-sizing: border-box; }
 .opa-usermenu-item:hover { background: var(--surface-3); color: var(--text-primary); }
 .opa-content { padding: var(--sp-5); flex: 1; min-width: 0; max-width: 1600px; width: 100%; }
 .opa-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); margin-bottom: var(--sp-4); flex-wrap: wrap; }
@@ -128,9 +128,30 @@ html.opa-page-fullscreen .opa-content { padding-top: var(--sp-3); }
 
 /* ---------------- Badges / pills / dots ---------------- */
 .opa-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; font-size: var(--fs-11); font-weight: var(--fw-medium); border: 1px solid var(--border-default); color: var(--text-secondary); background: var(--surface-2); white-space: nowrap; }
+
+/* Cross-entity navigation chips — high-value IDs only (not every attribute). */
+.opa-entity-chip-wrap { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.opa-entity-chip-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.opa-entity-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; border-radius: 4px; font-size: var(--fs-11);
+  border: 1px solid var(--border-default); color: var(--accent);
+  background: var(--surface-2); text-decoration: none; white-space: nowrap;
+  max-width: 280px; overflow: hidden; text-overflow: ellipsis;
+}
+.opa-entity-chip:hover { border-color: var(--accent); background: var(--surface-3); }
+.opa-entity-chip.is-plain { color: var(--text-secondary); cursor: default; }
+.opa-entity-chip.is-secondary {
+  padding: 0 6px; font-size: var(--fs-10); color: var(--text-muted);
+  border-style: dashed;
+}
+.opa-entity-chip.is-secondary:hover { color: var(--accent); }
 .opa-pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: var(--fs-11); font-weight: var(--fw-medium); text-transform: capitalize; }
 .opa-pill.ok { color: var(--ok); background: var(--ok-dim); } .opa-pill.warn { color: var(--warn); background: var(--warn-dim); }
 .opa-pill.error { color: var(--error); background: var(--error-dim); } .opa-pill.neutral { color: var(--text-secondary); background: var(--surface-2); }
+.opa-pill.info { color: var(--info); background: var(--info-dim); }
+/* High severity — orange, distinct from critical/blocker red and medium amber */
+.opa-pill.alert { color: var(--tier-redis, #c2540f); background: color-mix(in srgb, var(--tier-redis, #c2540f) 14%, transparent); }
 .opa-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .opa-dot.pulse { box-shadow: 0 0 0 0 currentColor; animation: opa-pulse 1.8s infinite; }
 @keyframes opa-pulse { 0% { box-shadow: 0 0 0 0 rgba(124,108,255,.5); } 70% { box-shadow: 0 0 0 6px rgba(124,108,255,0); } 100% { box-shadow: 0 0 0 0 rgba(124,108,255,0); } }
@@ -153,6 +174,8 @@ html.opa-page-fullscreen .opa-content { padding-top: var(--sp-3); }
 .opa-table tbody tr.clickable { cursor: pointer; }
 .opa-table tbody tr:hover { background: var(--surface-1); }
 .opa-table tbody tr.clickable:hover { background: var(--surface-3); }
+.opa-table tbody tr.selected { background: var(--accent-subtle); }
+.opa-table tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .opa-table td.mono { font-family: var(--font-mono); color: var(--text-primary); }
 .opa-table td .cell-strong { color: var(--text-primary); font-weight: var(--fw-medium); }
 .opa-table-empty { padding: var(--sp-6); text-align: center; color: var(--text-muted); }
@@ -174,6 +197,10 @@ html.opa-page-fullscreen .opa-content { padding-top: var(--sp-3); }
 .opa-btn.primary:hover { background: var(--accent-hover); }
 .opa-btn.ghost { background: none; border-color: transparent; color: var(--text-secondary); }
 .opa-btn.ghost:hover { background: var(--surface-1); color: var(--text-primary); }
+.opa-btn.opa-btn-compact { padding: 2px 8px; font-size: var(--fs-12); }
+.opa-btn:disabled { opacity: .45; cursor: not-allowed; }
+.opa-multiselect-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.opa-multiselect-actions { display: inline-flex; align-items: center; gap: 2px; }
 .opa-input, .opa-select { padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-default); background: var(--bg-sunken); color: var(--text-primary); font-size: var(--fs-13); font-family: var(--font-ui); }
 .opa-input:focus, .opa-select:focus { outline: none; border-color: var(--accent); }
 

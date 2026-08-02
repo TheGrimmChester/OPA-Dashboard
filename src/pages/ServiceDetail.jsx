@@ -1,5 +1,5 @@
 import React from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   FiActivity, FiClock, FiZap, FiAlertTriangle, FiTrendingUp, FiGlobe, FiList,
 } from 'react-icons/fi'
@@ -8,9 +8,11 @@ import {
   Panel, KpiTile, DataTable, TimeSeriesChart, InlineBar, EntityHeader,
   Badge, HealthDot, LanguageBadge,
 } from '../components/ui'
+import RelatedContextRail from '../components/ui/RelatedContextRail'
 import {
   fmtMs, fmtNum, fmtPct, fmtBytes, tierColor, latencyStatus, errorRateStatus,
 } from '../theme/format'
+import { logsHref, tracesHref } from '../utils/entityLinks'
 import './ServiceDetail.css'
 
 export default function ServiceDetail() {
@@ -33,14 +35,21 @@ export default function ServiceDetail() {
   const httpCalls = http.data?.http_calls || []
   const totalCalls = http.data?.total_calls ?? httpCalls.length
 
-  const metrics = (perf.data?.metrics || []).map((m) => ({
-    time: (m.time || '').slice(5, 16),
-    throughput: m.throughput,
-    error_rate: m.error_rate,
-    p50: m.p50_duration,
-    p95: m.p95_duration,
-    p99: m.p99_duration,
-  }))
+  const metrics = (perf.data?.metrics || []).map((m) => {
+    const raw = m.time || ''
+    const timeMs = /^\d{4}-\d{2}-\d{2}/.test(raw)
+      ? Date.parse(raw.replace(' ', 'T') + (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? '' : 'Z'))
+      : 0
+    return {
+      time: raw.slice(5, 16),
+      timeMs: Number.isFinite(timeMs) ? timeMs : 0,
+      throughput: m.throughput,
+      error_rate: m.error_rate,
+      p50: m.p50_duration,
+      p95: m.p95_duration,
+      p99: m.p99_duration,
+    }
+  })
   const spark = (k) => metrics.map((m) => m[k])
   const firstLast = (k) => {
     const a = metrics.filter((m) => m[k] != null)
@@ -129,8 +138,17 @@ export default function ServiceDetail() {
             {fmtNum(s.total_traces || 0)} traces · {fmtNum(s.total_spans || 0)} spans
           </span>
         }
+        actions={(
+          <div className="opa-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <Link className="opa-btn ghost" to={tracesHref({ service: svc })}>Traces</Link>
+            <Link className="opa-btn ghost" to={tracesHref({ service: svc, status: 'error' })}>Errors</Link>
+            <Link className="opa-btn ghost" to={logsHref({ service: svc })}>Logs</Link>
+          </div>
+        )}
       />
 
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div className="opa-stack" style={{ flex: 1, minWidth: 0 }}>
       {/* Golden signals */}
       <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile label="Throughput" icon={<FiActivity size={12} />} value={fmtNum(s.total_traces || 0)} unit="traces" status="neutral"
@@ -148,14 +166,14 @@ export default function ServiceDetail() {
       {/* Charts */}
       <div className="opa-grid cols-2">
         <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart data={metrics} series={[
+          <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'p50', name: 'p50', color: 'var(--p50)', type: 'line' },
             { key: 'p95', name: 'p95', color: 'var(--p95)', type: 'line' },
             { key: 'p99', name: 'p99', color: 'var(--p99)', type: 'line' },
           ]} valueFmt={fmtMs} yFmt={fmtMs} height={230} />
         </Panel>
         <Panel title="Throughput & errors" icon={<FiActivity />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart data={metrics} series={[
+          <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'throughput', name: 'Throughput', color: 'var(--accent)', type: 'bar' },
             { key: 'error_rate', name: 'Error %', color: 'var(--error)', type: 'line' },
           ]} valueFmt={(v) => fmtNum(v)} height={230} />
@@ -169,14 +187,14 @@ export default function ServiceDetail() {
           columns={epColumns} rows={endpoints} rowKey={(r, i) => r.name || i}
           initialSort={{ key: 'count', dir: 'desc' }}
           onRowClick={(r) => {
-            // Outbound endpoint (has a host) -> match by http.url; inbound -> match by
-            // url_path when present, else by span name. Always scoped to this service.
-            const filter = r.url_host
-              ? `http.url:"${r.name}"`
-              : r.url_path
-                ? `url_path:"${r.url_path}"`
-                : `name:"${r.name}"`
-            navigate('/traces?' + new URLSearchParams({ service: svc, filter }).toString())
+            navigate(tracesHref({
+              service: svc,
+              filter: r.url_host
+                ? `http.url:"${r.name}"`
+                : r.url_path
+                  ? `url_path:"${r.url_path}"`
+                  : `name:"${r.name}"`,
+            }))
           }}
         />
       </Panel>
@@ -188,9 +206,14 @@ export default function ServiceDetail() {
         <DataTable
           columns={httpColumns} rows={httpCalls} rowKey={(r, i) => `${r.method || ''}-${r.url || i}`}
           initialSort={{ key: 'call_count', dir: 'desc' }}
-          onRowClick={(r) => navigate('/traces?' + new URLSearchParams({ filter: `http.url:"${r.url}"` }).toString())}
+          onRowClick={(r) => navigate(tracesHref({ filter: `http.url:"${r.url}"` }))}
         />
       </Panel>
+        </div>
+        <div style={{ width: 220, flexShrink: 0 }}>
+          <RelatedContextRail query={svc} title="Related context" />
+        </div>
+      </div>
     </div>
   )
 }
