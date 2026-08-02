@@ -1,5 +1,5 @@
 /**
- * Security page IA: four pillars with legacy tab= deep-link compatibility.
+ * Security page IA: four pillars.
  *
  * Primary: findings | scans | ops | control
  * Findings type=: all | cve | iast | secrets | sast | iac
@@ -16,53 +16,24 @@ export const OPS_MODES = ['watch', 'run', 'contexts', 'jobs', 'webhooks']
 export const CONTROL_SECTIONS = ['agents', 'policies', 'gate', 'inventory']
 
 /** Tabs where `run=` deep-links filter findings / show run detail. */
-export const RUN_CONTEXT_TABS = new Set(['scans', 'findings', 'secrets', 'sast', 'iac'])
-
-const LEGACY_TO_NAV = {
-  vulns: { tab: 'findings', type: 'cve' },
-  vulnerabilities: { tab: 'findings', type: 'cve' },
-  iast: { tab: 'findings', type: 'iast' },
-  secrets: { tab: 'findings', type: 'secrets' },
-  sast: { tab: 'findings', type: 'sast' },
-  iac: { tab: 'findings', type: 'iac' },
-  findings: { tab: 'findings' },
-  scans: { tab: 'scans' },
-  watch: { tab: 'ops', mode: 'watch' },
-  jobs: { tab: 'ops', mode: 'jobs' },
-  webhooks: { tab: 'ops', mode: 'webhooks' },
-  agents: { tab: 'control', section: 'agents' },
-  policies: { tab: 'control', section: 'policies' },
-  pr: { tab: 'control', section: 'gate' },
-  gate: { tab: 'control', section: 'gate' },
-  inventory: { tab: 'control', section: 'inventory' },
-  ops: { tab: 'ops' },
-  control: { tab: 'control' },
-}
+export const RUN_CONTEXT_TABS = new Set(['scans', 'findings'])
 
 export function resolveSecurityNav(params) {
   const raw = String(params.get('tab') || '').toLowerCase()
-  const mapped = LEGACY_TO_NAV[raw]
 
-  let tab = mapped?.tab || (SECURITY_PILLARS.includes(raw) ? raw : '')
+  let tab = SECURITY_PILLARS.includes(raw) ? raw : ''
   if (!tab) {
     // Bare `?run=` opens Scans; never invent a tab that steals Repo Watch.
     tab = params.get('run') ? 'scans' : 'findings'
   }
 
-  let type = String(params.get('type') || mapped?.type || 'all').toLowerCase()
+  let type = String(params.get('type') || 'all').toLowerCase()
   if (!FINDINGS_TYPES.includes(type)) type = 'all'
 
-  let mode = String(params.get('mode') || mapped?.mode || 'watch').toLowerCase()
-  // Legacy watchMode aliases
-  if (mode === 'repos') mode = 'watch'
+  let mode = String(params.get('mode') || 'watch').toLowerCase()
   if (!OPS_MODES.includes(mode)) mode = 'watch'
-  // Legacy tab=jobs without mode
-  if (raw === 'jobs') mode = 'jobs'
-  if (raw === 'webhooks') mode = 'webhooks'
-  if (raw === 'watch') mode = 'watch'
 
-  let section = String(params.get('section') || mapped?.section || 'agents').toLowerCase()
-  if (section === 'pr') section = 'gate'
+  let section = String(params.get('section') || 'agents').toLowerCase()
   if (!CONTROL_SECTIONS.includes(section)) section = 'agents'
 
   return { tab, type, mode, section }
@@ -75,7 +46,7 @@ export function resolveSecurityRunId(params, tab) {
   return runQ
 }
 
-/** Normalize URL after reading legacy deep links. */
+/** Normalize URL to canonical pillar params. */
 export function normalizeSecuritySearchParams(params) {
   const nav = resolveSecurityNav(params)
   const p = new URLSearchParams(params)

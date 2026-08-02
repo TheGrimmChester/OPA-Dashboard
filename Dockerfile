@@ -7,10 +7,6 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-# Opt-in reworked visualizations (charts v2 + trace-tree virtualization).
-# Default false => original UI. Build with --build-arg VITE_VIZ_V2=true to enable.
-ARG VITE_VIZ_V2=false
-ENV VITE_VIZ_V2=$VITE_VIZ_V2
 # Multi-service API bases (empty = same-origin nginx path proxy in smoke).
 ARG VITE_API_URL=
 ARG VITE_ORCHESTRATOR_URL=
@@ -25,6 +21,11 @@ FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# NAS/NFS docker storage can hang forever on the stock nginx entrypoint's
+# `touch /etc/nginx/conf.d/default.conf` (IPv6 listen probe). We already ship a
+# complete default.conf — skip that script so the container reaches nginx.
+RUN rm -f /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
 
 EXPOSE 80
 
