@@ -267,9 +267,9 @@ export default function OPAReviewJob() {
         mono={false}
         subtitle={
           <span className="opa-review-job-crumb">
-            <Link to="/security?tab=jobs">Security</Link>
+            <Link to="/security?tab=ops&mode=jobs">Security</Link>
             <span className="opa-muted"> / </span>
-            <Link to="/security?tab=jobs">PR Jobs</Link>
+            <Link to="/security?tab=ops&mode=jobs">PR Jobs</Link>
             <span className="opa-muted"> / </span>
             <span className="opa-mono">{jobId ? String(jobId).slice(0, 18) : '—'}</span>
           </span>
@@ -307,7 +307,7 @@ export default function OPAReviewJob() {
             <button type="button" className="opa-btn ghost" disabled={loading || busy} onClick={load}>
               <FiRefreshCw size={12} /> Refresh
             </button>
-            <Link to="/security?tab=jobs" className="opa-row" style={{ gap: 4, fontSize: 'var(--fs-12)', color: 'var(--text-secondary)' }}>
+            <Link to="/security?tab=ops&mode=jobs" className="opa-row" style={{ gap: 4, fontSize: 'var(--fs-12)', color: 'var(--text-secondary)' }}>
               <FiChevronLeft size={13} /> Jobs
             </Link>
           </div>

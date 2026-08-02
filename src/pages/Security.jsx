@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  FiShield, FiAlertTriangle, FiEye, FiEyeOff, FiCrosshair, FiKey, FiSliders,
-  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiX, FiGitPullRequest,
+  FiShield, FiAlertTriangle, FiEye, FiCrosshair, FiKey, FiSliders,
+  FiCode, FiCheckCircle, FiPlay, FiRefreshCw, FiX, FiGitPullRequest,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { apiUrl } from '../utils/apiBase'
@@ -19,9 +19,42 @@ import { useTenant } from '../contexts/TenantContext'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { securityRunHref, serviceHref, scmJobHref } from '../utils/entityLinks'
 import { agentKindLabel, groupScmJobsForDisplay } from '../utils/scmRuns'
+import {
+  CONTROL_SECTIONS,
+  FINDINGS_TYPES,
+  OPS_MODES,
+  RUN_CONTEXT_TABS,
+  normalizeSecuritySearchParams,
+  resolveSecurityNav,
+  resolveSecurityRunId,
+} from './securityNav'
 import './Security.css'
 
 const SEV_KEY = 'opa.security.min_severity'
+
+const FINDINGS_TYPE_META = [
+  { id: 'all', label: 'All' },
+  { id: 'cve', label: 'CVE' },
+  { id: 'iast', label: 'IAST' },
+  { id: 'secrets', label: 'Secrets' },
+  { id: 'sast', label: 'SAST' },
+  { id: 'iac', label: 'IaC' },
+]
+
+const OPS_MODE_META = [
+  { id: 'watch', label: 'Watch', hint: 'Repos & per-repo gate' },
+  { id: 'run', label: 'Run', hint: 'OPA Review stack' },
+  { id: 'contexts', label: 'Contexts', hint: 'Briefs & AI key' },
+  { id: 'jobs', label: 'Jobs', hint: 'PR queue & evidence' },
+  { id: 'webhooks', label: 'Webhooks', hint: 'Delivery log' },
+]
+
+const CONTROL_SECTION_META = [
+  { id: 'agents', label: 'Agents', hint: 'Kill switches & prefs' },
+  { id: 'policies', label: 'Policies', hint: 'Severity & ingest' },
+  { id: 'gate', label: 'Gate', hint: 'AppSec PR check' },
+  { id: 'inventory', label: 'Inventory', hint: 'SBOM packages' },
+]
 
 /** Web host for GitHub links (public or enterprise) from connector meta. */
 function githubWebOrigin(connector) {
@@ -173,10 +206,7 @@ const PROFILE_HINTS = {
   full: 'All lite/stub scanners',
 }
 
-/** Tabs where a `run=` deep-link filters findings / shows run detail. */
-const RUN_CONTEXT_TABS = new Set(['scans', 'secrets', 'sast', 'iac'])
-
-/** PR Jobs table URL filters (`?tab=jobs&status=…&severity=…&repo=…&q=…`). */
+/** PR Jobs table URL filters (`?tab=ops&mode=jobs&status=…`). */
 const JOB_FILTER_KEYS = ['status', 'severity', 'repo', 'q']
 const JOB_STATUS_FILTERS = new Set(['running', 'queued', 'waiting', 'completed', 'failed', 'cancelled'])
 const JOB_SEV_FILTERS = new Set(['blocker|critical', 'high', 'medium', 'low', 'none'])
@@ -206,22 +236,6 @@ function jobMatchesStatusFilter(status, filter) {
   return st === filter
 }
 
-function resolveSecurityTab(params) {
-  const tabQ = params.get('tab')
-  if (tabQ) return tabQ
-  // Bare `?run=` links open Scans; never invent a tab that steals Repo Watch.
-  if (params.get('run')) return 'scans'
-  return 'vulns'
-}
-
-function resolveSecurityRunId(params, tab) {
-  const runQ = params.get('run') || ''
-  if (!runQ) return ''
-  // Explicit non-run tabs (e.g. tab=watch&run=…) keep the tab; ignore run context.
-  if (!RUN_CONTEXT_TABS.has(tab)) return ''
-  return runQ
-}
-
 /** Compact Select all / Clear controls for checkbox multi-selects. */
 function MultiSelectActions({ onSelectAll, onClear, disabled = false, selectLabel = 'Select all', clearLabel = 'Clear' }) {
   return (
@@ -236,18 +250,23 @@ function MultiSelectActions({ onSelectAll, onClear, disabled = false, selectLabe
   )
 }
 
-/** Wave 19 + Wave 30 + Wave 33: Vulns / IAST / Secrets / SAST / IaC / Scans / Inventory / Policies / PR-check. */
+/** Security: Findings · Scans · PR Ops · Control (legacy tab= deep-links still resolve). */
 export default function Security() {
   const toast = useToast()
   const { organizationId } = useTenant()
   const orgAll = !organizationId || organizationId === 'all'
   const [searchParams, setSearchParams] = useSearchParams()
-  const [tab, setTab] = useState(() => resolveSecurityTab(searchParams))
+  const initialNav = resolveSecurityNav(searchParams)
+  const [tab, setTab] = useState(() => initialNav.tab)
+  const [findingsType, setFindingsType] = useState(() => initialNav.type)
+  const [opsMode, setOpsMode] = useState(() => initialNav.mode)
+  const [controlSection, setControlSection] = useState(() => initialNav.section)
+  const [selectedFindingKey, setSelectedFindingKey] = useState('')
   const [minSev, setMinSev] = useState(() => localStorage.getItem(SEV_KEY) || 'high')
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
   const [activeRunId, setActiveRunId] = useState(() => (
-    resolveSecurityRunId(searchParams, resolveSecurityTab(searchParams))
+    resolveSecurityRunId(searchParams, initialNav.tab)
   ))
   const [runDetail, setRunDetail] = useState(null)
   const [runFindings, setRunFindings] = useState(null)
@@ -259,36 +278,62 @@ export default function Security() {
     image: '',
   })
 
-  const runFilter = activeRunId && RUN_CONTEXT_TABS.has(tab)
+  const runFilter = activeRunId && (tab === 'scans' || tab === 'findings')
     ? { security_run_id: activeRunId }
     : {}
 
-  const summary = useApi('/api/vulns/summary', { hours: 168 }, { noRange: true })
-  const findings = useApi('/api/vulns/findings', { limit: 100 }, { noRange: true })
-  const inventory = useApi('/api/vulns/inventory', { limit: 100 }, { noRange: true })
-  const iastSum = useApi('/api/iast/summary', { hours: 24 }, { noRange: true })
-  const iast = useApi('/api/iast/findings', { limit: 100 }, { noRange: true })
+  const onOps = tab === 'ops'
+  const onOpsWatch = onOps && (opsMode === 'watch' || opsMode === 'run' || opsMode === 'contexts')
+  const onOpsJobs = onOps && opsMode === 'jobs'
+  const onOpsHooks = onOps && opsMode === 'webhooks'
+  const onControl = tab === 'control'
+  const onFindings = tab === 'findings'
+  const onScans = tab === 'scans'
+
+  const summary = useApi('/api/vulns/summary', { hours: 168 }, { noRange: true, skip: !onFindings })
+  const findings = useApi('/api/vulns/findings', { limit: 100 }, { noRange: true, skip: !onFindings })
+  const inventory = useApi('/api/vulns/inventory', { limit: 100 }, {
+    noRange: true,
+    skip: !(onControl && controlSection === 'inventory'),
+  })
+  const iastSum = useApi('/api/iast/summary', { hours: 24 }, { noRange: true, skip: !onFindings })
+  const iast = useApi('/api/iast/findings', { limit: 100 }, { noRange: true, skip: !onFindings })
   const secrets = useApi('/api/security/secrets', { limit: 100, ...runFilter }, {
     noRange: true,
-    skip: tab !== 'secrets' && tab !== 'policies' && tab !== 'pr' && tab !== 'scans',
+    skip: !(onFindings || onScans || (onControl && (controlSection === 'policies' || controlSection === 'gate'))),
   })
   const sast = useApi('/api/security/sast', { limit: 100, ...runFilter }, {
     noRange: true,
-    skip: tab !== 'sast' && tab !== 'pr' && tab !== 'scans',
+    skip: !(onFindings || onScans || (onControl && controlSection === 'gate')),
   })
   const iac = useApi('/api/security/iac', { limit: 100, ...runFilter }, {
     noRange: true,
-    skip: tab !== 'iac' && tab !== 'pr' && tab !== 'scans',
+    skip: !(onFindings || onScans || (onControl && controlSection === 'gate')),
   })
-  const policies = useApi('/api/security/policies', {}, { noRange: true, skip: tab !== 'policies' })
-  const prCheck = useApi('/api/security/pr-check', {}, { noRange: true, skip: tab !== 'pr' })
-  const runs = useApi('/api/security/runs', { limit: 50 }, { noRange: true, skip: tab !== 'scans' && !activeRunId })
-  const profiles = useApi('/api/security/profiles', {}, { noRange: true, skip: tab !== 'scans' })
-  const services = useApi('/api/services', {}, { noRange: true, skip: tab !== 'scans' })
-  const connectors = useApi('/api/connectors', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'jobs' && tab !== 'agents' })
-  const scmJobs = useApi('/api/scm/jobs', { limit: 200 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
-  const scmWebhooks = useApi('/api/scm/webhooks', { limit: 200 }, { noRange: true, skip: tab !== 'webhooks' })
-  const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' && tab !== 'jobs' && tab !== 'webhooks' && tab !== 'agents' })
+  const policies = useApi('/api/security/policies', {}, {
+    noRange: true,
+    skip: !(onControl && controlSection === 'policies'),
+  })
+  const prCheck = useApi('/api/security/pr-check', {}, {
+    noRange: true,
+    skip: !(onControl && controlSection === 'gate'),
+  })
+  const runs = useApi('/api/security/runs', { limit: 50 }, { noRange: true, skip: !onScans && !activeRunId })
+  const profiles = useApi('/api/security/profiles', {}, { noRange: true, skip: !onScans })
+  const services = useApi('/api/services', {}, { noRange: true, skip: !onScans })
+  const connectors = useApi('/api/connectors', {}, {
+    noRange: true,
+    skip: !(onOps || (onControl && controlSection === 'agents')),
+  })
+  const scmJobs = useApi('/api/scm/jobs', { limit: 200 }, {
+    noRange: true,
+    skip: !(onOpsJobs || onOpsWatch),
+  })
+  const scmWebhooks = useApi('/api/scm/webhooks', { limit: 200 }, { noRange: true, skip: !onOpsHooks })
+  const scmSettings = useApi('/api/scm/settings', {}, {
+    noRange: true,
+    skip: !(onOps || (onControl && (controlSection === 'gate' || controlSection === 'agents'))),
+  })
   const [webhookDetailId, setWebhookDetailId] = useState('')
   const [selectedJobId, setSelectedJobId] = useState('')
   const [selectedJobDetail, setSelectedJobDetail] = useState(null)
@@ -308,7 +353,8 @@ export default function Security() {
   })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
   const [watchRefresh, setWatchRefresh] = useState(0)
-  const [watchMode, setWatchMode] = useState('repos') // repos | run | contexts
+  /** Derived from opsMode: watch → repos list, run → OPA Review, contexts → briefs. */
+  const watchMode = opsMode === 'run' ? 'run' : opsMode === 'contexts' ? 'contexts' : 'repos'
   const [selectedWatchRepo, setSelectedWatchRepo] = useState('')
   const [addReposOpen, setAddReposOpen] = useState(false)
   const [aiReviewForm, setAiReviewForm] = useState({ force: true, ai_only: false, preview_url: '' })
@@ -327,7 +373,7 @@ export default function Security() {
   const [genDraft, setGenDraft] = useState(null)
 
   useEffect(() => {
-    if (!activeConnector || tab !== 'watch') {
+    if (!activeConnector || !onOpsWatch) {
       setWatchedRows([])
       setAvailableRepos([])
       setRepoPick({})
@@ -389,10 +435,10 @@ export default function Security() {
       if (!cancelled) setReposLoading(false)
     })
     return () => { cancelled = true }
-  }, [activeConnector, tab, watchRefresh])
+  }, [activeConnector, onOpsWatch, watchRefresh])
 
   useEffect(() => {
-    if (tab !== 'watch') return undefined
+    if (!onOpsWatch) return undefined
     let cancelled = false
     axios.get(apiUrl('/api/scm/contexts')).then((res) => {
       if (!cancelled) setContexts(res.data?.contexts || [])
@@ -400,7 +446,7 @@ export default function Security() {
       if (!cancelled) setContexts([])
     })
     return () => { cancelled = true }
-  }, [tab, watchRefresh])
+  }, [onOpsWatch, watchRefresh])
 
   const selectedReviewRepos = useMemo(
     () => Object.keys(reviewRepos).filter((r) => reviewRepos[r]),
@@ -408,7 +454,7 @@ export default function Security() {
   )
 
   useEffect(() => {
-    if (tab !== 'watch' || !activeConnector || !selectedReviewRepos.length) {
+    if (!onOpsWatch || !activeConnector || !selectedReviewRepos.length) {
       setPullsByRepo({})
       setAppliedContexts([])
       return undefined
@@ -437,10 +483,10 @@ export default function Security() {
       if (!cancelled) setPullsLoading(false)
     })
     return () => { cancelled = true }
-  }, [tab, activeConnector, selectedReviewRepos.join('|'), watchRefresh])
+  }, [onOpsWatch, activeConnector, selectedReviewRepos.join('|'), watchRefresh])
 
   useEffect(() => {
-    if (!lastStackId || tab !== 'watch') return undefined
+    if (!lastStackId || !onOpsWatch) return undefined
     let cancelled = false
     const tick = () => {
       axios.get(apiUrl(`/api/scm/opa-review/stacks/${encodeURIComponent(lastStackId)}`))
@@ -450,54 +496,51 @@ export default function Security() {
     tick()
     const id = setInterval(tick, 4000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [lastStackId, tab])
+  }, [lastStackId, onOpsWatch])
 
   // Keep PR Jobs fresh while a stack drain is in flight (running/queued/waiting).
   useEffect(() => {
-    if (tab !== 'jobs') return undefined
+    if (!onOpsJobs) return undefined
     const id = setInterval(() => { scmJobs.reload?.() }, 4000)
     return () => clearInterval(id)
-  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onOpsJobs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (tab !== 'webhooks') return undefined
+    if (!onOpsHooks) return undefined
     const id = setInterval(() => { scmWebhooks.reload?.() }, 8000)
     return () => clearInterval(id)
-  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onOpsHooks]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep tab / run / connector in sync with the URL (and strip stale run= on Watch).
+  // Keep pillar / mode / section / run / connector in sync with the URL.
   useEffect(() => {
-    const nextTab = resolveSecurityTab(searchParams)
-    const nextRun = resolveSecurityRunId(searchParams, nextTab)
-    const nextConnector = searchParams.get('connector') || ''
-    if (nextTab !== tab) setTab(nextTab)
+    const { nav, params: normalized } = normalizeSecuritySearchParams(searchParams)
+    const nextRun = resolveSecurityRunId(normalized, nav.tab)
+    const nextConnector = normalized.get('connector') || ''
+
+    if (nav.tab !== tab) setTab(nav.tab)
+    if (nav.type !== findingsType) setFindingsType(nav.type)
+    if (nav.mode !== opsMode) setOpsMode(nav.mode)
+    if (nav.section !== controlSection) setControlSection(nav.section)
     if (nextRun !== activeRunId) setActiveRunId(nextRun)
     if (nextConnector && nextConnector !== activeConnector) setActiveConnector(nextConnector)
 
-    // Mangled deep links like ?run=…&tab=watch&connector=… — honor watch, drop run.
-    if (searchParams.get('tab') === 'watch' && searchParams.get('run')) {
-      const p = new URLSearchParams(searchParams)
-      p.delete('run')
-      setSearchParams(p, { replace: true })
-      return
-    }
-    // Drop PR Jobs filters when another tab is active (keeps shared URL clean).
-    if (nextTab !== 'jobs' && JOB_FILTER_KEYS.some((k) => searchParams.has(k))) {
-      const p = new URLSearchParams(searchParams)
-      for (const k of JOB_FILTER_KEYS) p.delete(k)
-      setSearchParams(p, { replace: true })
+    // Rewrite legacy tab= secrets|jobs|… into canonical pillar URLs once.
+    const cur = searchParams.toString()
+    const next = normalized.toString()
+    if (cur !== next) {
+      setSearchParams(normalized, { replace: true })
     }
   }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-select a live connector when the watch tab opens (skip if URL named one).
+  // Auto-select a live connector when ops watch opens (skip if URL named one).
   useEffect(() => {
-    if (tab !== 'watch' || activeConnector) return
+    if (!onOpsWatch || activeConnector) return
     if (searchParams.get('connector')) return
     const list = connectors.data?.connectors || []
     if (!list.length) return
     const preferred = list.find((x) => x.has_token) || list[0]
     if (preferred?.id) setActiveConnector(preferred.id)
-  }, [tab, activeConnector, connectors.data, searchParams])
+  }, [onOpsWatch, activeConnector, connectors.data, searchParams])
 
   const s = summary.data || {}
   const is = iastSum.data || {}
@@ -520,37 +563,235 @@ export default function Security() {
   }, [services.data])
 
   const sevRank = { critical: 4, high: 3, medium: 2, low: 1 }
-  const filteredSecrets = useMemo(() => {
-    const min = sevRank[minSev] || 3
-    return secretRows.filter((r) => (sevRank[String(r.severity || '').toLowerCase()] || 0) >= min)
-  }, [secretRows, minSev])
+  const parseSummary = (r) => {
+    try {
+      return typeof r?.summary_json === 'string' ? JSON.parse(r.summary_json || '{}') : (r?.summary_json || {})
+    } catch {
+      return {}
+    }
+  }
+
+  /** Unified Findings inbox rows (CVE / IAST / secrets / SAST / IaC). */
+  const unifiedFindings = useMemo(() => {
+    const min = sevRank[minSev] || 1
+    const rows = []
+    for (const r of vulnRows) {
+      rows.push({
+        key: `cve:${r.advisory_id}:${r.package_name}:${r.version}:${r.service}`,
+        type: 'cve',
+        sev: String(r.severity || '').toLowerCase() || 'medium',
+        target: r.service || r.package_name || '—',
+        title: r.advisory_id || 'advisory',
+        where: `${r.package_name || ''}@${r.version || ''}`.replace(/^@$/, '—'),
+        detector: 'reachability',
+        ctx: r.reachability === 'observed' ? 'observed' : 'not observed',
+        snippet: r.summary || '',
+        service: r.service,
+        raw: r,
+      })
+    }
+    for (const r of iastRows) {
+      rows.push({
+        key: `iast:${r.sink}:${r.scraped_at}:${r.service}:${r.route}`,
+        type: 'iast',
+        sev: (r.blocked === 1 || r.blocked === true || r.blocked === '1') ? 'high' : 'medium',
+        target: r.service || '—',
+        title: r.sink || 'sink',
+        where: r.route || '—',
+        detector: r.detector || 'runtime',
+        ctx: (r.blocked === 1 || r.blocked === true || r.blocked === '1') ? 'blocked' : 'open',
+        snippet: String(r.evidence || '').slice(0, 160),
+        service: r.service,
+        raw: r,
+      })
+    }
+    for (const r of secretRows) {
+      rows.push({
+        key: `secret:${r.rule}:${r.file}:${r.line}:${r.security_run_id}`,
+        type: 'secrets',
+        sev: String(r.severity || '').toLowerCase() || 'high',
+        target: r.service || r.file || '—',
+        title: r.rule || 'secret',
+        where: `${r.file || '—'}:${r.line || 0}`,
+        detector: r.detector || '—',
+        ctx: r.security_run_id || '—',
+        snippet: String(r.snippet || '').slice(0, 120),
+        service: r.service,
+        runId: r.security_run_id,
+        raw: r,
+      })
+    }
+    for (const r of sastRows) {
+      rows.push({
+        key: `sast:${r.rule}:${r.file}:${r.line}:${r.security_run_id}`,
+        type: 'sast',
+        sev: String(r.severity || '').toLowerCase() || 'medium',
+        target: r.service || r.file || '—',
+        title: r.rule || 'sast',
+        where: `${r.file || '—'}:${r.line || 0}`,
+        detector: 'sast-lite',
+        ctx: r.security_run_id || '—',
+        snippet: String(r.message || '').slice(0, 120),
+        service: r.service,
+        runId: r.security_run_id,
+        raw: r,
+      })
+    }
+    for (const r of iacRows) {
+      rows.push({
+        key: `iac:${r.kind}:${r.rule}:${r.file}:${r.security_run_id}`,
+        type: 'iac',
+        sev: String(r.severity || '').toLowerCase() || 'medium',
+        target: r.file || '—',
+        title: r.rule || r.kind || 'iac',
+        where: r.file || '—',
+        detector: 'iac-lite',
+        ctx: r.security_run_id || '—',
+        snippet: String(r.message || '').slice(0, 120),
+        service: r.service,
+        runId: r.security_run_id,
+        raw: r,
+      })
+    }
+    const filtered = rows.filter((r) => {
+      if (findingsType !== 'all' && r.type !== findingsType) return false
+      // CVE/IAST: always show (no minSev on those historically for vulns list);
+      // secrets/sast/iac honor dashboard min severity.
+      if (r.type === 'secrets' || r.type === 'sast' || r.type === 'iac') {
+        return (sevRank[r.sev] || 0) >= min
+      }
+      return true
+    })
+    filtered.sort((a, b) => (sevRank[b.sev] || 0) - (sevRank[a.sev] || 0))
+    return filtered
+  }, [vulnRows, iastRows, secretRows, sastRows, iacRows, findingsType, minSev])
+
+  const findingsTypeCounts = useMemo(() => {
+    const c = { all: 0, cve: 0, iast: 0, secrets: 0, sast: 0, iac: 0 }
+    // Count from unfiltered-by-type but sev-filtered for scan types
+    const min = sevRank[minSev] || 1
+    const bump = (type, sev) => {
+      if (type === 'secrets' || type === 'sast' || type === 'iac') {
+        if ((sevRank[sev] || 0) < min) return
+      }
+      c[type] += 1
+      c.all += 1
+    }
+    for (const r of vulnRows) bump('cve', String(r.severity || '').toLowerCase())
+    for (const r of iastRows) bump('iast', 'medium')
+    for (const r of secretRows) bump('secrets', String(r.severity || '').toLowerCase())
+    for (const r of sastRows) bump('sast', String(r.severity || '').toLowerCase())
+    for (const r of iacRows) bump('iac', String(r.severity || '').toLowerCase())
+    return c
+  }, [vulnRows, iastRows, secretRows, sastRows, iacRows, minSev])
+
+  const selectedFinding = useMemo(
+    () => unifiedFindings.find((r) => r.key === selectedFindingKey) || unifiedFindings[0] || null,
+    [unifiedFindings, selectedFindingKey],
+  )
+
+  useEffect(() => {
+    if (selectedFinding && selectedFinding.key !== selectedFindingKey) {
+      setSelectedFindingKey(selectedFinding.key)
+    }
+  }, [selectedFinding, selectedFindingKey])
+
+  const runTimelineSteps = useMemo(() => {
+    const summary = parseSummary(runDetail)
+    const counts = runFindings?.counts || summary?.counts || {}
+    const scanners = Array.isArray(summary?.scanners) ? summary.scanners
+      : (typeof runDetail?.scanners_json === 'string'
+        ? (() => { try { return JSON.parse(runDetail.scanners_json) } catch { return [] } })()
+        : [])
+    const status = String(runDetail?.status || '').toLowerCase()
+    const done = status === 'completed' || status === 'ok'
+    const failed = status.includes('error') || status === 'failed'
+    const ids = scanners.length
+      ? scanners.map((s) => (typeof s === 'string' ? s : s.id || s.name)).filter(Boolean)
+      : Object.keys(counts)
+    if (!ids.length && activeRunId) {
+      return SCANNER_OPTS.map((s) => ({
+        scanner: s.id,
+        status: done ? 'completed' : failed ? 'failed' : 'queued',
+        detail: counts[s.id] != null ? `${counts[s.id]} findings` : (done ? 'done' : '—'),
+      }))
+    }
+    return ids.map((id) => ({
+      scanner: id,
+      status: failed ? 'failed' : done ? 'completed' : (status === 'running' ? 'running' : 'queued'),
+      detail: counts[id] != null ? `${counts[id]} findings` : (summary?.secrets_detector && id === 'secrets' ? summary.secrets_detector : '—'),
+    }))
+  }, [runDetail, runFindings, activeRunId])
 
   const saveSev = (v) => {
     setMinSev(v)
     localStorage.setItem(SEV_KEY, v)
   }
 
-  const selectTab = (next) => {
-    setTab(next)
+  const selectTab = (next, { type, mode, section } = {}) => {
     const p = new URLSearchParams(searchParams)
     p.set('tab', next)
-    if (RUN_CONTEXT_TABS.has(next) && activeRunId) {
-      p.set('run', activeRunId)
-    } else {
+    setTab(next)
+
+    if (next === 'findings') {
+      const nextType = type != null ? (FINDINGS_TYPES.includes(type) ? type : 'all') : findingsType
+      setFindingsType(nextType)
+      if (nextType && nextType !== 'all') p.set('type', nextType)
+      else p.delete('type')
+      p.delete('mode')
+      p.delete('section')
+      if (activeRunId) p.set('run', activeRunId)
+      else p.delete('run')
+    } else if (next === 'ops') {
+      const resolvedMode = mode != null ? (OPS_MODES.includes(mode) ? mode : 'watch') : opsMode
+      setOpsMode(resolvedMode)
+      p.set('mode', resolvedMode)
+      p.delete('type')
+      p.delete('section')
       p.delete('run')
-      if (!RUN_CONTEXT_TABS.has(next)) setActiveRunId('')
-    }
-    if (next !== 'watch') p.delete('connector')
-    else if (activeConnector) p.set('connector', activeConnector)
-    if (next !== 'jobs') {
+      setActiveRunId('')
+      if (activeConnector) p.set('connector', activeConnector)
+      if (resolvedMode !== 'jobs') {
+        for (const k of JOB_FILTER_KEYS) p.delete(k)
+      }
+    } else if (next === 'control') {
+      const resolvedSection = section != null
+        ? (CONTROL_SECTIONS.includes(section) ? section : 'agents')
+        : controlSection
+      setControlSection(resolvedSection)
+      p.set('section', resolvedSection)
+      p.delete('type')
+      p.delete('mode')
+      p.delete('run')
+      p.delete('connector')
+      setActiveRunId('')
+      for (const k of JOB_FILTER_KEYS) p.delete(k)
+    } else {
+      // scans
+      p.delete('type')
+      p.delete('mode')
+      p.delete('section')
+      p.delete('connector')
+      if (activeRunId) p.set('run', activeRunId)
+      else p.delete('run')
       for (const k of JOB_FILTER_KEYS) p.delete(k)
     }
+
     setSearchParams(p, { replace: true })
+  }
+
+  const selectFindingsType = (type) => selectTab('findings', { type })
+  const selectOpsMode = (mode) => selectTab('ops', { mode })
+  const selectControlSection = (section) => selectTab('control', { section })
+  const setWatchMode = (next) => {
+    if (next === 'repos') selectOpsMode('watch')
+    else if (next === 'run' || next === 'contexts') selectOpsMode(next)
   }
 
   const setJobFilter = (key, value) => {
     const p = new URLSearchParams(searchParams)
-    p.set('tab', 'jobs')
+    p.set('tab', 'ops')
+    p.set('mode', 'jobs')
     if (value) p.set(key, value)
     else p.delete(key)
     setSearchParams(p, { replace: true })
@@ -558,7 +799,8 @@ export default function Security() {
 
   const clearJobFilters = () => {
     const p = new URLSearchParams(searchParams)
-    p.set('tab', 'jobs')
+    p.set('tab', 'ops')
+    p.set('mode', 'jobs')
     for (const k of JOB_FILTER_KEYS) p.delete(k)
     setSearchParams(p, { replace: true })
   }
@@ -796,7 +1038,7 @@ export default function Security() {
         profile: form.profile || 'auto',
       })
       flash('ok', 'Simulated SCM job', data.job_id)
-      selectTab('jobs')
+      selectOpsMode('jobs')
       scmJobs.reload?.()
     } catch (e) {
       flash('error', 'Simulate failed', e.response?.data || e.message)
@@ -864,7 +1106,7 @@ export default function Security() {
       setLastAiJobId((data.job_ids || [])[0] || '')
       const note = data.note ? ` · ${data.note}` : ''
       flash('ok', 'OPA Review stack queued', `${data.stack_id || ''} · ${(data.job_ids || []).length} job(s)${note}`)
-      selectTab('jobs')
+      selectOpsMode('jobs')
       scmJobs.reload?.()
     } catch (e) {
       const raw = e.response?.data
@@ -1122,14 +1364,6 @@ export default function Security() {
     }
   }, [activeRunId, tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const parseSummary = (r) => {
-    try {
-      return typeof r?.summary_json === 'string' ? JSON.parse(r.summary_json || '{}') : (r?.summary_json || {})
-    } catch {
-      return {}
-    }
-  }
-
   const scmJobStatusHint = (status) => {
     switch (String(status || '').toLowerCase()) {
       case 'running': return 'Actively processing'
@@ -1168,10 +1402,10 @@ export default function Security() {
     return groupScmJobsForDisplay(raw)
   }, [scmJobs.data])
 
-  const jobStatusFilter = tab === 'jobs' ? resolveJobStatusFilter(searchParams) : ''
-  const jobSeverityFilter = tab === 'jobs' ? resolveJobSeverityFilter(searchParams) : ''
-  const jobRepoFilter = tab === 'jobs' ? String(searchParams.get('repo') || '') : ''
-  const jobQFilter = tab === 'jobs' ? String(searchParams.get('q') || '') : ''
+  const jobStatusFilter = onOpsJobs ? resolveJobStatusFilter(searchParams) : ''
+  const jobSeverityFilter = onOpsJobs ? resolveJobSeverityFilter(searchParams) : ''
+  const jobRepoFilter = onOpsJobs ? String(searchParams.get('repo') || '') : ''
+  const jobQFilter = onOpsJobs ? String(searchParams.get('q') || '') : ''
   const jobFiltersActive = !!(jobStatusFilter || jobSeverityFilter || jobRepoFilter || jobQFilter)
 
   const scmJobRepos = useMemo(() => {
@@ -1206,7 +1440,7 @@ export default function Security() {
   }, [scmJobRows, jobStatusFilter, jobSeverityFilter, jobRepoFilter, jobQFilter])
 
   useEffect(() => {
-    if (tab !== 'jobs') return undefined
+    if (!onOpsJobs) return undefined
     if (!filteredScmJobRows.length) {
       if (selectedJobId) setSelectedJobId('')
       return undefined
@@ -1219,7 +1453,7 @@ export default function Security() {
   }, [tab, filteredScmJobRows, selectedJobId])
 
   useEffect(() => {
-    if (tab !== 'jobs' || !selectedJobId) {
+    if (!onOpsJobs || !selectedJobId) {
       setSelectedJobDetail(null)
       setSelectedJobDetailLoading(false)
       return undefined
@@ -1298,76 +1532,12 @@ export default function Security() {
       : <span className={className} style={style}>{children}</span>
   )
 
-  const vulnCols = [
-    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
-    { key: 'advisory_id', header: 'Advisory', render: (r) => <span className="opa-mono cell-strong">{r.advisory_id}</span> },
-    { key: 'package_name', header: 'Package', render: (r) => <span className="opa-mono">{r.package_name}@{r.version}</span> },
-    { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
-    { key: 'reachability', header: 'Reachability', render: (r) => (
-      r.reachability === 'observed'
-        ? <StatusPill tone="error"><FiEye size={10} /> observed</StatusPill>
-        : <StatusPill tone="neutral"><FiEyeOff size={10} /> not observed</StatusPill>
-    ) },
-    { key: 'path_hits', header: 'Hits', num: true, render: (r) => fmtNum(r.path_hits) },
-    { key: 'summary', header: 'Summary', render: (r) => <span className="opa-muted">{r.summary}</span> },
-  ]
-
   const invCols = [
     { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
     { key: 'ecosystem', header: 'Eco', render: (r) => <Badge>{r.ecosystem || '—'}</Badge> },
     { key: 'package_name', header: 'Package', render: (r) => <span className="opa-mono">{r.package_name}</span> },
     { key: 'version', header: 'Version', render: (r) => <span className="opa-mono">{r.version}</span> },
     { key: 'release', header: 'Release' },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
-  ]
-
-  const iastCols = [
-    { key: 'sink', header: 'Sink', render: (r) => <Badge>{r.sink}</Badge> },
-    { key: 'blocked', header: 'Blocked', render: (r) => (r.blocked === 1 || r.blocked === true || r.blocked === '1'
-      ? <StatusPill tone="error">blocked</StatusPill>
-      : <StatusPill tone="neutral">detect</StatusPill>) },
-    { key: 'detector', header: 'Detector', render: (r) => <Badge>{r.detector || '—'}</Badge> },
-    { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
-    { key: 'route', header: 'Route', render: (r) => <span className="opa-mono">{r.route || '—'}</span> },
-    { key: 'evidence', header: 'Evidence', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.evidence || '').slice(0, 120)}</span> },
-    { key: 'trace_id', header: 'Trace', render: (r) => <span className="opa-mono opa-muted">{r.trace_id ? String(r.trace_id).slice(0, 12) : '—'}</span> },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
-  ]
-
-  const secretCols = [
-    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
-    { key: 'rule', header: 'Rule', render: (r) => <span className="opa-mono cell-strong">{r.rule || '—'}</span> },
-    { key: 'file', header: 'File', render: (r) => <span className="opa-mono">{r.file || '—'}:{r.line || 0}</span> },
-    { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
-    { key: 'detector', header: 'Detector', render: (r) => <Badge>{r.detector || '—'}</Badge> },
-    { key: 'security_run_id', header: 'Run', render: (r) => (r.security_run_id
-      ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
-      : '—') },
-    { key: 'snippet', header: 'Snippet', render: (r) => <span className="opa-mono opa-muted" style={{ fontSize: 11 }}>{String(r.snippet || '').slice(0, 80)}</span> },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
-  ]
-
-  const sastCols = [
-    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
-    { key: 'rule', header: 'Rule', render: (r) => <span className="opa-mono cell-strong">{r.rule || '—'}</span> },
-    { key: 'file', header: 'File', render: (r) => <span className="opa-mono">{r.file || '—'}:{r.line || 0}</span> },
-    { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
-    { key: 'security_run_id', header: 'Run', render: (r) => (r.security_run_id
-      ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
-      : '—') },
-    { key: 'message', header: 'Message', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{String(r.message || '').slice(0, 120)}</span> },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
-  ]
-
-  const iacCols = [
-    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
-    { key: 'kind', header: 'Kind', render: (r) => <Badge>{r.kind || 'iac'}</Badge> },
-    { key: 'rule', header: 'Rule', render: (r) => <span className="opa-mono cell-strong">{r.rule || '—'}</span> },
-    { key: 'file', header: 'File', render: (r) => <span className="opa-mono">{r.file || '—'}</span> },
-    { key: 'security_run_id', header: 'Run', render: (r) => (r.security_run_id
-      ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
-      : '—') },
-    { key: 'message', header: 'Message', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{String(r.message || '').slice(0, 120)}</span> },
     { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
   ]
 
@@ -1444,22 +1614,13 @@ export default function Security() {
       )}
 
       <div className="opa-tabs">
-        <button type="button" className={`opa-tab ${tab === 'vulns' ? 'active' : ''}`} onClick={() => selectTab('vulns')}>Vulnerabilities</button>
-        <button type="button" className={`opa-tab ${tab === 'iast' ? 'active' : ''}`} onClick={() => selectTab('iast')}>IAST</button>
-        <button type="button" className={`opa-tab ${tab === 'secrets' ? 'active' : ''}`} onClick={() => selectTab('secrets')}>Secrets</button>
-        <button type="button" className={`opa-tab ${tab === 'sast' ? 'active' : ''}`} onClick={() => selectTab('sast')}>SAST</button>
-        <button type="button" className={`opa-tab ${tab === 'iac' ? 'active' : ''}`} onClick={() => selectTab('iac')}>IaC</button>
-        <button type="button" className={`opa-tab ${tab === 'scans' ? 'active' : ''}`} onClick={() => selectTab('scans')}>Scans</button>
-        <button type="button" className={`opa-tab ${tab === 'watch' ? 'active' : ''}`} onClick={() => selectTab('watch')}>Repo Watch</button>
-        <button type="button" className={`opa-tab ${tab === 'jobs' ? 'active' : ''}`} onClick={() => selectTab('jobs')}>PR Jobs</button>
-        <button type="button" className={`opa-tab ${tab === 'agents' ? 'active' : ''}`} onClick={() => selectTab('agents')}>Agents</button>
-        <button type="button" className={`opa-tab ${tab === 'webhooks' ? 'active' : ''}`} onClick={() => selectTab('webhooks')}>Webhooks</button>
-        <button type="button" className={`opa-tab ${tab === 'inventory' ? 'active' : ''}`} onClick={() => selectTab('inventory')}>Inventory</button>
-        <button type="button" className={`opa-tab ${tab === 'policies' ? 'active' : ''}`} onClick={() => selectTab('policies')}>Policies</button>
-        <button type="button" className={`opa-tab ${tab === 'pr' ? 'active' : ''}`} onClick={() => selectTab('pr')}>Gate</button>
+        <button type="button" className={`opa-tab ${onFindings ? 'active' : ''}`} onClick={() => selectTab('findings')}>Findings</button>
+        <button type="button" className={`opa-tab ${onScans ? 'active' : ''}`} onClick={() => selectTab('scans')}>Scans</button>
+        <button type="button" className={`opa-tab ${onOps ? 'active' : ''}`} onClick={() => selectOpsMode(opsMode || 'watch')}>PR Ops</button>
+        <button type="button" className={`opa-tab ${onControl ? 'active' : ''}`} onClick={() => selectControlSection(controlSection || 'agents')}>Control</button>
       </div>
 
-      {activeRunId && tab !== 'scans' && (tab === 'secrets' || tab === 'sast' || tab === 'iac') && (
+      {activeRunId && onFindings && (
         <div className="opa-muted" style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
           Filtering by run <code className="opa-mono">{activeRunId}</code>
           <button type="button" className="opa-btn ghost" onClick={() => selectRun('')}>Clear</button>
@@ -1467,45 +1628,23 @@ export default function Security() {
         </div>
       )}
 
-      {tab === 'vulns' && (
+      {onFindings && (
         <>
-          <div className="opa-grid cols-4">
-            <KpiTile label="Findings" icon={<FiShield size={12} />} value={fmtNum(s.findings || 0)} status="neutral" />
-            <KpiTile label="Critical / High" icon={<FiAlertTriangle size={12} />} value={fmtNum((Number(s.critical) || 0) + (Number(s.high) || 0))}
-              status={Number(s.critical) || Number(s.high) ? 'error' : 'neutral'} />
-            <KpiTile label="Observed in prod" icon={<FiEye size={12} />} value={fmtNum(s.observed || 0)}
-              status={Number(s.observed) ? 'warn' : 'neutral'}
-              footer={<span className="opa-muted" style={{ fontSize: 11 }}>not observed ≠ safe</span>} />
-            <KpiTile label="Not observed" icon={<FiEyeOff size={12} />} value={fmtNum(s.not_observed || 0)} status="neutral" />
-          </div>
-          <Panel title="Findings (reachability-ranked)" icon={<FiShield />} flush loading={findings.loading} error={findings.error}
-            empty={!findings.loading && vulnRows.length === 0} emptyText="POST a SBOM to /v1/sbom to seed inventory + match advisories">
-            <DataTable columns={vulnCols} rows={vulnRows} rowKey={(r, i) => `${r.advisory_id}:${r.package_name}:${i}`} maxHeight={480} />
-          </Panel>
-        </>
-      )}
-
-      {tab === 'iast' && (
-        <>
-          <div className="opa-grid cols-4">
-            <KpiTile label="Findings (24h)" icon={<FiCrosshair size={12} />} value={fmtNum(is.findings || 0)} status="neutral" />
-            <KpiTile label="SQL" value={fmtNum(is.sql_sinks || 0)} status="neutral" />
-            <KpiTile label="Command" value={fmtNum(is.command_sinks || 0)} status="neutral" />
-            <KpiTile label="File / Deserialize" value={fmtNum((Number(is.file_sinks) || 0) + (Number(is.deserialize_sinks) || 0))} status="neutral" />
-          </div>
-          <Panel title="Runtime sink detections" icon={<FiCrosshair />} flush loading={iast.loading} error={iast.error}
-            empty={!iast.loading && iastRows.length === 0} emptyText="No IAST findings — enable OPA_IAST=1 / opa.iast on PHP (block is opt-in via opa.iast_block). IAST is runtime-only and cannot be started from Scans.">
-            <DataTable columns={iastCols} rows={iastRows} rowKey={(r, i) => `${r.sink}:${r.scraped_at}:${i}`} maxHeight={480} />
-          </Panel>
-        </>
-      )}
-
-      {tab === 'secrets' && (
-        <Panel title="Secret findings" icon={<FiKey />} flush loading={secrets.loading} error={secrets.error}
-          empty={!secrets.loading && filteredSecrets.length === 0}
-          emptyText="Start a scan from the Scans tab, or POST to /v1/security/secrets"
-          actions={
-            <label className="opa-muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="opa-findings-types" role="tablist" aria-label="Finding type">
+            {FINDINGS_TYPE_META.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={findingsType === t.id}
+                className={`opa-findings-type${findingsType === t.id ? ' active' : ''}`}
+                onClick={() => selectFindingsType(t.id)}
+              >
+                {t.label}{' '}
+                <strong className="opa-mono">{fmtNum(findingsTypeCounts[t.id] || 0)}</strong>
+              </button>
+            ))}
+            <label className="opa-findings-sev opa-muted">
               Min sev
               <select value={minSev} onChange={(e) => saveSev(e.target.value)}>
                 <option value="critical">critical</option>
@@ -1514,31 +1653,142 @@ export default function Security() {
                 <option value="low">low</option>
               </select>
             </label>
-          }>
-          <div className="opa-muted" style={{ fontSize: 11, padding: '8px 12px 0' }}>
-            Detector chip shows <Badge>gitleaks</Badge> when the Agent image has the CLI, otherwise <Badge>embedded-secret-scan</Badge> (lite regex).
           </div>
-          <DataTable columns={secretCols} rows={filteredSecrets} rowKey={(r, i) => `${r.rule}:${r.file}:${i}`} maxHeight={480} />
-        </Panel>
+
+          <div className="opa-grid cols-4">
+            <KpiTile label="Open" icon={<FiShield size={12} />} value={fmtNum(unifiedFindings.length)} status="neutral" />
+            <KpiTile
+              label="Critical / High"
+              icon={<FiAlertTriangle size={12} />}
+              value={fmtNum(unifiedFindings.filter((f) => f.sev === 'critical' || f.sev === 'high').length)}
+              status={unifiedFindings.some((f) => f.sev === 'critical' || f.sev === 'high') ? 'error' : 'neutral'}
+            />
+            <KpiTile
+              label="Observed (CVE)"
+              icon={<FiEye size={12} />}
+              value={fmtNum(s.observed || 0)}
+              status={Number(s.observed) ? 'warn' : 'neutral'}
+              footer={<span className="opa-muted" style={{ fontSize: 11 }}>not observed ≠ safe</span>}
+            />
+            <KpiTile
+              label="IAST (24h)"
+              icon={<FiCrosshair size={12} />}
+              value={fmtNum(is.findings || 0)}
+              status="neutral"
+            />
+          </div>
+
+          <div className="opa-findings-split">
+            <Panel
+              title="Findings inbox"
+              icon={<FiShield />}
+              flush
+              loading={findings.loading || iast.loading || secrets.loading || sast.loading || iac.loading}
+              error={findings.error || iast.error || secrets.error || sast.error || iac.error}
+              empty={!findings.loading && !iast.loading && !secrets.loading && !sast.loading && !iac.loading && unifiedFindings.length === 0}
+              emptyText="No findings at this severity — start a scan or lower the filter"
+            >
+              <div className="opa-muted" style={{ fontSize: 11, padding: '8px 12px 0' }}>
+                Detector chips stay honest: gitleaks vs lite, sast-lite, iac stub. CVE uses reachability ranking.
+              </div>
+              <div className="opa-findings-table-wrap">
+                <table className="opa-findings-table">
+                  <thead>
+                    <tr>
+                      <th>Sev</th>
+                      <th>Type</th>
+                      <th>Target</th>
+                      <th>Finding</th>
+                      <th>Detector</th>
+                      <th>Ctx</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unifiedFindings.map((f) => (
+                      <tr
+                        key={f.key}
+                        className={selectedFinding?.key === f.key ? 'selected' : ''}
+                        onClick={() => setSelectedFindingKey(f.key)}
+                      >
+                        <td><StatusPill tone={sevTone(f.sev)}>{f.sev}</StatusPill></td>
+                        <td><Badge>{f.type}</Badge></td>
+                        <td className="opa-mono" style={{ fontSize: 11 }}>{f.target}</td>
+                        <td>
+                          <div className="cell-strong">{f.title}</div>
+                          <div className="opa-muted opa-mono" style={{ fontSize: 11 }}>{f.where}</div>
+                        </td>
+                        <td><Badge>{f.detector}</Badge></td>
+                        <td className="opa-mono" style={{ fontSize: 11 }}>{f.ctx}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+
+            <Panel
+              title="Detail"
+              icon={<FiEye />}
+              actions={selectedFinding?.runId ? (
+                <Link to={securityRunHref(selectedFinding.runId)} className="opa-btn ghost" style={{ textDecoration: 'none' }}>
+                  Open run
+                </Link>
+              ) : null}
+            >
+              {!selectedFinding ? (
+                <div className="opa-muted">Select a finding.</div>
+              ) : (
+                <div className="opa-findings-detail">
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                    <StatusPill tone={sevTone(selectedFinding.sev)}>{selectedFinding.sev}</StatusPill>
+                    <Badge>{selectedFinding.type}</Badge>
+                    <span className="opa-muted" style={{ fontSize: 12 }}>{selectedFinding.detector}</span>
+                  </div>
+                  <div className="cell-strong" style={{ fontSize: 14 }}>{selectedFinding.title}</div>
+                  <div className="opa-muted opa-mono" style={{ fontSize: 12, marginTop: 4 }}>{selectedFinding.where}</div>
+                  <div className="opa-findings-meta">
+                    <div>
+                      <span className="opa-muted">Service</span>
+                      <div className="opa-mono" style={{ fontSize: 12 }}>
+                        {selectedFinding.service
+                          ? <Link to={serviceHref(selectedFinding.service)}>{selectedFinding.service}</Link>
+                          : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="opa-muted">Context</span>
+                      <div className="opa-mono" style={{ fontSize: 12 }}>{selectedFinding.ctx}</div>
+                    </div>
+                  </div>
+                  {selectedFinding.snippet ? (
+                    <div className="opa-findings-snippet">
+                      <strong>Snippet</strong>
+                      <div className="opa-mono" style={{ fontSize: 11 }}>{selectedFinding.snippet}</div>
+                    </div>
+                  ) : null}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="opa-btn ghost"
+                      onClick={() => {
+                        const text = selectedFinding.where || selectedFinding.title || ''
+                        if (text && navigator.clipboard?.writeText) {
+                          navigator.clipboard.writeText(text).then(() => flash('ok', 'Copied path')).catch(() => {})
+                        }
+                      }}
+                    >
+                      Copy path
+                    </button>
+                    <button type="button" className="opa-btn ghost" onClick={() => selectTab('scans')}>Scans</button>
+                  </div>
+                </div>
+              )}
+            </Panel>
+          </div>
+        </>
       )}
 
-      {tab === 'sast' && (
-        <Panel title="SAST-lite findings" icon={<FiCode />} flush loading={sast.loading} error={sast.error}
-          empty={!sast.loading && sastRows.length === 0}
-          emptyText="Start a lite SAST scan from Scans, or POST to /v1/security/sast — pattern scan, not a full SAST engine">
-          <DataTable columns={sastCols} rows={sastRows} rowKey={(r, i) => `${r.rule}:${r.file}:${i}`} maxHeight={480} />
-        </Panel>
-      )}
-
-      {tab === 'iac' && (
-        <Panel title="IaC / container findings" icon={<FiServer />} flush loading={iac.loading} error={iac.error}
-          empty={!iac.loading && iacRows.length === 0}
-          emptyText="Start an IaC/container lite scan from Scans, or POST /v1/security/iac — stub heuristics">
-          <DataTable columns={iacCols} rows={iacRows} rowKey={(r, i) => `${r.kind}:${r.rule}:${r.file}:${i}`} maxHeight={480} />
-        </Panel>
-      )}
-
-      {tab === 'scans' && (
+      {onScans && (
         <>
           <Panel title="Start security scan" icon={<FiPlay />}
             actions={
@@ -1617,24 +1867,50 @@ export default function Security() {
           {activeRunId && (
             <Panel title="Active run" icon={<FiShield />}
               actions={<button type="button" className="opa-btn ghost" onClick={() => selectRun('')}>Clear</button>}>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
                 <span className="opa-mono" style={{ fontSize: 12 }}>{activeRunId}</span>
-                <StatusPill tone="neutral">{runDetail?.status || '—'}</StatusPill>
+                <StatusPill tone={
+                  String(runDetail?.status || '').includes('error') || runDetail?.status === 'failed' ? 'error'
+                    : runDetail?.status === 'completed' ? 'ok'
+                      : runDetail?.status === 'running' ? 'warn'
+                        : 'neutral'
+                }>
+                  {runDetail?.status || '—'}
+                </StatusPill>
                 {runDetail?.service && <Link to={serviceHref(runDetail.service)}>{runDetail.service}</Link>}
-                <button type="button" className="opa-btn ghost" onClick={() => { selectTab('secrets'); }}>View secrets</button>
-                <button type="button" className="opa-btn ghost" onClick={() => { selectTab('sast'); }}>View SAST</button>
-                <button type="button" className="opa-btn ghost" onClick={() => { selectTab('iac'); }}>View IaC</button>
+                <button type="button" className="opa-btn ghost" onClick={() => selectFindingsType('secrets')}>View secrets</button>
+                <button type="button" className="opa-btn ghost" onClick={() => selectFindingsType('sast')}>View SAST</button>
+                <button type="button" className="opa-btn ghost" onClick={() => selectFindingsType('iac')}>View IaC</button>
+                <button type="button" className="opa-btn ghost" onClick={() => selectFindingsType('all')}>All findings</button>
               </div>
-              <pre className="opa-mono" style={{ fontSize: 11, background: 'var(--surface-2)', padding: 12, overflow: 'auto' }}>
-                {JSON.stringify({
-                  status: runDetail?.status,
-                  summary: parseSummary(runDetail),
-                  findings: runFindings?.counts,
-                  error: runDetail?.error,
-                  honesty: parseSummary(runDetail)?.honesty || 'gitleaks|lite secrets; other scanners lite/stub',
-                  secrets_detector: parseSummary(runDetail)?.secrets_detector,
-                }, null, 2)}
-              </pre>
+              <div className="opa-scan-timeline" aria-label="Scanner timeline">
+                {runTimelineSteps.map((st) => (
+                  <div key={st.scanner} className="opa-scan-step">
+                    <StatusPill tone={
+                      st.status === 'completed' ? 'ok'
+                        : st.status === 'failed' ? 'error'
+                          : st.status === 'running' ? 'warn'
+                            : 'neutral'
+                    }>
+                      {st.status}
+                    </StatusPill>
+                    <span className="cell-strong">{st.scanner}</span>
+                    <span className="opa-muted" style={{ fontSize: 12 }}>{st.detail}</span>
+                  </div>
+                ))}
+                {!runTimelineSteps.length && (
+                  <div className="opa-muted" style={{ fontSize: 12 }}>Waiting for scanner progress…</div>
+                )}
+              </div>
+              {(parseSummary(runDetail)?.honesty || runDetail?.error) && (
+                <div className="opa-findings-snippet" style={{ marginTop: 12 }}>
+                  <strong>Honesty</strong>
+                  <div style={{ fontSize: 12 }}>
+                    {parseSummary(runDetail)?.honesty || 'gitleaks|lite secrets; other scanners lite/stub'}
+                    {runDetail?.error ? ` · ${runDetail.error}` : ''}
+                  </div>
+                </div>
+              )}
             </Panel>
           )}
 
@@ -1645,14 +1921,41 @@ export default function Security() {
         </>
       )}
 
-      {tab === 'inventory' && (
+      {onControl && (
+        <div className="opa-watch-modes opa-control-modes" role="tablist" aria-label="Control sections">
+          {CONTROL_SECTION_META.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={controlSection === m.id}
+              className={`opa-watch-mode${controlSection === m.id ? ' active' : ''}`}
+              onClick={() => selectControlSection(m.id)}
+            >
+              <strong>{m.label}</strong>
+              <span>{m.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(onControl && controlSection === 'agents') && (
+        <AgentsTab
+          connectors={connectorList}
+          toast={toast}
+          activeConnector={activeConnector}
+          onConnectorChange={setActiveConnector}
+        />
+      )}
+
+      {(onControl && controlSection === 'inventory') && (
         <Panel title="Service dependencies" icon={<FiShield />} flush loading={inventory.loading} error={inventory.error}
           empty={!inventory.loading && pkgRows.length === 0} emptyText="No inventory yet — run an SBOM scan or POST /v1/sbom">
           <DataTable columns={invCols} rows={pkgRows} rowKey={(r, i) => `${r.service}:${r.package_name}:${r.version}:${i}`} maxHeight={520} />
         </Panel>
       )}
 
-      {tab === 'policies' && (
+      {(onControl && controlSection === 'policies') && (
         <Panel title="Policies" icon={<FiSliders />} loading={policies.loading}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
             Local severity threshold is stored in <code>localStorage</code> (<code>{SEV_KEY}</code>).
@@ -1676,7 +1979,7 @@ export default function Security() {
         </Panel>
       )}
 
-      {tab === 'pr' && (
+      {(onControl && controlSection === 'gate') && (
         <Panel title="AppSec Gate" icon={<FiCheckCircle />} loading={prCheck.loading} error={prCheck.error}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
             <strong>Tenant gate</strong> aggregates all findings (legacy CI). Prefer <strong>scoped</strong> checks with
@@ -1695,7 +1998,25 @@ export default function Security() {
         </Panel>
       )}
 
-      {tab === 'watch' && (
+      {onOps && (
+        <div className="opa-watch-modes opa-ops-modes" role="tablist" aria-label="PR Ops modes">
+          {OPS_MODE_META.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={opsMode === m.id}
+              className={`opa-watch-mode${opsMode === m.id ? ' active' : ''}`}
+              onClick={() => selectOpsMode(m.id)}
+            >
+              <strong>{m.label}</strong>
+              <span>{m.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {onOpsWatch && (
         <>
           <div className="opa-watch-conn">
             <ConnectorPicker
@@ -1742,26 +2063,6 @@ export default function Security() {
               <span className="opa-watch-kpi-label">AI blocking on</span>
               <span className="opa-watch-kpi-val">{watchedRows.filter((r) => r.enabled && r.ai_blocking).length}</span>
             </div>
-          </div>
-
-          <div className="opa-watch-modes" role="tablist" aria-label="Repo Watch modes">
-            {[
-              { id: 'repos', label: 'Watch', hint: 'Repos & per-repo gate' },
-              { id: 'run', label: 'Run', hint: 'OPA Review stack' },
-              { id: 'contexts', label: 'Contexts', hint: 'Briefs & AI key' },
-            ].map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                role="tab"
-                aria-selected={watchMode === m.id}
-                className={`opa-watch-mode${watchMode === m.id ? ' active' : ''}`}
-                onClick={() => setWatchMode(m.id)}
-              >
-                <strong>{m.label}</strong>
-                <span>{m.hint}</span>
-              </button>
-            ))}
           </div>
 
           {watchMode === 'repos' && (
@@ -2174,7 +2475,7 @@ export default function Security() {
                   </button>
                 )}
                 {lastStackId && (
-                  <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>
+                  <button type="button" className="opa-btn ghost" onClick={() => selectOpsMode('jobs')}>
                     Stack {String(lastStackId).slice(0, 16)}…
                   </button>
                 )}
@@ -2347,7 +2648,7 @@ export default function Security() {
         </>
       )}
 
-      {tab === 'jobs' && (
+      {onOpsJobs && (
         <Panel title="PR Jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading && !scmJobRows.length} error={scmJobs.error}
           empty={!scmJobs.loading && !scmJobRows.length}
           emptyText={
@@ -2625,16 +2926,7 @@ export default function Security() {
         </Panel>
       )}
 
-      {tab === 'agents' && (
-        <AgentsTab
-          connectors={connectorList}
-          toast={toast}
-          activeConnector={activeConnector}
-          onConnectorChange={setActiveConnector}
-        />
-      )}
-
-      {tab === 'webhooks' && (
+      {onOpsHooks && (
         <Panel
           title="GitHub webhooks"
           icon={<FiGitPullRequest />}
@@ -2762,7 +3054,7 @@ export default function Security() {
               {webhookDetail.job_id ? (
                 <div>
                   <Link to={scmJobHref(webhookDetail.job_id)} className="opa-btn ghost">Open related job</Link>
-                  <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>PR Jobs</button>
+                  <button type="button" className="opa-btn ghost" onClick={() => selectOpsMode('jobs')}>PR Jobs</button>
                 </div>
               ) : null}
             </div>

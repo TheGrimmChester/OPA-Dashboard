@@ -178,7 +178,7 @@ export default function ConnectorsManager({
         GitHub App is production (webhooks + Check Runs). PAT bootstrap is for local/dev.
         App configured: {githubAppConfigured ? 'yes' : 'no'}.
         {' '}Used by{' '}
-        <Link to="/security?tab=watch">Security · Repo Watch</Link>
+        <Link to="/security?tab=ops&mode=watch">Security · Repo Watch</Link>
         {' '}and{' '}
         <Link to="/settings/account">Account</Link>.
       </p>

@@ -100,7 +100,7 @@ export function scmJobHref(jobId) {
 }
 
 export function securityJobsHref({ status, severity, repo, q } = {}) {
-  return withParams('/security', { tab: 'jobs', status, severity, repo, q })
+  return withParams('/security', { tab: 'ops', mode: 'jobs', status, severity, repo, q })
 }
 
 /** SCM connectors settings (GitHub App / PAT). */
