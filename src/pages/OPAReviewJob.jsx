@@ -192,8 +192,17 @@ export default function OPAReviewJob() {
     if (!jobId || busy) return
     setBusy(true)
     try {
-      const body = { create_pr: !!createPr }
-      if (Array.isArray(findingKeys) && findingKeys.length) body.finding_keys = findingKeys
+      const keys = Array.isArray(findingKeys) && findingKeys.length
+        ? findingKeys
+        : findings
+          .map((f) => f?.finding_key || f?.key || '')
+          .map((k) => String(k || '').trim())
+          .filter(Boolean)
+      if (!keys.length) {
+        toast.push('Auto-fix needs finding keys on this job', { tone: 'error' })
+        return
+      }
+      const body = { create_pr: !!createPr, finding_keys: keys }
       const { data } = await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(jobId)}/auto-fix`), body)
       const detail = data?.auto_fix_id || data?.honesty || ''
       toast.push(
