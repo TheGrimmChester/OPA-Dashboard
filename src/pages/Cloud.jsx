@@ -29,7 +29,7 @@ function Tabs({ tabs = [], value, onChange, t }) {
   )
 }
 
-/** Cloud coverage: Cloud coverage — inventory, cost, tag governance. */
+/** Cloud coverage — inventory, cost, tag governance. */
 export default function Cloud() {
   const { t } = useI18n()
   const [tab, setTab] = useState('resources')
