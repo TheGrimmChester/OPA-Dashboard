@@ -65,6 +65,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/users', label: 'Users & Roles', icon: FiUsers },
       { to: '/api-keys', label: 'API Keys', icon: FiKey },
+      { to: '/automation', label: 'Automation', icon: FiCpu },
     ],
   },
 ]
