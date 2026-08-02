@@ -6,7 +6,7 @@
   <title>OPA · Security views redesign preview</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg-base: #0B0E14;
@@ -28,8 +28,8 @@
       --warn: #F5C451; --warn-dim: rgba(245, 196, 81, 0.14);
       --error: #FF5C6C;
       --info: #4CA9FF; --info-dim: rgba(76, 169, 255, 0.14);
-      --font-ui: "Inter", system-ui, -apple-system, sans-serif;
-      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+      --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
       --radius: 8px;
       --radius-sm: 5px;
       --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -1079,6 +1079,152 @@
 
     .opa-tabs.sv-subtabs { margin-top: -8px; margin-bottom: 12px; }
     .opa-tabs.sv-subtabs .opa-tab { font-size: 12px; padding: 6px 10px; }
+
+    /* —— Agents Control redesign —— */
+    .ag-workbench {
+      flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+    }
+    .ag-variant-bar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 0 0 auto;
+    }
+    .ag-variant-label {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--text-muted); margin-right: 4px;
+    }
+    .ag-variant-bar > button {
+      border: 1px solid var(--border-subtle); background: var(--surface-1);
+      color: var(--text-secondary); border-radius: var(--radius-sm);
+      padding: 5px 10px; font-size: 12px; font-weight: 500;
+    }
+    .ag-variant-bar > button:hover { color: var(--text-primary); background: var(--surface-2); }
+    .ag-variant-bar > button.active {
+      background: var(--accent-subtle); border-color: rgba(124,108,255,0.45); color: var(--text-primary);
+    }
+    .ag-draft-note { font-size: 11px; margin-left: auto; max-width: 360px; line-height: 1.35; }
+
+    .ag-killstrip {
+      display: flex; gap: 10px; align-items: flex-start; flex: 0 0 auto;
+      padding: 9px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle); background: var(--bg-sunken);
+      font-size: 12px; line-height: 1.4; color: var(--text-secondary);
+    }
+    .ag-killstrip.hot {
+      background: var(--warn-dim); border-color: transparent; color: var(--text-primary);
+    }
+    .ag-killstrip strong { flex: 0 0 auto; color: var(--text-primary); }
+
+    .ag-scope {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; flex: 0 0 auto;
+      padding: 10px 12px; border-radius: var(--radius);
+      border: 1px solid var(--border-subtle); background: var(--surface-1);
+    }
+    .ag-scope-field {
+      display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-muted); min-width: 140px;
+    }
+    .ag-scope-field.grow { flex: 1 1 200px; min-width: 180px; }
+    .ag-scope-field select {
+      background: var(--surface-2); border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm); padding: 6px 9px; color: var(--text-primary); font-size: 12px;
+    }
+    .ag-scope-actions { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+
+    .ag-select, .ag-input {
+      width: 100%; min-width: 140px; max-width: 200px;
+      background: var(--surface-2); border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm); padding: 6px 8px; font-size: 12px; color: var(--text-primary);
+    }
+    .ag-input { max-width: 200px; }
+    .ag-row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+
+    .ag-layout { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+
+    /* A — cards */
+    .ag-cap-strip {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: 0 0 auto;
+    }
+    .ag-cap-chip {
+      display: flex; gap: 8px; align-items: center;
+      padding: 8px 10px; border-radius: var(--radius);
+      border: 1px solid var(--border-subtle); background: var(--surface-1);
+    }
+    .ag-cap-chip.on { border-color: rgba(124,108,255,0.35); background: var(--accent-subtle); }
+    .ag-cap-chip strong { display: block; font-size: 12px; }
+    .ag-cap-chip .mono { color: var(--text-muted); }
+    .ag-card-grid {
+      flex: 1; min-height: 0; overflow: auto;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start;
+      padding-right: 2px;
+    }
+    .ag-card {
+      border: 1px solid var(--border-subtle); border-radius: var(--radius);
+      background: var(--surface-1); padding: 0; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .ag-card header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border-subtle);
+    }
+    .ag-card header h3 { margin: 0; font-size: 13px; font-weight: 600; }
+    .ag-card-blurb {
+      margin: 0; padding: 8px 12px 0; font-size: 11px; line-height: 1.4; color: var(--text-muted);
+    }
+    .ag-card-body { padding: 4px 12px 10px; }
+    .ag-card .rw-pref { border-bottom-color: var(--border-subtle); }
+    .ag-card .rw-pref:last-child { border-bottom: 0; }
+
+    /* B — jump stack */
+    .ag-b { gap: 8px; }
+    .ag-jump {
+      display: flex; gap: 4px; flex-wrap: wrap; flex: 0 0 auto;
+      padding: 4px; background: var(--surface-1); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+    }
+    .ag-jump button {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 0; background: transparent; color: var(--text-secondary);
+      padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500;
+    }
+    .ag-jump button:hover { background: var(--surface-2); color: var(--text-primary); }
+    .ag-jump button.active { background: var(--accent-subtle); color: var(--text-primary); }
+    .ag-stack-scroll {
+      flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px;
+      scroll-behavior: smooth; padding-right: 2px;
+    }
+    .ag-stack-section { scroll-margin-top: 8px; }
+
+    /* C — master detail */
+    .ag-c {
+      display: grid; grid-template-columns: 200px 1fr; gap: 10px; overflow: hidden;
+    }
+    .ag-domain-rail {
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 8px; background: var(--surface-1); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius); height: fit-content; max-height: 100%; overflow: auto;
+    }
+    .ag-domain-item {
+      text-align: left; border: 1px solid transparent; background: transparent;
+      color: var(--text-secondary); padding: 10px; border-radius: var(--radius-sm);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .ag-domain-item:hover { background: var(--surface-2); color: var(--text-primary); }
+    .ag-domain-item.active {
+      background: var(--accent-subtle); border-color: rgba(124,108,255,0.4); color: var(--text-primary);
+    }
+    .ag-domain-item-top { display: flex; align-items: center; gap: 8px; }
+    .ag-domain-item-meta { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding-left: 14px; }
+    .ag-detail {
+      min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px;
+    }
+    .ag-detail-blurb { margin: 4px 0 0; font-size: 11px; color: var(--text-muted); line-height: 1.35; max-width: 520px; }
+    .ag-detail-body { overflow: auto; max-height: 420px; }
+    .ag-candidates { flex: 0 0 auto; }
+    .ag-effective { flex: 0 0 auto; }
+
+    @media (max-width: 1100px) {
+      .ag-cap-strip { grid-template-columns: 1fr 1fr; }
+      .ag-card-grid { grid-template-columns: 1fr; }
+      .ag-c { grid-template-columns: 1fr; }
+    }
     /* Map legacy rw-btn to opa look when still used in views */
     .rw-btn { border: 1px solid var(--border-default); background: var(--surface-2); color: var(--text-primary); border-radius: var(--radius-sm); padding: 7px 12px; font-size: 12px; font-weight: 500; }
     .rw-btn.primary, .opa-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -1110,19 +1256,29 @@
   <script type="text/babel">
     function Preview() {
       const params = new URLSearchParams(location.search);
-      const [pillar, setPillar] = React.useState(params.get("pillar") || "findings");
+      const embedded = params.get("embed") === "1" || window !== window.top;
+      const [pillar, setPillar] = React.useState(params.get("pillar") || "control");
       const [opsMode, setOpsMode] = React.useState(params.get("mode") || "jobs");
       const [ctrlSection, setCtrlSection] = React.useState(params.get("section") || "agents");
+      const [agentsVariant, setAgentsVariant] = React.useState(params.get("variant") || "c");
       const [scanRun, setScanRun] = React.useState(params.get("run") || "");
 
       React.useEffect(() => {
+        if (embedded) return;
         const u = new URL(location.href);
         u.searchParams.set("pillar", pillar);
         if (pillar === "ops") u.searchParams.set("mode", opsMode); else u.searchParams.delete("mode");
-        if (pillar === "control") u.searchParams.set("section", ctrlSection); else u.searchParams.delete("section");
+        if (pillar === "control") {
+          u.searchParams.set("section", ctrlSection);
+          if (ctrlSection === "agents") u.searchParams.set("variant", agentsVariant);
+          else u.searchParams.delete("variant");
+        } else {
+          u.searchParams.delete("section");
+          u.searchParams.delete("variant");
+        }
         if (pillar === "scans" && scanRun) u.searchParams.set("run", scanRun); else u.searchParams.delete("run");
         history.replaceState(null, "", u);
-      }, [pillar, opsMode, ctrlSection, scanRun]);
+      }, [pillar, opsMode, ctrlSection, agentsVariant, scanRun, embedded]);
 
       const counts = {
         findings: FINDINGS_SEED.length,
@@ -1143,13 +1299,24 @@
       } else if (pillar === "ops") {
         View = <OpsScreen onPillar={goPillar} counts={counts} initialMode={opsMode} />;
       } else if (pillar === "control") {
-        View = <ControlScreen onPillar={goPillar} counts={counts} initialSection={ctrlSection} />;
+        View = (
+          <ControlScreen
+            onPillar={goPillar}
+            counts={counts}
+            initialSection={ctrlSection}
+            initialVariant={agentsVariant}
+            forcedVariant={embedded ? agentsVariant : undefined}
+            onSection={setCtrlSection}
+            onVariant={embedded ? undefined : setAgentsVariant}
+          />
+        );
       } else {
         View = <FindingsScreen onPillar={goPillar} onGotoScan={goScan} counts={counts} />;
       }
 
       return (
         <>
+          {!embedded && (
           <div className="picker">
             <div className="picker-row">
               <button type="button" className={pillar==="findings"?"active":""} onClick={() => setPillar("findings")}>Findings</button>
@@ -1171,7 +1338,15 @@
                 ))}
               </div>
             )}
+            {pillar === "control" && ctrlSection === "agents" && (
+              <div className="picker-row">
+                {["a","b","c"].map((v) => (
+                  <button key={v} type="button" className={agentsVariant===v?"active":""} onClick={() => setAgentsVariant(v)}>{v.toUpperCase()}</button>
+                ))}
+              </div>
+            )}
           </div>
+          )}
           <div className="frame" key={pillar + "-" + opsMode + "-" + ctrlSection}>{View}</div>
         </>
       );
