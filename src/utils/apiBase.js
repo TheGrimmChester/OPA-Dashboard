@@ -17,8 +17,13 @@ function resolveServiceUrl(explicit, fallbackDefault) {
   return fallbackDefault
 }
 
-const ORCH_URL = resolveServiceUrl(import.meta.env.VITE_ORCHESTRATOR_URL, 'http://localhost:8091')
-const PERF_URL = resolveServiceUrl(import.meta.env.VITE_PERF_LAB_URL, 'http://localhost:8092')
+// Production images use same-origin nginx path proxy (empty base). Local Vite
+// defaults to the service ports. Never fall back to the Agent URL — Agent
+// returns 410 Gone for extracted SCM / security-runs / perf routes.
+const ORCH_DEFAULT = import.meta.env.PROD ? '' : 'http://localhost:8091'
+const PERF_DEFAULT = import.meta.env.PROD ? '' : 'http://localhost:8092'
+const ORCH_URL = resolveServiceUrl(import.meta.env.VITE_ORCHESTRATOR_URL, ORCH_DEFAULT)
+const PERF_URL = resolveServiceUrl(import.meta.env.VITE_PERF_LAB_URL, PERF_DEFAULT)
 
 export function apiBaseForPath(path = '') {
   const p = String(path || '')
