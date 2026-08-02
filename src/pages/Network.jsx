@@ -30,7 +30,7 @@ function Tabs({ tabs = [], value, onChange, t }) {
   )
 }
 
-/** Network: Network ingest contract & host profiles. */
+/** Network ingest contract & host profiles. */
 export default function Network() {
   const { t } = useI18n()
   const [tab, setTab] = useState('flows')

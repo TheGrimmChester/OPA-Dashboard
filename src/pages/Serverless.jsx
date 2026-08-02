@@ -4,7 +4,7 @@ import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtAgo } from '../theme/format'
 
-/** Serverless: Serverless / FaaS pillar. */
+/** Serverless / FaaS pillar. */
 export default function Serverless() {
   const summary = useApi('/api/faas/summary', { hours: 24 }, { noRange: true })
   const cold = useApi('/api/faas/cold-starts', { hours: 24 }, { noRange: true })
