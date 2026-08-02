@@ -47,6 +47,7 @@ export const NAV_GROUPS = [
     label: 'Infrastructure',
     items: [
       { to: '/infrastructure', label: 'Hosts', icon: FiHardDrive },
+      { to: '/cloud', label: 'Cloud', icon: FiCloud },
       { to: '/metrics', label: 'Metrics Explorer', icon: FiBarChart2 },
       { to: '/query', label: 'Query', icon: FiTerminal },
       { to: '/dashboards', label: 'Dashboards', icon: FiLayout },
@@ -56,7 +57,7 @@ export const NAV_GROUPS = [
     label: 'Operate',
     items: [
       { to: '/live', label: 'Live', icon: FiRadio },
-      { to: '/serverless', label: 'Serverless', icon: FiCloud },
+      { to: '/serverless', label: 'Serverless', icon: FiZap },
       { to: '/system', label: 'System', icon: FiHardDrive },
     ],
   },
