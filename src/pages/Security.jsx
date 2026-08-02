@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  FiShield, FiAlertTriangle, FiEye, FiEyeOff, FiCrosshair, FiKey, FiSliders,
-  FiCode, FiServer, FiCheckCircle, FiPlay, FiRefreshCw, FiX, FiGitPullRequest,
+  FiShield, FiAlertTriangle, FiEye, FiCrosshair, FiKey, FiSliders,
+  FiCode, FiCheckCircle, FiPlay, FiRefreshCw, FiX, FiGitPullRequest,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { apiUrl } from '../utils/apiBase'
@@ -14,13 +14,47 @@ import AgentsTab from '../components/security/AgentsTab'
 import CheckWithHint from '../components/security/CheckWithHint'
 import JobEvidencePanel, { findingsFromJob } from '../components/security/JobEvidencePanel'
 import PrefRow from '../components/security/PrefRow'
+import { parseChecksJson, WATCH_CHECK_OPTS, checksFromPolicyMap } from '../components/security/watchHelpers'
 import { useTenant } from '../contexts/TenantContext'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { securityRunHref, serviceHref, scmJobHref } from '../utils/entityLinks'
 import { agentKindLabel, groupScmJobsForDisplay } from '../utils/scmRuns'
+import {
+  CONTROL_SECTIONS,
+  FINDINGS_TYPES,
+  OPS_MODES,
+  RUN_CONTEXT_TABS,
+  normalizeSecuritySearchParams,
+  resolveSecurityNav,
+  resolveSecurityRunId,
+} from './securityNav'
 import './Security.css'
 
 const SEV_KEY = 'opa.security.min_severity'
+
+const FINDINGS_TYPE_META = [
+  { id: 'all', label: 'All' },
+  { id: 'cve', label: 'CVE' },
+  { id: 'iast', label: 'IAST' },
+  { id: 'secrets', label: 'Secrets' },
+  { id: 'sast', label: 'SAST' },
+  { id: 'iac', label: 'IaC' },
+]
+
+const OPS_MODE_META = [
+  { id: 'watch', label: 'Watch', hint: 'Repos & per-repo gate' },
+  { id: 'run', label: 'Run', hint: 'OPA Review stack' },
+  { id: 'contexts', label: 'Contexts', hint: 'Briefs & AI key' },
+  { id: 'jobs', label: 'Jobs', hint: 'PR queue & evidence' },
+  { id: 'webhooks', label: 'Webhooks', hint: 'Delivery log' },
+]
+
+const CONTROL_SECTION_META = [
+  { id: 'agents', label: 'Agents', hint: 'Kill switches & prefs' },
+  { id: 'policies', label: 'Policies', hint: 'Severity & ingest' },
+  { id: 'gate', label: 'Gate', hint: 'AppSec PR check' },
+  { id: 'inventory', label: 'Inventory', hint: 'SBOM packages' },
+]
 
 /** Web host for GitHub links (public or enterprise) from connector meta. */
 function githubWebOrigin(connector) {
@@ -97,6 +131,7 @@ function scmJobStatusTone(status) {
     case 'queued': return 'info'
     case 'waiting': return 'neutral'
     case 'cancelled': return 'neutral'
+    case 'skipped': return 'neutral'
     case 'failed':
     case 'error': return 'error'
     default: return 'neutral'
@@ -172,12 +207,9 @@ const PROFILE_HINTS = {
   full: 'All lite/stub scanners',
 }
 
-/** Tabs where a `run=` deep-link filters findings / shows run detail. */
-const RUN_CONTEXT_TABS = new Set(['scans', 'secrets', 'sast', 'iac'])
-
-/** PR Jobs table URL filters (`?tab=jobs&status=…&severity=…&repo=…&q=…`). */
+/** PR Jobs table URL filters (`?tab=ops&mode=jobs&status=…`). */
 const JOB_FILTER_KEYS = ['status', 'severity', 'repo', 'q']
-const JOB_STATUS_FILTERS = new Set(['running', 'queued', 'waiting', 'completed', 'failed', 'cancelled'])
+const JOB_STATUS_FILTERS = new Set(['running', 'queued', 'waiting', 'completed', 'failed', 'cancelled', 'skipped'])
 const JOB_SEV_FILTERS = new Set(['blocker|critical', 'high', 'medium', 'low', 'none'])
 
 function resolveJobStatusFilter(params) {
@@ -205,22 +237,6 @@ function jobMatchesStatusFilter(status, filter) {
   return st === filter
 }
 
-function resolveSecurityTab(params) {
-  const tabQ = params.get('tab')
-  if (tabQ) return tabQ
-  // Bare `?run=` links open Scans; never invent a tab that steals Repo Watch.
-  if (params.get('run')) return 'scans'
-  return 'vulns'
-}
-
-function resolveSecurityRunId(params, tab) {
-  const runQ = params.get('run') || ''
-  if (!runQ) return ''
-  // Explicit non-run tabs (e.g. tab=watch&run=…) keep the tab; ignore run context.
-  if (!RUN_CONTEXT_TABS.has(tab)) return ''
-  return runQ
-}
-
 /** Compact Select all / Clear controls for checkbox multi-selects. */
 function MultiSelectActions({ onSelectAll, onClear, disabled = false, selectLabel = 'Select all', clearLabel = 'Clear' }) {
   return (
@@ -235,18 +251,23 @@ function MultiSelectActions({ onSelectAll, onClear, disabled = false, selectLabe
   )
 }
 
-/** Wave 19 + Wave 30 + Wave 33: Vulns / IAST / Secrets / SAST / IaC / Scans / Inventory / Policies / PR-check. */
+/** Security: Findings · Scans · PR Ops · Control. */
 export default function Security() {
   const toast = useToast()
   const { organizationId } = useTenant()
   const orgAll = !organizationId || organizationId === 'all'
   const [searchParams, setSearchParams] = useSearchParams()
-  const [tab, setTab] = useState(() => resolveSecurityTab(searchParams))
+  const initialNav = resolveSecurityNav(searchParams)
+  const [tab, setTab] = useState(() => initialNav.tab)
+  const [findingsType, setFindingsType] = useState(() => initialNav.type)
+  const [opsMode, setOpsMode] = useState(() => initialNav.mode)
+  const [controlSection, setControlSection] = useState(() => initialNav.section)
+  const [selectedFindingKey, setSelectedFindingKey] = useState('')
   const [minSev, setMinSev] = useState(() => localStorage.getItem(SEV_KEY) || 'high')
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
   const [activeRunId, setActiveRunId] = useState(() => (
-    resolveSecurityRunId(searchParams, resolveSecurityTab(searchParams))
+    resolveSecurityRunId(searchParams, initialNav.tab)
   ))
   const [runDetail, setRunDetail] = useState(null)
   const [runFindings, setRunFindings] = useState(null)
@@ -258,36 +279,53 @@ export default function Security() {
     image: '',
   })
 
-  const runFilter = activeRunId && RUN_CONTEXT_TABS.has(tab)
+  const runFilter = activeRunId && (tab === 'scans' || tab === 'findings')
     ? { security_run_id: activeRunId }
     : {}
 
-  const summary = useApi('/api/vulns/summary', { hours: 168 }, { noRange: true })
-  const findings = useApi('/api/vulns/findings', { limit: 100 }, { noRange: true })
-  const inventory = useApi('/api/vulns/inventory', { limit: 100 }, { noRange: true })
-  const iastSum = useApi('/api/iast/summary', { hours: 24 }, { noRange: true })
-  const iast = useApi('/api/iast/findings', { limit: 100 }, { noRange: true })
+  const onOps = tab === 'ops'
+  const onOpsWatch = onOps && (opsMode === 'watch' || opsMode === 'run' || opsMode === 'contexts')
+  const onOpsJobs = onOps && opsMode === 'jobs'
+  const onOpsHooks = onOps && opsMode === 'webhooks'
+  const onControl = tab === 'control'
+  const onFindings = tab === 'findings'
+  const onScans = tab === 'scans'
+
+  const summary = useApi('/api/vulns/summary', { hours: 168 }, { noRange: true, skip: !onFindings })
+  const findings = useApi('/api/vulns/findings', { limit: 100 }, { noRange: true, skip: !onFindings })
+  const inventory = useApi('/api/vulns/inventory', { limit: 100 }, {
+    noRange: true,
+    skip: !(onControl && controlSection === 'inventory'),
+  })
+  const iastSum = useApi('/api/iast/summary', { hours: 24 }, { noRange: true, skip: !onFindings })
+  const iast = useApi('/api/iast/findings', { limit: 100 }, { noRange: true, skip: !onFindings })
   const secrets = useApi('/api/security/secrets', { limit: 100, ...runFilter }, {
     noRange: true,
-    skip: tab !== 'secrets' && tab !== 'policies' && tab !== 'pr' && tab !== 'scans',
+    skip: !(onFindings || onScans || (onControl && (controlSection === 'policies' || controlSection === 'gate'))),
   })
   const sast = useApi('/api/security/sast', { limit: 100, ...runFilter }, {
     noRange: true,
-    skip: tab !== 'sast' && tab !== 'pr' && tab !== 'scans',
+    skip: !(onFindings || onScans || (onControl && controlSection === 'gate')),
   })
   const iac = useApi('/api/security/iac', { limit: 100, ...runFilter }, {
     noRange: true,
-    skip: tab !== 'iac' && tab !== 'pr' && tab !== 'scans',
+    skip: !(onFindings || onScans || (onControl && controlSection === 'gate')),
   })
-  const policies = useApi('/api/security/policies', {}, { noRange: true, skip: tab !== 'policies' })
-  const prCheck = useApi('/api/security/pr-check', {}, { noRange: true, skip: tab !== 'pr' })
-  const runs = useApi('/api/security/runs', { limit: 50 }, { noRange: true, skip: tab !== 'scans' && !activeRunId })
-  const profiles = useApi('/api/security/profiles', {}, { noRange: true, skip: tab !== 'scans' })
-  const services = useApi('/api/services', {}, { noRange: true, skip: tab !== 'scans' })
-  const connectors = useApi('/api/connectors', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'jobs' && tab !== 'agents' })
-  const scmJobs = useApi('/api/scm/jobs', { limit: 200 }, { noRange: true, skip: tab !== 'jobs' && tab !== 'watch' })
-  const scmWebhooks = useApi('/api/scm/webhooks', { limit: 200 }, { noRange: true, skip: tab !== 'webhooks' })
-  const scmSettings = useApi('/api/scm/settings', {}, { noRange: true, skip: tab !== 'watch' && tab !== 'pr' && tab !== 'jobs' && tab !== 'webhooks' && tab !== 'agents' })
+  const policies = useApi('/api/security/policies', {}, {
+    noRange: true,
+    skip: !(onControl && controlSection === 'policies'),
+  })
+  const prCheck = useApi('/api/security/pr-check', {}, {
+    noRange: true,
+    skip: !(onControl && controlSection === 'gate'),
+  })
+  const runs = useApi('/api/security/runs', { limit: 50 }, { noRange: true, skip: !onScans && !activeRunId })
+  const profiles = useApi('/api/security/profiles', {}, { noRange: true, skip: !onScans })
+  const services = useApi('/api/services', {}, { noRange: true, skip: !onScans })
+  const connectors = useApi('/api/connectors', {}, {
+    noRange: true,
+    skip: !(onOps || (onControl && controlSection === 'agents')),
+  })
   const [webhookDetailId, setWebhookDetailId] = useState('')
   const [selectedJobId, setSelectedJobId] = useState('')
   const [selectedJobDetail, setSelectedJobDetail] = useState(null)
@@ -307,6 +345,39 @@ export default function Security() {
   })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
   const [watchRefresh, setWatchRefresh] = useState(0)
+  const connectorRows = connectors.data?.connectors || []
+  /**
+   * Pass selected connector (PAT or App) for Jobs + Webhooks.
+   * Orchestrator remaps PAT → sibling App by account_login across tenant orgs.
+   * Do not guess among multiple Apps — wrong install hides the running review.
+   */
+  const opsConnectorId = useMemo(() => {
+    if (!(onOpsJobs || onOpsHooks)) return ''
+    if (activeConnector) return activeConnector
+    const list = Array.isArray(connectorRows) ? connectorRows : []
+    const apps = list.filter((c) => String(c.kind || '').toLowerCase() === 'github_app')
+    if (apps.length === 1) return apps[0].id
+    return ''
+  }, [onOpsJobs, onOpsHooks, connectorRows, activeConnector])
+  const scmJobs = useApi('/api/scm/jobs', {
+    limit: 200,
+    ...(opsConnectorId ? { connector_id: opsConnectorId } : {}),
+  }, {
+    noRange: true,
+    skip: !(onOpsJobs || onOpsWatch),
+  })
+  const scmWebhooks = useApi('/api/scm/webhooks', {
+    limit: 200,
+    ...(opsConnectorId ? { connector_id: opsConnectorId } : {}),
+  }, { noRange: true, skip: !onOpsHooks })
+  const scmSettings = useApi('/api/scm/settings', {}, {
+    noRange: true,
+    skip: !(onOps || (onControl && (controlSection === 'gate' || controlSection === 'agents'))),
+  })
+  /** Derived from opsMode: watch → repos list, run → OPA Review, contexts → briefs. */
+  const watchMode = opsMode === 'run' ? 'run' : opsMode === 'contexts' ? 'contexts' : 'repos'
+  const [selectedWatchRepo, setSelectedWatchRepo] = useState('')
+  const [addReposOpen, setAddReposOpen] = useState(false)
   const [aiReviewForm, setAiReviewForm] = useState({ force: true, ai_only: false, preview_url: '' })
   const [reviewRepos, setReviewRepos] = useState({}) // repo -> bool
   const [reviewPrs, setReviewPrs] = useState({}) // `${repo}#${pr}` -> bool
@@ -323,7 +394,7 @@ export default function Security() {
   const [genDraft, setGenDraft] = useState(null)
 
   useEffect(() => {
-    if (!activeConnector || tab !== 'watch') {
+    if (!activeConnector || !onOpsWatch) {
       setWatchedRows([])
       setAvailableRepos([])
       setRepoPick({})
@@ -357,6 +428,9 @@ export default function Security() {
       setRepoPick(pick)
       if (watched.length) {
         const sample = watched.find((w) => w.enabled) || watched[0]
+        setSelectedWatchRepo((prev) => (
+          watched.some((w) => w.repo_full_name === prev) ? prev : sample.repo_full_name
+        ))
         setWatchPolicy((p) => ({
           ...p,
           ai_blocking: !!sample.ai_blocking,
@@ -365,6 +439,8 @@ export default function Security() {
             ? Number(sample.auto_approve_min_score) || 0
             : p.auto_approve_min_score,
         }))
+      } else {
+        setSelectedWatchRepo('')
       }
     }).catch((e) => {
       if (cancelled) return
@@ -380,10 +456,10 @@ export default function Security() {
       if (!cancelled) setReposLoading(false)
     })
     return () => { cancelled = true }
-  }, [activeConnector, tab, watchRefresh])
+  }, [activeConnector, onOpsWatch, watchRefresh])
 
   useEffect(() => {
-    if (tab !== 'watch') return undefined
+    if (!onOpsWatch) return undefined
     let cancelled = false
     axios.get(apiUrl('/api/scm/contexts')).then((res) => {
       if (!cancelled) setContexts(res.data?.contexts || [])
@@ -391,7 +467,7 @@ export default function Security() {
       if (!cancelled) setContexts([])
     })
     return () => { cancelled = true }
-  }, [tab, watchRefresh])
+  }, [onOpsWatch, watchRefresh])
 
   const selectedReviewRepos = useMemo(
     () => Object.keys(reviewRepos).filter((r) => reviewRepos[r]),
@@ -399,7 +475,7 @@ export default function Security() {
   )
 
   useEffect(() => {
-    if (tab !== 'watch' || !activeConnector || !selectedReviewRepos.length) {
+    if (!onOpsWatch || !activeConnector || !selectedReviewRepos.length) {
       setPullsByRepo({})
       setAppliedContexts([])
       return undefined
@@ -428,10 +504,10 @@ export default function Security() {
       if (!cancelled) setPullsLoading(false)
     })
     return () => { cancelled = true }
-  }, [tab, activeConnector, selectedReviewRepos.join('|'), watchRefresh])
+  }, [onOpsWatch, activeConnector, selectedReviewRepos.join('|'), watchRefresh])
 
   useEffect(() => {
-    if (!lastStackId || tab !== 'watch') return undefined
+    if (!lastStackId || !onOpsWatch) return undefined
     let cancelled = false
     const tick = () => {
       axios.get(apiUrl(`/api/scm/opa-review/stacks/${encodeURIComponent(lastStackId)}`))
@@ -441,54 +517,51 @@ export default function Security() {
     tick()
     const id = setInterval(tick, 4000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [lastStackId, tab])
+  }, [lastStackId, onOpsWatch])
 
   // Keep PR Jobs fresh while a stack drain is in flight (running/queued/waiting).
   useEffect(() => {
-    if (tab !== 'jobs') return undefined
+    if (!onOpsJobs) return undefined
     const id = setInterval(() => { scmJobs.reload?.() }, 4000)
     return () => clearInterval(id)
-  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onOpsJobs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (tab !== 'webhooks') return undefined
+    if (!onOpsHooks) return undefined
     const id = setInterval(() => { scmWebhooks.reload?.() }, 8000)
     return () => clearInterval(id)
-  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onOpsHooks]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep tab / run / connector in sync with the URL (and strip stale run= on Watch).
+  // Keep pillar / mode / section / run / connector in sync with the URL.
   useEffect(() => {
-    const nextTab = resolveSecurityTab(searchParams)
-    const nextRun = resolveSecurityRunId(searchParams, nextTab)
-    const nextConnector = searchParams.get('connector') || ''
-    if (nextTab !== tab) setTab(nextTab)
+    const { nav, params: normalized } = normalizeSecuritySearchParams(searchParams)
+    const nextRun = resolveSecurityRunId(normalized, nav.tab)
+    const nextConnector = normalized.get('connector') || ''
+
+    if (nav.tab !== tab) setTab(nav.tab)
+    if (nav.type !== findingsType) setFindingsType(nav.type)
+    if (nav.mode !== opsMode) setOpsMode(nav.mode)
+    if (nav.section !== controlSection) setControlSection(nav.section)
     if (nextRun !== activeRunId) setActiveRunId(nextRun)
     if (nextConnector && nextConnector !== activeConnector) setActiveConnector(nextConnector)
 
-    // Mangled deep links like ?run=…&tab=watch&connector=… — honor watch, drop run.
-    if (searchParams.get('tab') === 'watch' && searchParams.get('run')) {
-      const p = new URLSearchParams(searchParams)
-      p.delete('run')
-      setSearchParams(p, { replace: true })
-      return
-    }
-    // Drop PR Jobs filters when another tab is active (keeps shared URL clean).
-    if (nextTab !== 'jobs' && JOB_FILTER_KEYS.some((k) => searchParams.has(k))) {
-      const p = new URLSearchParams(searchParams)
-      for (const k of JOB_FILTER_KEYS) p.delete(k)
-      setSearchParams(p, { replace: true })
+    // Canonicalize pillar URL params (drop stale type/mode/section/run).
+    const cur = searchParams.toString()
+    const next = normalized.toString()
+    if (cur !== next) {
+      setSearchParams(normalized, { replace: true })
     }
   }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-select a live connector when the watch tab opens (skip if URL named one).
+  // Auto-select a live connector when ops watch opens (skip if URL named one).
   useEffect(() => {
-    if (tab !== 'watch' || activeConnector) return
+    if (!onOpsWatch || activeConnector) return
     if (searchParams.get('connector')) return
     const list = connectors.data?.connectors || []
     if (!list.length) return
     const preferred = list.find((x) => x.has_token) || list[0]
     if (preferred?.id) setActiveConnector(preferred.id)
-  }, [tab, activeConnector, connectors.data, searchParams])
+  }, [onOpsWatch, activeConnector, connectors.data, searchParams])
 
   const s = summary.data || {}
   const is = iastSum.data || {}
@@ -511,37 +584,235 @@ export default function Security() {
   }, [services.data])
 
   const sevRank = { critical: 4, high: 3, medium: 2, low: 1 }
-  const filteredSecrets = useMemo(() => {
-    const min = sevRank[minSev] || 3
-    return secretRows.filter((r) => (sevRank[String(r.severity || '').toLowerCase()] || 0) >= min)
-  }, [secretRows, minSev])
+  const parseSummary = (r) => {
+    try {
+      return typeof r?.summary_json === 'string' ? JSON.parse(r.summary_json || '{}') : (r?.summary_json || {})
+    } catch {
+      return {}
+    }
+  }
+
+  /** Unified Findings inbox rows (CVE / IAST / secrets / SAST / IaC). */
+  const unifiedFindings = useMemo(() => {
+    const min = sevRank[minSev] || 1
+    const rows = []
+    for (const r of vulnRows) {
+      rows.push({
+        key: `cve:${r.advisory_id}:${r.package_name}:${r.version}:${r.service}`,
+        type: 'cve',
+        sev: String(r.severity || '').toLowerCase() || 'medium',
+        target: r.service || r.package_name || '—',
+        title: r.advisory_id || 'advisory',
+        where: `${r.package_name || ''}@${r.version || ''}`.replace(/^@$/, '—'),
+        detector: 'reachability',
+        ctx: r.reachability === 'observed' ? 'observed' : 'not observed',
+        snippet: r.summary || '',
+        service: r.service,
+        raw: r,
+      })
+    }
+    for (const r of iastRows) {
+      rows.push({
+        key: `iast:${r.sink}:${r.scraped_at}:${r.service}:${r.route}`,
+        type: 'iast',
+        sev: (r.blocked === 1 || r.blocked === true || r.blocked === '1') ? 'high' : 'medium',
+        target: r.service || '—',
+        title: r.sink || 'sink',
+        where: r.route || '—',
+        detector: r.detector || 'runtime',
+        ctx: (r.blocked === 1 || r.blocked === true || r.blocked === '1') ? 'blocked' : 'open',
+        snippet: String(r.evidence || '').slice(0, 160),
+        service: r.service,
+        raw: r,
+      })
+    }
+    for (const r of secretRows) {
+      rows.push({
+        key: `secret:${r.rule}:${r.file}:${r.line}:${r.security_run_id}`,
+        type: 'secrets',
+        sev: String(r.severity || '').toLowerCase() || 'high',
+        target: r.service || r.file || '—',
+        title: r.rule || 'secret',
+        where: `${r.file || '—'}:${r.line || 0}`,
+        detector: r.detector || '—',
+        ctx: r.security_run_id || '—',
+        snippet: String(r.snippet || '').slice(0, 120),
+        service: r.service,
+        runId: r.security_run_id,
+        raw: r,
+      })
+    }
+    for (const r of sastRows) {
+      rows.push({
+        key: `sast:${r.rule}:${r.file}:${r.line}:${r.security_run_id}`,
+        type: 'sast',
+        sev: String(r.severity || '').toLowerCase() || 'medium',
+        target: r.service || r.file || '—',
+        title: r.rule || 'sast',
+        where: `${r.file || '—'}:${r.line || 0}`,
+        detector: 'sast-lite',
+        ctx: r.security_run_id || '—',
+        snippet: String(r.message || '').slice(0, 120),
+        service: r.service,
+        runId: r.security_run_id,
+        raw: r,
+      })
+    }
+    for (const r of iacRows) {
+      rows.push({
+        key: `iac:${r.kind}:${r.rule}:${r.file}:${r.security_run_id}`,
+        type: 'iac',
+        sev: String(r.severity || '').toLowerCase() || 'medium',
+        target: r.file || '—',
+        title: r.rule || r.kind || 'iac',
+        where: r.file || '—',
+        detector: 'iac-lite',
+        ctx: r.security_run_id || '—',
+        snippet: String(r.message || '').slice(0, 120),
+        service: r.service,
+        runId: r.security_run_id,
+        raw: r,
+      })
+    }
+    const filtered = rows.filter((r) => {
+      if (findingsType !== 'all' && r.type !== findingsType) return false
+      // CVE/IAST: always show (no minSev on those historically for vulns list);
+      // secrets/sast/iac honor dashboard min severity.
+      if (r.type === 'secrets' || r.type === 'sast' || r.type === 'iac') {
+        return (sevRank[r.sev] || 0) >= min
+      }
+      return true
+    })
+    filtered.sort((a, b) => (sevRank[b.sev] || 0) - (sevRank[a.sev] || 0))
+    return filtered
+  }, [vulnRows, iastRows, secretRows, sastRows, iacRows, findingsType, minSev])
+
+  const findingsTypeCounts = useMemo(() => {
+    const c = { all: 0, cve: 0, iast: 0, secrets: 0, sast: 0, iac: 0 }
+    // Count from unfiltered-by-type but sev-filtered for scan types
+    const min = sevRank[minSev] || 1
+    const bump = (type, sev) => {
+      if (type === 'secrets' || type === 'sast' || type === 'iac') {
+        if ((sevRank[sev] || 0) < min) return
+      }
+      c[type] += 1
+      c.all += 1
+    }
+    for (const r of vulnRows) bump('cve', String(r.severity || '').toLowerCase())
+    for (const r of iastRows) bump('iast', 'medium')
+    for (const r of secretRows) bump('secrets', String(r.severity || '').toLowerCase())
+    for (const r of sastRows) bump('sast', String(r.severity || '').toLowerCase())
+    for (const r of iacRows) bump('iac', String(r.severity || '').toLowerCase())
+    return c
+  }, [vulnRows, iastRows, secretRows, sastRows, iacRows, minSev])
+
+  const selectedFinding = useMemo(
+    () => unifiedFindings.find((r) => r.key === selectedFindingKey) || unifiedFindings[0] || null,
+    [unifiedFindings, selectedFindingKey],
+  )
+
+  useEffect(() => {
+    if (selectedFinding && selectedFinding.key !== selectedFindingKey) {
+      setSelectedFindingKey(selectedFinding.key)
+    }
+  }, [selectedFinding, selectedFindingKey])
+
+  const runTimelineSteps = useMemo(() => {
+    const summary = parseSummary(runDetail)
+    const counts = runFindings?.counts || summary?.counts || {}
+    const scanners = Array.isArray(summary?.scanners) ? summary.scanners
+      : (typeof runDetail?.scanners_json === 'string'
+        ? (() => { try { return JSON.parse(runDetail.scanners_json) } catch { return [] } })()
+        : [])
+    const status = String(runDetail?.status || '').toLowerCase()
+    const done = status === 'completed' || status === 'ok'
+    const failed = status.includes('error') || status === 'failed'
+    const ids = scanners.length
+      ? scanners.map((s) => (typeof s === 'string' ? s : s.id || s.name)).filter(Boolean)
+      : Object.keys(counts)
+    if (!ids.length && activeRunId) {
+      return SCANNER_OPTS.map((s) => ({
+        scanner: s.id,
+        status: done ? 'completed' : failed ? 'failed' : 'queued',
+        detail: counts[s.id] != null ? `${counts[s.id]} findings` : (done ? 'done' : '—'),
+      }))
+    }
+    return ids.map((id) => ({
+      scanner: id,
+      status: failed ? 'failed' : done ? 'completed' : (status === 'running' ? 'running' : 'queued'),
+      detail: counts[id] != null ? `${counts[id]} findings` : (summary?.secrets_detector && id === 'secrets' ? summary.secrets_detector : '—'),
+    }))
+  }, [runDetail, runFindings, activeRunId])
 
   const saveSev = (v) => {
     setMinSev(v)
     localStorage.setItem(SEV_KEY, v)
   }
 
-  const selectTab = (next) => {
-    setTab(next)
+  const selectTab = (next, { type, mode, section } = {}) => {
     const p = new URLSearchParams(searchParams)
     p.set('tab', next)
-    if (RUN_CONTEXT_TABS.has(next) && activeRunId) {
-      p.set('run', activeRunId)
-    } else {
+    setTab(next)
+
+    if (next === 'findings') {
+      const nextType = type != null ? (FINDINGS_TYPES.includes(type) ? type : 'all') : findingsType
+      setFindingsType(nextType)
+      if (nextType && nextType !== 'all') p.set('type', nextType)
+      else p.delete('type')
+      p.delete('mode')
+      p.delete('section')
+      if (activeRunId) p.set('run', activeRunId)
+      else p.delete('run')
+    } else if (next === 'ops') {
+      const resolvedMode = mode != null ? (OPS_MODES.includes(mode) ? mode : 'watch') : opsMode
+      setOpsMode(resolvedMode)
+      p.set('mode', resolvedMode)
+      p.delete('type')
+      p.delete('section')
       p.delete('run')
-      if (!RUN_CONTEXT_TABS.has(next)) setActiveRunId('')
-    }
-    if (next !== 'watch') p.delete('connector')
-    else if (activeConnector) p.set('connector', activeConnector)
-    if (next !== 'jobs') {
+      setActiveRunId('')
+      if (activeConnector) p.set('connector', activeConnector)
+      if (resolvedMode !== 'jobs') {
+        for (const k of JOB_FILTER_KEYS) p.delete(k)
+      }
+    } else if (next === 'control') {
+      const resolvedSection = section != null
+        ? (CONTROL_SECTIONS.includes(section) ? section : 'agents')
+        : controlSection
+      setControlSection(resolvedSection)
+      p.set('section', resolvedSection)
+      p.delete('type')
+      p.delete('mode')
+      p.delete('run')
+      p.delete('connector')
+      setActiveRunId('')
+      for (const k of JOB_FILTER_KEYS) p.delete(k)
+    } else {
+      // scans
+      p.delete('type')
+      p.delete('mode')
+      p.delete('section')
+      p.delete('connector')
+      if (activeRunId) p.set('run', activeRunId)
+      else p.delete('run')
       for (const k of JOB_FILTER_KEYS) p.delete(k)
     }
+
     setSearchParams(p, { replace: true })
+  }
+
+  const selectFindingsType = (type) => selectTab('findings', { type })
+  const selectOpsMode = (mode) => selectTab('ops', { mode })
+  const selectControlSection = (section) => selectTab('control', { section })
+  const setWatchMode = (next) => {
+    if (next === 'repos') selectOpsMode('watch')
+    else if (next === 'run' || next === 'contexts') selectOpsMode(next)
   }
 
   const setJobFilter = (key, value) => {
     const p = new URLSearchParams(searchParams)
-    p.set('tab', 'jobs')
+    p.set('tab', 'ops')
+    p.set('mode', 'jobs')
     if (value) p.set(key, value)
     else p.delete(key)
     setSearchParams(p, { replace: true })
@@ -549,7 +820,8 @@ export default function Security() {
 
   const clearJobFilters = () => {
     const p = new URLSearchParams(searchParams)
-    p.set('tab', 'jobs')
+    p.set('tab', 'ops')
+    p.set('mode', 'jobs')
     for (const k of JOB_FILTER_KEYS) p.delete(k)
     setSearchParams(p, { replace: true })
   }
@@ -619,10 +891,14 @@ export default function Security() {
 
   const selectConnector = (id) => {
     setActiveConnector(id)
-    setTab('watch')
+    // Stay on PR Ops — never use legacy tab=watch (four-pillar IA).
+    const mode = onOpsWatch || onOpsJobs || onOpsHooks ? opsMode : 'watch'
+    setTab('ops')
+    setOpsMode(OPS_MODES.includes(mode) ? mode : 'watch')
     setActiveRunId('')
     const p = new URLSearchParams(searchParams)
-    p.set('tab', 'watch')
+    p.set('tab', 'ops')
+    p.set('mode', OPS_MODES.includes(mode) ? mode : 'watch')
     p.delete('run')
     if (id) p.set('connector', id)
     else p.delete('connector')
@@ -684,44 +960,60 @@ export default function Security() {
     })
   }
 
+  const patchWatchedRow = (fullName, patch) => {
+    setWatchedRows((rows) => rows.map((r) => (
+      r.repo_full_name === fullName ? { ...r, ...patch } : r
+    )))
+  }
+
+  const selectedWatchRow = useMemo(
+    () => watchedRows.find((r) => r.repo_full_name === selectedWatchRepo) || watchedRows[0] || null,
+    [watchedRows, selectedWatchRepo],
+  )
+
   const saveWatched = async () => {
     if (!activeConnector) {
       flash('warn', 'Select a connector first')
       return
     }
-    const checks = Object.entries(watchPolicy.checks).filter(([, on]) => on).map(([id]) => id)
-    const defaultChecks = checks.length ? checks : ['secrets', 'sast', 'iac', 'sbom', 'ai_review']
+    const defaultChecks = checksFromPolicyMap(watchPolicy.checks)
     const byName = {}
     for (const w of watchedRows) {
       if (!w.repo_full_name) continue
+      const rowChecks = parseChecksJson(w.checks_json)
       byName[w.repo_full_name] = {
         repo_full_name: w.repo_full_name,
         repo_id: w.repo_id || '',
         enabled: !!w.enabled,
         service_name: w.service_name || '',
         profile: w.profile || form.profile || 'auto',
-        checks: defaultChecks,
+        checks: rowChecks.length ? rowChecks : defaultChecks,
         min_severity: w.min_severity || minSev,
-        ai_blocking: !!watchPolicy.ai_blocking,
-        auto_request_reviewer: !!watchPolicy.auto_request_reviewer,
-        auto_approve_min_score: Number(watchPolicy.auto_approve_min_score) || 0,
+        ai_blocking: !!w.ai_blocking,
+        auto_request_reviewer: !!w.auto_request_reviewer,
+        auto_approve_min_score: Number(w.auto_approve_min_score) || 0,
       }
     }
     for (const [name, on] of Object.entries(repoPick)) {
       if (!name) continue
       if (on) {
         const avail = availableRepos.find((r) => (r.full_name || r.repo_full_name) === name)
+        const existing = byName[name]
         byName[name] = {
-          ...(byName[name] || {}),
+          ...(existing || {}),
           repo_full_name: name,
-          repo_id: avail?.id || byName[name]?.repo_id || '',
+          repo_id: avail?.id || existing?.repo_id || '',
           enabled: true,
-          profile: form.profile || 'auto',
-          checks: defaultChecks,
-          min_severity: minSev,
-          ai_blocking: !!watchPolicy.ai_blocking,
-          auto_request_reviewer: !!watchPolicy.auto_request_reviewer,
-          auto_approve_min_score: Number(watchPolicy.auto_approve_min_score) || 0,
+          profile: existing?.profile || form.profile || 'auto',
+          checks: existing?.checks?.length ? existing.checks : defaultChecks,
+          min_severity: existing?.min_severity || minSev,
+          ai_blocking: existing ? !!existing.ai_blocking : !!watchPolicy.ai_blocking,
+          auto_request_reviewer: existing
+            ? !!existing.auto_request_reviewer
+            : !!watchPolicy.auto_request_reviewer,
+          auto_approve_min_score: existing
+            ? Number(existing.auto_approve_min_score) || 0
+            : Number(watchPolicy.auto_approve_min_score) || 0,
         }
       } else if (byName[name]) {
         byName[name].enabled = false
@@ -753,6 +1045,7 @@ export default function Security() {
       setWatchedRows(data.watched || [])
       flash('ok', 'Watched repos updated', `${(data.watched || []).length} repos`)
       setWatchRefresh((n) => n + 1)
+      setAddReposOpen(false)
     } catch (e) {
       flash('error', 'Watch update failed', e.response?.data || e.message)
     } finally {
@@ -770,7 +1063,7 @@ export default function Security() {
         profile: form.profile || 'auto',
       })
       flash('ok', 'Simulated SCM job', data.job_id)
-      selectTab('jobs')
+      selectOpsMode('jobs')
       scmJobs.reload?.()
     } catch (e) {
       flash('error', 'Simulate failed', e.response?.data || e.message)
@@ -838,7 +1131,7 @@ export default function Security() {
       setLastAiJobId((data.job_ids || [])[0] || '')
       const note = data.note ? ` · ${data.note}` : ''
       flash('ok', 'OPA Review stack queued', `${data.stack_id || ''} · ${(data.job_ids || []).length} job(s)${note}`)
-      selectTab('jobs')
+      selectOpsMode('jobs')
       scmJobs.reload?.()
     } catch (e) {
       const raw = e.response?.data
@@ -1096,14 +1389,6 @@ export default function Security() {
     }
   }, [activeRunId, tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const parseSummary = (r) => {
-    try {
-      return typeof r?.summary_json === 'string' ? JSON.parse(r.summary_json || '{}') : (r?.summary_json || {})
-    } catch {
-      return {}
-    }
-  }
-
   const scmJobStatusHint = (status) => {
     switch (String(status || '').toLowerCase()) {
       case 'running': return 'Actively processing'
@@ -1111,6 +1396,7 @@ export default function Security() {
       case 'waiting': return 'Backlog — waiting for a free slot or prior stack item'
       case 'completed': return 'Finished successfully'
       case 'cancelled': return 'Cancelled before or during run'
+      case 'skipped': return 'Skipped (already reviewed, or policy skip)'
       case 'failed':
       case 'error': return 'Finished with an error'
       default: return ''
@@ -1125,8 +1411,9 @@ export default function Security() {
       case 'failed':
       case 'error': return 3
       case 'cancelled': return 4
-      case 'completed': return 5
-      default: return 6
+      case 'skipped': return 5
+      case 'completed': return 6
+      default: return 7
     }
   }
 
@@ -1142,10 +1429,10 @@ export default function Security() {
     return groupScmJobsForDisplay(raw)
   }, [scmJobs.data])
 
-  const jobStatusFilter = tab === 'jobs' ? resolveJobStatusFilter(searchParams) : ''
-  const jobSeverityFilter = tab === 'jobs' ? resolveJobSeverityFilter(searchParams) : ''
-  const jobRepoFilter = tab === 'jobs' ? String(searchParams.get('repo') || '') : ''
-  const jobQFilter = tab === 'jobs' ? String(searchParams.get('q') || '') : ''
+  const jobStatusFilter = onOpsJobs ? resolveJobStatusFilter(searchParams) : ''
+  const jobSeverityFilter = onOpsJobs ? resolveJobSeverityFilter(searchParams) : ''
+  const jobRepoFilter = onOpsJobs ? String(searchParams.get('repo') || '') : ''
+  const jobQFilter = onOpsJobs ? String(searchParams.get('q') || '') : ''
   const jobFiltersActive = !!(jobStatusFilter || jobSeverityFilter || jobRepoFilter || jobQFilter)
 
   const scmJobRepos = useMemo(() => {
@@ -1180,7 +1467,7 @@ export default function Security() {
   }, [scmJobRows, jobStatusFilter, jobSeverityFilter, jobRepoFilter, jobQFilter])
 
   useEffect(() => {
-    if (tab !== 'jobs') return undefined
+    if (!onOpsJobs) return undefined
     if (!filteredScmJobRows.length) {
       if (selectedJobId) setSelectedJobId('')
       return undefined
@@ -1193,7 +1480,7 @@ export default function Security() {
   }, [tab, filteredScmJobRows, selectedJobId])
 
   useEffect(() => {
-    if (tab !== 'jobs' || !selectedJobId) {
+    if (!onOpsJobs || !selectedJobId) {
       setSelectedJobDetail(null)
       setSelectedJobDetailLoading(false)
       return undefined
@@ -1272,76 +1559,12 @@ export default function Security() {
       : <span className={className} style={style}>{children}</span>
   )
 
-  const vulnCols = [
-    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
-    { key: 'advisory_id', header: 'Advisory', render: (r) => <span className="opa-mono cell-strong">{r.advisory_id}</span> },
-    { key: 'package_name', header: 'Package', render: (r) => <span className="opa-mono">{r.package_name}@{r.version}</span> },
-    { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
-    { key: 'reachability', header: 'Reachability', render: (r) => (
-      r.reachability === 'observed'
-        ? <StatusPill tone="error"><FiEye size={10} /> observed</StatusPill>
-        : <StatusPill tone="neutral"><FiEyeOff size={10} /> not observed</StatusPill>
-    ) },
-    { key: 'path_hits', header: 'Hits', num: true, render: (r) => fmtNum(r.path_hits) },
-    { key: 'summary', header: 'Summary', render: (r) => <span className="opa-muted">{r.summary}</span> },
-  ]
-
   const invCols = [
     { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
     { key: 'ecosystem', header: 'Eco', render: (r) => <Badge>{r.ecosystem || '—'}</Badge> },
     { key: 'package_name', header: 'Package', render: (r) => <span className="opa-mono">{r.package_name}</span> },
     { key: 'version', header: 'Version', render: (r) => <span className="opa-mono">{r.version}</span> },
     { key: 'release', header: 'Release' },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
-  ]
-
-  const iastCols = [
-    { key: 'sink', header: 'Sink', render: (r) => <Badge>{r.sink}</Badge> },
-    { key: 'blocked', header: 'Blocked', render: (r) => (r.blocked === 1 || r.blocked === true || r.blocked === '1'
-      ? <StatusPill tone="error">blocked</StatusPill>
-      : <StatusPill tone="neutral">detect</StatusPill>) },
-    { key: 'detector', header: 'Detector', render: (r) => <Badge>{r.detector || '—'}</Badge> },
-    { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
-    { key: 'route', header: 'Route', render: (r) => <span className="opa-mono">{r.route || '—'}</span> },
-    { key: 'evidence', header: 'Evidence', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.evidence || '').slice(0, 120)}</span> },
-    { key: 'trace_id', header: 'Trace', render: (r) => <span className="opa-mono opa-muted">{r.trace_id ? String(r.trace_id).slice(0, 12) : '—'}</span> },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
-  ]
-
-  const secretCols = [
-    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
-    { key: 'rule', header: 'Rule', render: (r) => <span className="opa-mono cell-strong">{r.rule || '—'}</span> },
-    { key: 'file', header: 'File', render: (r) => <span className="opa-mono">{r.file || '—'}:{r.line || 0}</span> },
-    { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
-    { key: 'detector', header: 'Detector', render: (r) => <Badge>{r.detector || '—'}</Badge> },
-    { key: 'security_run_id', header: 'Run', render: (r) => (r.security_run_id
-      ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
-      : '—') },
-    { key: 'snippet', header: 'Snippet', render: (r) => <span className="opa-mono opa-muted" style={{ fontSize: 11 }}>{String(r.snippet || '').slice(0, 80)}</span> },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
-  ]
-
-  const sastCols = [
-    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
-    { key: 'rule', header: 'Rule', render: (r) => <span className="opa-mono cell-strong">{r.rule || '—'}</span> },
-    { key: 'file', header: 'File', render: (r) => <span className="opa-mono">{r.file || '—'}:{r.line || 0}</span> },
-    { key: 'service', header: 'Service', render: (r) => (r.service ? <Link to={serviceHref(r.service)}>{r.service}</Link> : '—') },
-    { key: 'security_run_id', header: 'Run', render: (r) => (r.security_run_id
-      ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
-      : '—') },
-    { key: 'message', header: 'Message', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{String(r.message || '').slice(0, 120)}</span> },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
-  ]
-
-  const iacCols = [
-    { key: 'severity', header: 'Sev', render: (r) => <StatusPill tone={sevTone(r.severity)}>{r.severity}</StatusPill> },
-    { key: 'kind', header: 'Kind', render: (r) => <Badge>{r.kind || 'iac'}</Badge> },
-    { key: 'rule', header: 'Rule', render: (r) => <span className="opa-mono cell-strong">{r.rule || '—'}</span> },
-    { key: 'file', header: 'File', render: (r) => <span className="opa-mono">{r.file || '—'}</span> },
-    { key: 'security_run_id', header: 'Run', render: (r) => (r.security_run_id
-      ? <Link to={securityRunHref(r.security_run_id)} className="opa-mono" style={{ fontSize: 11 }}>{String(r.security_run_id).slice(0, 14)}</Link>
-      : '—') },
-    { key: 'message', header: 'Message', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{String(r.message || '').slice(0, 120)}</span> },
     { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
   ]
 
@@ -1418,22 +1641,13 @@ export default function Security() {
       )}
 
       <div className="opa-tabs">
-        <button type="button" className={`opa-tab ${tab === 'vulns' ? 'active' : ''}`} onClick={() => selectTab('vulns')}>Vulnerabilities</button>
-        <button type="button" className={`opa-tab ${tab === 'iast' ? 'active' : ''}`} onClick={() => selectTab('iast')}>IAST</button>
-        <button type="button" className={`opa-tab ${tab === 'secrets' ? 'active' : ''}`} onClick={() => selectTab('secrets')}>Secrets</button>
-        <button type="button" className={`opa-tab ${tab === 'sast' ? 'active' : ''}`} onClick={() => selectTab('sast')}>SAST</button>
-        <button type="button" className={`opa-tab ${tab === 'iac' ? 'active' : ''}`} onClick={() => selectTab('iac')}>IaC</button>
-        <button type="button" className={`opa-tab ${tab === 'scans' ? 'active' : ''}`} onClick={() => selectTab('scans')}>Scans</button>
-        <button type="button" className={`opa-tab ${tab === 'watch' ? 'active' : ''}`} onClick={() => selectTab('watch')}>Repo Watch</button>
-        <button type="button" className={`opa-tab ${tab === 'jobs' ? 'active' : ''}`} onClick={() => selectTab('jobs')}>PR Jobs</button>
-        <button type="button" className={`opa-tab ${tab === 'agents' ? 'active' : ''}`} onClick={() => selectTab('agents')}>Agents</button>
-        <button type="button" className={`opa-tab ${tab === 'webhooks' ? 'active' : ''}`} onClick={() => selectTab('webhooks')}>Webhooks</button>
-        <button type="button" className={`opa-tab ${tab === 'inventory' ? 'active' : ''}`} onClick={() => selectTab('inventory')}>Inventory</button>
-        <button type="button" className={`opa-tab ${tab === 'policies' ? 'active' : ''}`} onClick={() => selectTab('policies')}>Policies</button>
-        <button type="button" className={`opa-tab ${tab === 'pr' ? 'active' : ''}`} onClick={() => selectTab('pr')}>Gate</button>
+        <button type="button" className={`opa-tab ${onFindings ? 'active' : ''}`} onClick={() => selectTab('findings')}>Findings</button>
+        <button type="button" className={`opa-tab ${onScans ? 'active' : ''}`} onClick={() => selectTab('scans')}>Scans</button>
+        <button type="button" className={`opa-tab ${onOps ? 'active' : ''}`} onClick={() => selectOpsMode(opsMode || 'watch')}>PR Ops</button>
+        <button type="button" className={`opa-tab ${onControl ? 'active' : ''}`} onClick={() => selectControlSection(controlSection || 'agents')}>Control</button>
       </div>
 
-      {activeRunId && tab !== 'scans' && (tab === 'secrets' || tab === 'sast' || tab === 'iac') && (
+      {activeRunId && onFindings && (
         <div className="opa-muted" style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
           Filtering by run <code className="opa-mono">{activeRunId}</code>
           <button type="button" className="opa-btn ghost" onClick={() => selectRun('')}>Clear</button>
@@ -1441,45 +1655,23 @@ export default function Security() {
         </div>
       )}
 
-      {tab === 'vulns' && (
+      {onFindings && (
         <>
-          <div className="opa-grid cols-4">
-            <KpiTile label="Findings" icon={<FiShield size={12} />} value={fmtNum(s.findings || 0)} status="neutral" />
-            <KpiTile label="Critical / High" icon={<FiAlertTriangle size={12} />} value={fmtNum((Number(s.critical) || 0) + (Number(s.high) || 0))}
-              status={Number(s.critical) || Number(s.high) ? 'error' : 'neutral'} />
-            <KpiTile label="Observed in prod" icon={<FiEye size={12} />} value={fmtNum(s.observed || 0)}
-              status={Number(s.observed) ? 'warn' : 'neutral'}
-              footer={<span className="opa-muted" style={{ fontSize: 11 }}>not observed ≠ safe</span>} />
-            <KpiTile label="Not observed" icon={<FiEyeOff size={12} />} value={fmtNum(s.not_observed || 0)} status="neutral" />
-          </div>
-          <Panel title="Findings (reachability-ranked)" icon={<FiShield />} flush loading={findings.loading} error={findings.error}
-            empty={!findings.loading && vulnRows.length === 0} emptyText="POST a SBOM to /v1/sbom to seed inventory + match advisories">
-            <DataTable columns={vulnCols} rows={vulnRows} rowKey={(r, i) => `${r.advisory_id}:${r.package_name}:${i}`} maxHeight={480} />
-          </Panel>
-        </>
-      )}
-
-      {tab === 'iast' && (
-        <>
-          <div className="opa-grid cols-4">
-            <KpiTile label="Findings (24h)" icon={<FiCrosshair size={12} />} value={fmtNum(is.findings || 0)} status="neutral" />
-            <KpiTile label="SQL" value={fmtNum(is.sql_sinks || 0)} status="neutral" />
-            <KpiTile label="Command" value={fmtNum(is.command_sinks || 0)} status="neutral" />
-            <KpiTile label="File / Deserialize" value={fmtNum((Number(is.file_sinks) || 0) + (Number(is.deserialize_sinks) || 0))} status="neutral" />
-          </div>
-          <Panel title="Runtime sink detections" icon={<FiCrosshair />} flush loading={iast.loading} error={iast.error}
-            empty={!iast.loading && iastRows.length === 0} emptyText="No IAST findings — enable OPA_IAST=1 / opa.iast on PHP (block is opt-in via opa.iast_block). IAST is runtime-only and cannot be started from Scans.">
-            <DataTable columns={iastCols} rows={iastRows} rowKey={(r, i) => `${r.sink}:${r.scraped_at}:${i}`} maxHeight={480} />
-          </Panel>
-        </>
-      )}
-
-      {tab === 'secrets' && (
-        <Panel title="Secret findings" icon={<FiKey />} flush loading={secrets.loading} error={secrets.error}
-          empty={!secrets.loading && filteredSecrets.length === 0}
-          emptyText="Start a scan from the Scans tab, or POST to /v1/security/secrets"
-          actions={
-            <label className="opa-muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="opa-findings-types" role="tablist" aria-label="Finding type">
+            {FINDINGS_TYPE_META.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={findingsType === t.id}
+                className={`opa-findings-type${findingsType === t.id ? ' active' : ''}`}
+                onClick={() => selectFindingsType(t.id)}
+              >
+                {t.label}{' '}
+                <strong className="opa-mono">{fmtNum(findingsTypeCounts[t.id] || 0)}</strong>
+              </button>
+            ))}
+            <label className="opa-findings-sev opa-muted">
               Min sev
               <select value={minSev} onChange={(e) => saveSev(e.target.value)}>
                 <option value="critical">critical</option>
@@ -1488,31 +1680,142 @@ export default function Security() {
                 <option value="low">low</option>
               </select>
             </label>
-          }>
-          <div className="opa-muted" style={{ fontSize: 11, padding: '8px 12px 0' }}>
-            Detector chip shows <Badge>gitleaks</Badge> when the Agent image has the CLI, otherwise <Badge>embedded-secret-scan</Badge> (lite regex).
           </div>
-          <DataTable columns={secretCols} rows={filteredSecrets} rowKey={(r, i) => `${r.rule}:${r.file}:${i}`} maxHeight={480} />
-        </Panel>
+
+          <div className="opa-grid cols-4">
+            <KpiTile label="Open" icon={<FiShield size={12} />} value={fmtNum(unifiedFindings.length)} status="neutral" />
+            <KpiTile
+              label="Critical / High"
+              icon={<FiAlertTriangle size={12} />}
+              value={fmtNum(unifiedFindings.filter((f) => f.sev === 'critical' || f.sev === 'high').length)}
+              status={unifiedFindings.some((f) => f.sev === 'critical' || f.sev === 'high') ? 'error' : 'neutral'}
+            />
+            <KpiTile
+              label="Observed (CVE)"
+              icon={<FiEye size={12} />}
+              value={fmtNum(s.observed || 0)}
+              status={Number(s.observed) ? 'warn' : 'neutral'}
+              footer={<span className="opa-muted" style={{ fontSize: 11 }}>not observed ≠ safe</span>}
+            />
+            <KpiTile
+              label="IAST (24h)"
+              icon={<FiCrosshair size={12} />}
+              value={fmtNum(is.findings || 0)}
+              status="neutral"
+            />
+          </div>
+
+          <div className="opa-findings-split">
+            <Panel
+              title="Findings inbox"
+              icon={<FiShield />}
+              flush
+              loading={findings.loading || iast.loading || secrets.loading || sast.loading || iac.loading}
+              error={findings.error || iast.error || secrets.error || sast.error || iac.error}
+              empty={!findings.loading && !iast.loading && !secrets.loading && !sast.loading && !iac.loading && unifiedFindings.length === 0}
+              emptyText="No findings at this severity — start a scan or lower the filter"
+            >
+              <div className="opa-muted" style={{ fontSize: 11, padding: '8px 12px 0' }}>
+                Detector chips stay honest: gitleaks vs lite, sast-lite, iac stub. CVE uses reachability ranking.
+              </div>
+              <div className="opa-findings-table-wrap">
+                <table className="opa-findings-table">
+                  <thead>
+                    <tr>
+                      <th>Sev</th>
+                      <th>Type</th>
+                      <th>Target</th>
+                      <th>Finding</th>
+                      <th>Detector</th>
+                      <th>Ctx</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unifiedFindings.map((f) => (
+                      <tr
+                        key={f.key}
+                        className={selectedFinding?.key === f.key ? 'selected' : ''}
+                        onClick={() => setSelectedFindingKey(f.key)}
+                      >
+                        <td><StatusPill tone={sevTone(f.sev)}>{f.sev}</StatusPill></td>
+                        <td><Badge>{f.type}</Badge></td>
+                        <td className="opa-mono" style={{ fontSize: 11 }}>{f.target}</td>
+                        <td>
+                          <div className="cell-strong">{f.title}</div>
+                          <div className="opa-muted opa-mono" style={{ fontSize: 11 }}>{f.where}</div>
+                        </td>
+                        <td><Badge>{f.detector}</Badge></td>
+                        <td className="opa-mono" style={{ fontSize: 11 }}>{f.ctx}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+
+            <Panel
+              title="Detail"
+              icon={<FiEye />}
+              actions={selectedFinding?.runId ? (
+                <Link to={securityRunHref(selectedFinding.runId)} className="opa-btn ghost" style={{ textDecoration: 'none' }}>
+                  Open run
+                </Link>
+              ) : null}
+            >
+              {!selectedFinding ? (
+                <div className="opa-muted">Select a finding.</div>
+              ) : (
+                <div className="opa-findings-detail">
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                    <StatusPill tone={sevTone(selectedFinding.sev)}>{selectedFinding.sev}</StatusPill>
+                    <Badge>{selectedFinding.type}</Badge>
+                    <span className="opa-muted" style={{ fontSize: 12 }}>{selectedFinding.detector}</span>
+                  </div>
+                  <div className="cell-strong" style={{ fontSize: 14 }}>{selectedFinding.title}</div>
+                  <div className="opa-muted opa-mono" style={{ fontSize: 12, marginTop: 4 }}>{selectedFinding.where}</div>
+                  <div className="opa-findings-meta">
+                    <div>
+                      <span className="opa-muted">Service</span>
+                      <div className="opa-mono" style={{ fontSize: 12 }}>
+                        {selectedFinding.service
+                          ? <Link to={serviceHref(selectedFinding.service)}>{selectedFinding.service}</Link>
+                          : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="opa-muted">Context</span>
+                      <div className="opa-mono" style={{ fontSize: 12 }}>{selectedFinding.ctx}</div>
+                    </div>
+                  </div>
+                  {selectedFinding.snippet ? (
+                    <div className="opa-findings-snippet">
+                      <strong>Snippet</strong>
+                      <div className="opa-mono" style={{ fontSize: 11 }}>{selectedFinding.snippet}</div>
+                    </div>
+                  ) : null}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="opa-btn ghost"
+                      onClick={() => {
+                        const text = selectedFinding.where || selectedFinding.title || ''
+                        if (text && navigator.clipboard?.writeText) {
+                          navigator.clipboard.writeText(text).then(() => flash('ok', 'Copied path')).catch(() => {})
+                        }
+                      }}
+                    >
+                      Copy path
+                    </button>
+                    <button type="button" className="opa-btn ghost" onClick={() => selectTab('scans')}>Scans</button>
+                  </div>
+                </div>
+              )}
+            </Panel>
+          </div>
+        </>
       )}
 
-      {tab === 'sast' && (
-        <Panel title="SAST-lite findings" icon={<FiCode />} flush loading={sast.loading} error={sast.error}
-          empty={!sast.loading && sastRows.length === 0}
-          emptyText="Start a lite SAST scan from Scans, or POST to /v1/security/sast — pattern scan, not a full SAST engine">
-          <DataTable columns={sastCols} rows={sastRows} rowKey={(r, i) => `${r.rule}:${r.file}:${i}`} maxHeight={480} />
-        </Panel>
-      )}
-
-      {tab === 'iac' && (
-        <Panel title="IaC / container findings" icon={<FiServer />} flush loading={iac.loading} error={iac.error}
-          empty={!iac.loading && iacRows.length === 0}
-          emptyText="Start an IaC/container lite scan from Scans, or POST /v1/security/iac — stub heuristics">
-          <DataTable columns={iacCols} rows={iacRows} rowKey={(r, i) => `${r.kind}:${r.rule}:${r.file}:${i}`} maxHeight={480} />
-        </Panel>
-      )}
-
-      {tab === 'scans' && (
+      {onScans && (
         <>
           <Panel title="Start security scan" icon={<FiPlay />}
             actions={
@@ -1591,24 +1894,50 @@ export default function Security() {
           {activeRunId && (
             <Panel title="Active run" icon={<FiShield />}
               actions={<button type="button" className="opa-btn ghost" onClick={() => selectRun('')}>Clear</button>}>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
                 <span className="opa-mono" style={{ fontSize: 12 }}>{activeRunId}</span>
-                <StatusPill tone="neutral">{runDetail?.status || '—'}</StatusPill>
+                <StatusPill tone={
+                  String(runDetail?.status || '').includes('error') || runDetail?.status === 'failed' ? 'error'
+                    : runDetail?.status === 'completed' ? 'ok'
+                      : runDetail?.status === 'running' ? 'warn'
+                        : 'neutral'
+                }>
+                  {runDetail?.status || '—'}
+                </StatusPill>
                 {runDetail?.service && <Link to={serviceHref(runDetail.service)}>{runDetail.service}</Link>}
-                <button type="button" className="opa-btn ghost" onClick={() => { selectTab('secrets'); }}>View secrets</button>
-                <button type="button" className="opa-btn ghost" onClick={() => { selectTab('sast'); }}>View SAST</button>
-                <button type="button" className="opa-btn ghost" onClick={() => { selectTab('iac'); }}>View IaC</button>
+                <button type="button" className="opa-btn ghost" onClick={() => selectFindingsType('secrets')}>View secrets</button>
+                <button type="button" className="opa-btn ghost" onClick={() => selectFindingsType('sast')}>View SAST</button>
+                <button type="button" className="opa-btn ghost" onClick={() => selectFindingsType('iac')}>View IaC</button>
+                <button type="button" className="opa-btn ghost" onClick={() => selectFindingsType('all')}>All findings</button>
               </div>
-              <pre className="opa-mono" style={{ fontSize: 11, background: 'var(--surface-2)', padding: 12, overflow: 'auto' }}>
-                {JSON.stringify({
-                  status: runDetail?.status,
-                  summary: parseSummary(runDetail),
-                  findings: runFindings?.counts,
-                  error: runDetail?.error,
-                  honesty: parseSummary(runDetail)?.honesty || 'gitleaks|lite secrets; other scanners lite/stub',
-                  secrets_detector: parseSummary(runDetail)?.secrets_detector,
-                }, null, 2)}
-              </pre>
+              <div className="opa-scan-timeline" aria-label="Scanner timeline">
+                {runTimelineSteps.map((st) => (
+                  <div key={st.scanner} className="opa-scan-step">
+                    <StatusPill tone={
+                      st.status === 'completed' ? 'ok'
+                        : st.status === 'failed' ? 'error'
+                          : st.status === 'running' ? 'warn'
+                            : 'neutral'
+                    }>
+                      {st.status}
+                    </StatusPill>
+                    <span className="cell-strong">{st.scanner}</span>
+                    <span className="opa-muted" style={{ fontSize: 12 }}>{st.detail}</span>
+                  </div>
+                ))}
+                {!runTimelineSteps.length && (
+                  <div className="opa-muted" style={{ fontSize: 12 }}>Waiting for scanner progress…</div>
+                )}
+              </div>
+              {(parseSummary(runDetail)?.honesty || runDetail?.error) && (
+                <div className="opa-findings-snippet" style={{ marginTop: 12 }}>
+                  <strong>Honesty</strong>
+                  <div style={{ fontSize: 12 }}>
+                    {parseSummary(runDetail)?.honesty || 'gitleaks|lite secrets; other scanners lite/stub'}
+                    {runDetail?.error ? ` · ${runDetail.error}` : ''}
+                  </div>
+                </div>
+              )}
             </Panel>
           )}
 
@@ -1619,14 +1948,41 @@ export default function Security() {
         </>
       )}
 
-      {tab === 'inventory' && (
+      {onControl && (
+        <div className="opa-watch-modes opa-control-modes" role="tablist" aria-label="Control sections">
+          {CONTROL_SECTION_META.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={controlSection === m.id}
+              className={`opa-watch-mode${controlSection === m.id ? ' active' : ''}`}
+              onClick={() => selectControlSection(m.id)}
+            >
+              <strong>{m.label}</strong>
+              <span>{m.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(onControl && controlSection === 'agents') && (
+        <AgentsTab
+          connectors={connectorList}
+          toast={toast}
+          activeConnector={activeConnector}
+          onConnectorChange={setActiveConnector}
+        />
+      )}
+
+      {(onControl && controlSection === 'inventory') && (
         <Panel title="Service dependencies" icon={<FiShield />} flush loading={inventory.loading} error={inventory.error}
           empty={!inventory.loading && pkgRows.length === 0} emptyText="No inventory yet — run an SBOM scan or POST /v1/sbom">
           <DataTable columns={invCols} rows={pkgRows} rowKey={(r, i) => `${r.service}:${r.package_name}:${r.version}:${i}`} maxHeight={520} />
         </Panel>
       )}
 
-      {tab === 'policies' && (
+      {(onControl && controlSection === 'policies') && (
         <Panel title="Policies" icon={<FiSliders />} loading={policies.loading}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
             Local severity threshold is stored in <code>localStorage</code> (<code>{SEV_KEY}</code>).
@@ -1650,10 +2006,10 @@ export default function Security() {
         </Panel>
       )}
 
-      {tab === 'pr' && (
+      {(onControl && controlSection === 'gate') && (
         <Panel title="AppSec Gate" icon={<FiCheckCircle />} loading={prCheck.loading} error={prCheck.error}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
-            <strong>Tenant gate</strong> aggregates all findings (legacy CI). Prefer <strong>scoped</strong> checks with
+            <strong>Tenant gate</strong> aggregates all findings (tenant-wide). Prefer <strong>scoped</strong> checks with
             {' '}<code>security_run_id</code> from Repo Watch / Scans.
             CI: <code>POST /v1/security/pr-check</code> with <code>X-OPA-Security-Token</code>.
           </p>
@@ -1669,26 +2025,27 @@ export default function Security() {
         </Panel>
       )}
 
-      {tab === 'watch' && (
-        <>
-          <Panel title="Repo Watch" icon={<FiShield />}
-            loading={connectors.loading}
-            error={connectors.error}
-            actions={
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" className="opa-btn ghost" disabled={busy} onClick={simulateJob}>Simulate PR job</button>
-                <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
-                  <FiRefreshCw size={12} /> Refresh
-                </button>
-              </div>
-            }>
-            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Pick an SCM connector, then choose repositories to watch.
-              Connect / edit / delete connectors under{' '}
-              <Link to="/settings/connectors">Settings · Connectors</Link>.
-              {' '}App configured: {connectors.data?.github_app_configured ? 'yes' : 'no'}.
-            </p>
+      {onOps && (
+        <div className="opa-watch-modes opa-ops-modes" role="tablist" aria-label="PR Ops modes">
+          {OPS_MODE_META.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={opsMode === m.id}
+              className={`opa-watch-mode${opsMode === m.id ? ' active' : ''}`}
+              onClick={() => selectOpsMode(m.id)}
+            >
+              <strong>{m.label}</strong>
+              <span>{m.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
+      {onOpsWatch && (
+        <>
+          <div className="opa-watch-conn">
             <ConnectorPicker
               connectors={connectorList}
               loading={connectors.loading}
@@ -1705,541 +2062,629 @@ export default function Security() {
                     : ' — no decryptable PAT. Replace the token or reconnect on the Connectors page.'
               }
             />
-
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, marginBottom: 12, maxWidth: 420 }}>
-              Extra repos (optional)
-              <input
-                className="opa-mono"
-                value={extraRepos}
-                onChange={(e) => setExtraRepos(e.target.value)}
-                placeholder="org/name … if not in list"
-              />
-            </label>
-
-            <div className="opa-watch-checks">
-              <div className="opa-watch-checks-title">Checks included in each PR job</div>
-              {[
-                { id: 'secrets', label: 'Secrets', hint: 'Scan the PR diff for leaked credentials and API keys before merge.' },
-                { id: 'sast', label: 'SAST', hint: 'Static analysis for common insecure patterns in changed files.' },
-                { id: 'iac', label: 'IaC', hint: 'Check Terraform / K8s / CloudFormation diffs for misconfigurations.' },
-                { id: 'sbom', label: 'SBOM', hint: 'Generate or update dependency inventory for this PR’s lockfiles.' },
-                { id: 'ai_review', label: 'OPA Review (AI)', hint: 'Enqueue the Bugbot AI review child when this repo is watched.' },
-              ].map((c) => (
-                <CheckWithHint
-                  key={c.id}
-                  id={`watch-check-${c.id}`}
-                  label={c.label}
-                  hint={c.hint}
-                  checked={!!watchPolicy.checks[c.id]}
-                  onChange={(checked) => setWatchPolicy((p) => ({
-                    ...p,
-                    checks: { ...p.checks, [c.id]: checked },
-                  }))}
-                />
-              ))}
+            <div className="opa-watch-conn-meta">
+              <span className="opa-muted" style={{ fontSize: 12 }}>
+                Installed ≠ watched ≠ spend · App configured: {connectors.data?.github_app_configured ? 'yes' : 'no'}
+              </span>
+              <button type="button" className="opa-btn ghost" disabled={busy} onClick={simulateJob}>Simulate PR job</button>
+              <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
+                <FiRefreshCw size={12} /> Refresh
+              </button>
             </div>
-            <div className="opa-watch-toggles">
-              <PrefRow
-                label="AI blocking"
-                hint="Whether a failing Bugbot/approval child fails the GitHub Check Run and blocks merge."
-                on={!!watchPolicy.ai_blocking}
-                effectOn="OPA Review check fails when AI or approval blocks the PR."
-                effectOff="Findings stay advisory — gate can still pass independently."
-                as="label"
-              >
-                <input
-                  type="checkbox"
-                  checked={!!watchPolicy.ai_blocking}
-                  onChange={(e) => setWatchPolicy((p) => ({ ...p, ai_blocking: e.target.checked }))}
-                />
-              </PrefRow>
-              <PrefRow
-                label="Auto-request as reviewer"
-                hint="Ask GitHub to request the OPA Review bot as a reviewer when a PR opens."
-                on={!!watchPolicy.auto_request_reviewer}
-                effectOn="Bot is requested on open/reopen so humans see it in the reviewers list."
-                effectOff="Reviews still run via checks/comments — no reviewer request."
-                as="label"
-              >
-                <input
-                  type="checkbox"
-                  checked={!!watchPolicy.auto_request_reviewer}
-                  onChange={(e) => setWatchPolicy((p) => ({ ...p, auto_request_reviewer: e.target.checked }))}
-                />
-              </PrefRow>
-              <PrefRow
-                label="Min approve score"
-                hint="Lowest score that auto-approval may grant without a human (0 = COMMENT only)."
-              >
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  style={{ width: 64 }}
-                  value={watchPolicy.auto_approve_min_score}
-                  onChange={(e) => setWatchPolicy((p) => ({
-                    ...p,
-                    auto_approve_min_score: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
-                  }))}
-                  title="0 = COMMENT only; 1–100 = APPROVE when confidence ≥ score, else REQUEST_CHANGES"
-                />
-              </PrefRow>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" className="opa-btn primary" disabled={busy || !activeConnector} onClick={saveWatched}>Save watched repos</button>
-            </div>
-          </Panel>
+          </div>
 
-          <Panel title="Available repositories" icon={<FiEye />}
-            loading={reposLoading}
-            actions={
-              activeConnector ? (
-                <button type="button" className="opa-btn ghost" disabled={reposLoading} onClick={() => setWatchRefresh((n) => n + 1)}>
-                  <FiRefreshCw size={12} /> Reload list
-                </button>
-              ) : null
-            }>
-            {!activeConnector && (
-              <div className="opa-muted">Select or <Link to="/settings/connectors">connect a connector</Link> to load installable repos from <code>GET /api/connectors/{'{id}'}/repos</code>.</div>
-            )}
-            {activeConnector && reposMeta.error && (
-              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 13 }}>
-                Could not list repos: <span className="opa-mono">{String(reposMeta.error)}</span>
-                {reposMeta.note ? <> — {reposMeta.note}</> : null}
-                {reposMeta.error === 'connector_not_in_memory' || reposMeta.error === 'connector_token_unavailable' || reposMeta.error === 'connector_not_found' || reposMeta.error === 'connector_token_missing'
-                  ? <> <Link to={`/settings/connectors?edit=${encodeURIComponent(activeConnector)}`}>Replace token</Link> on Connectors (Agent needs stable JWT_SECRET / OPA_CONNECTOR_SECRET).</>
-                  : String(reposMeta.error).includes('401') || String(reposMeta.error).includes('403')
-                    ? <> Check PAT scopes / org SSO, then <Link to={`/settings/connectors?edit=${encodeURIComponent(activeConnector)}`}>replace the token</Link>.</>
-                    : <> Use checkboxes after listing, or type extra org/name above and Save.</>}
-              </div>
-            )}
-            {activeConnector && reposMeta.mock && !reposMeta.error && (
-              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 12 }}>
-                Mock list (<code>OPA_SCM_MOCK_GITHUB=1</code>) — not calling GitHub.
-                <Link to="/settings/connectors">Connect a real PAT</Link> to load your repos
-                (smoke mock is bypassed for real tokens).
-                {reposMeta.note ? <> {reposMeta.note}</> : null}
-              </div>
-            )}
-            {activeConnector && !reposMeta.mock && !reposMeta.error && reposMeta.note && (
-              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 12 }}>{reposMeta.note}</div>
-            )}
-            {activeConnector && !reposLoading && availableRepos.length === 0 && !reposMeta.error && (
-              <div className="opa-muted">No installable repos returned. Add org/name in Extra repos and Save, or check PAT scopes.</div>
-            )}
-            {availableRepos.length > 0 && (
-              <>
-                <div className="opa-multiselect-head">
-                  <span className="opa-muted" style={{ fontSize: 12 }}>{availableRepos.length} repos</span>
-                  <MultiSelectActions
-                    disabled={reposLoading}
-                    onSelectAll={() => setAllAvailableRepos(true)}
-                    onClear={() => setAllAvailableRepos(false)}
-                  />
-                </div>
-                <div style={{ display: 'grid', gap: 6, maxHeight: 280, overflow: 'auto' }}>
-                  {availableRepos.map((r) => {
-                    const name = r.full_name || r.repo_full_name
-                    if (!name) return null
+          <div className="opa-watch-kpi">
+            <div className="opa-watch-kpi-card">
+              <span className="opa-watch-kpi-label">Watched & enabled</span>
+              <span className="opa-watch-kpi-val ok">{watchedRows.filter((r) => r.enabled).length}</span>
+            </div>
+            <div className="opa-watch-kpi-card">
+              <span className="opa-watch-kpi-label">Disabled</span>
+              <span className="opa-watch-kpi-val">{watchedRows.filter((r) => !r.enabled).length}</span>
+            </div>
+            <div className="opa-watch-kpi-card">
+              <span className="opa-watch-kpi-label">Jobs (loaded)</span>
+              <span className="opa-watch-kpi-val info">{fmtNum(scmJobTotal)}</span>
+            </div>
+            <div className="opa-watch-kpi-card">
+              <span className="opa-watch-kpi-label">AI blocking on</span>
+              <span className="opa-watch-kpi-val">{watchedRows.filter((r) => r.enabled && r.ai_blocking).length}</span>
+            </div>
+          </div>
+
+          {watchMode === 'repos' && (
+            <div className="opa-watch-split">
+              <Panel title="Watched repositories" icon={<FiEye />} flush
+                loading={reposLoading && !watchedRows.length}
+                empty={!reposLoading && !watchedRows.length && !addReposOpen}
+                emptyText="Add repos from the catalog, then Save watch set"
+                actions={(
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" className="opa-btn ghost" onClick={() => setAddReposOpen((v) => !v)}>
+                      {addReposOpen ? 'Hide catalog' : 'Add repos'}
+                    </button>
+                    <button type="button" className="opa-btn primary" disabled={busy || !activeConnector} onClick={saveWatched}>
+                      Save watch set
+                    </button>
+                  </div>
+                )}>
+                <div className="opa-watch-list">
+                  {watchedRows.map((r) => {
+                    const checks = parseChecksJson(r.checks_json)
+                    const selected = r.repo_full_name === selectedWatchRepo
                     return (
-                      <label key={name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                        <input type="checkbox" checked={!!repoPick[name]} onChange={() => toggleRepoPick(name)} />
-                        <span className="opa-mono cell-strong">{name}</span>
-                        {r.private ? <Badge>private</Badge> : null}
-                        {r.mock ? <span className="opa-muted" style={{ fontSize: 11 }}>mock</span> : null}
-                      </label>
+                      <button
+                        key={r.id || r.repo_full_name}
+                        type="button"
+                        className={`opa-watch-list-row${selected ? ' selected' : ''}${r.enabled ? '' : ' dim'}`}
+                        onClick={() => setSelectedWatchRepo(r.repo_full_name)}
+                      >
+                        <div>
+                          <div className="opa-mono cell-strong">{r.repo_full_name}</div>
+                          <div className="opa-muted" style={{ fontSize: 11 }}>
+                            {(checks.length ? checks.join(' · ') : 'no checks')}
+                            {r.service_name ? ` · ${r.service_name}` : ''}
+                          </div>
+                        </div>
+                        <div className="opa-watch-list-badges">
+                          {r.ai_blocking ? <StatusPill tone="warn">AI block</StatusPill> : null}
+                          <StatusPill tone={r.enabled ? 'ok' : 'neutral'}>{r.enabled ? 'on' : 'off'}</StatusPill>
+                        </div>
+                      </button>
                     )
                   })}
                 </div>
-              </>
-            )}
-          </Panel>
-
-          <Panel title="Watched repositories" icon={<FiEye />} flush
-            empty={!reposLoading && !watchedRows.length}
-            emptyText="Pick repos above and click Save watched repos">
-            <DataTable
-              columns={[
-                { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono cell-strong">{r.repo_full_name}</span> },
-                { key: 'service_name', header: 'Service', render: (r) => (r.service_name ? <Link to={serviceHref(r.service_name)}>{r.service_name}</Link> : '—') },
-                { key: 'profile', header: 'Profile', render: (r) => <Badge>{r.profile || 'auto'}</Badge> },
-                { key: 'checks_json', header: 'Checks', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{r.checks_json || '—'}</span> },
-                {
-                  key: 'min_severity', header: 'Min sev',
-                  render: (r) => (r.min_severity
-                    ? <StatusPill tone={sevTone(r.min_severity)}>{r.min_severity}</StatusPill>
-                    : '—'),
-                },
-                { key: 'ai_blocking', header: 'AI block', render: (r) => (r.ai_blocking ? 'yes' : 'no') },
-                { key: 'auto_request_reviewer', header: 'Auto reviewer', render: (r) => (r.auto_request_reviewer ? 'yes' : 'no') },
-                {
-                  key: 'auto_approve_min_score', header: 'Min score',
-                  render: (r) => (Number(r.auto_approve_min_score) > 0 ? String(r.auto_approve_min_score) : '—'),
-                },
-                {
-                  key: 'enabled',
-                  header: 'On',
-                  render: (r) => (
-                    <input
-                      type="checkbox"
-                      checked={!!r.enabled}
-                      onChange={() => toggleWatchedEnabled(r.repo_full_name)}
-                      aria-label={`Enable ${r.repo_full_name}`}
-                    />
-                  ),
-                },
-              ]}
-              rows={watchedRows}
-              rowKey={(r) => r.id || r.repo_full_name}
-              maxHeight={320}
-            />
-          </Panel>
-
-          <Panel title="Run OPA Review" icon={<FiPlay />}>
-            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Select one or more watched repos and open PRs, then enqueue an <strong>OPA Review stack</strong>
-              (one job per repo×PR). Large selections stay in one stack — extras <strong>wait</strong> and drain
-              with stack concurrency (default serial). Each job packs <strong>full primary</strong> context for that repo plus
-              <strong>linked awareness</strong>. Findings post inline (re-runs add/update/resolve); the global PR message is a narrative résumé upserted in place.
-              Related repos are shallow-cloned under the job checkout for cross-repo context. Open a job’s findings page from PR Jobs for experimental Auto-fix / Create fix PR (requires OPA-AI-Orchestrator).
-              {!scmSettings.data?.cursor_key_set && (
-                <>
-                  {' '}
-                  <span style={{ color: 'var(--danger, #c44)' }}>No CLI agent API key</span>
-                  {' '}for user <code>{scmSettings.data?.user_id || '—'}</code>
-                  {' '}in org <code>{scmSettings.data?.organization_id || '—'}</code>
-                  {' '}— manage under <Link to="/settings/account">Account</Link> (personal for this username, or org).
-                  {' '}Keys do not transfer across usernames. Jobs still run with <code>ai.status=skipped</code>.
-                </>
-              )}
-              {scmSettings.data?.cursor_key_set && scmSettings.data?.cursor_key_scope && (
-                <> CLI key scope: <code>{scmSettings.data.cursor_key_scope}</code>
-                  {scmSettings.data?.user_id ? <> · user <code>{scmSettings.data.user_id}</code></> : null}.
-                </>
-              )}
-              {scmSettings.data?.skip_cursor_ai && <> Agent has OPA Review skipped (<code>SKIP_CURSOR_AI=1</code>).</>}
-            </p>
-            <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
-              <div className="cell-strong">Watched repos</div>
-              <MultiSelectActions
-                disabled={!watchedRows.length}
-                onSelectAll={() => setAllReviewRepos(true)}
-                onClear={() => setAllReviewRepos(false)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
-              {watchedRows.map((r) => (
-                <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={!!reviewRepos[r.repo_full_name]}
-                    onChange={(e) => {
-                      const on = e.target.checked
-                      setReviewRepos((p) => ({ ...p, [r.repo_full_name]: on }))
-                      if (!on) {
-                        setReviewPrs((prev) => {
-                          const next = { ...prev }
-                          const prefix = `${r.repo_full_name}#`
-                          for (const key of Object.keys(next)) {
-                            if (key.startsWith(prefix)) next[key] = false
-                          }
-                          return next
-                        })
-                      }
-                    }}
-                  />
-                  <span className="opa-mono">{r.repo_full_name}</span>
-                </label>
-              ))}
-              {!watchedRows.length && <span className="opa-muted">Watch a repo first</span>}
-            </div>
-            <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
-              <div className="cell-strong">
-                Open PRs {pullsLoading ? '(loading…)' : ''}
-                {!!Object.values(reviewPrs).filter(Boolean).length && (
-                  <span className="opa-muted"> · {Object.values(reviewPrs).filter(Boolean).length} selected
-                    {Object.values(reviewPrs).filter(Boolean).length > 40 ? ' (will wait in one stack)' : ''}
-                  </span>
-                )}
-              </div>
-              <MultiSelectActions
-                disabled={!selectedReviewRepos.length || pullsLoading || !selectedReviewRepos.some((repo) => (pullsByRepo[repo] || []).length)}
-                onSelectAll={() => setReviewPrsForRepos(selectedReviewRepos, true)}
-                onClear={() => setReviewPrsForRepos(selectedReviewRepos, false)}
-              />
-            </div>
-            <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
-              {selectedReviewRepos.map((repo) => {
-                const pulls = pullsByRepo[repo] || []
-                return (
-                  <div key={repo} style={{ padding: 8, background: 'var(--surface-2)', borderRadius: 6 }}>
-                    <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
-                      <div className="opa-mono" style={{ fontSize: 12 }}>{repo}</div>
+                {addReposOpen && (
+                  <div className="opa-watch-catalog">
+                    <div className="opa-multiselect-head">
+                      <span className="opa-muted" style={{ fontSize: 12 }}>
+                        {!activeConnector ? 'Select a connector first' : `${availableRepos.length} available`}
+                      </span>
                       <MultiSelectActions
-                        disabled={!pulls.length || pullsLoading}
-                        onSelectAll={() => setReviewPrsForRepos([repo], true)}
-                        onClear={() => setReviewPrsForRepos([repo], false)}
+                        disabled={reposLoading || !availableRepos.length}
+                        onSelectAll={() => setAllAvailableRepos(true)}
+                        onClear={() => setAllAvailableRepos(false)}
                       />
                     </div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
-                      {pulls.map((p) => {
-                        const key = `${repo}#${p.number}`
+                    {activeConnector && reposMeta.error && (
+                      <div className="opa-muted" style={{ margin: '0 12px 8px', fontSize: 12 }}>
+                        Could not list repos: <span className="opa-mono">{String(reposMeta.error)}</span>
+                        {reposMeta.note ? <> — {reposMeta.note}</> : null}
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gap: 4, maxHeight: 200, overflow: 'auto', padding: '0 12px 10px' }}>
+                      {availableRepos.map((r) => {
+                        const name = r.full_name || r.repo_full_name
+                        if (!name) return null
+                        const already = watchedRows.some((w) => w.repo_full_name === name)
                         return (
-                          <label key={key} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                            <input
-                              type="checkbox"
-                              checked={!!reviewPrs[key]}
-                              onChange={(e) => setReviewPrs((prev) => ({ ...prev, [key]: e.target.checked }))}
-                            />
-                            #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
+                          <label key={name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                            <input type="checkbox" checked={!!repoPick[name]} onChange={() => toggleRepoPick(name)} />
+                            <span className="opa-mono cell-strong">{name}</span>
+                            {already ? <Badge>watched</Badge> : null}
+                            {r.private ? <Badge>private</Badge> : null}
                           </label>
                         )
                       })}
-                      {!pulls.length && !pullsLoading && <span className="opa-muted">No open PRs</span>}
+                    </div>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, margin: '0 12px 12px', maxWidth: 420 }}>
+                      Extra repos (optional)
+                      <input
+                        className="opa-mono"
+                        value={extraRepos}
+                        onChange={(e) => setExtraRepos(e.target.value)}
+                        placeholder="org/name … if not in list"
+                      />
+                    </label>
+                  </div>
+                )}
+              </Panel>
+
+              <Panel
+                title={selectedWatchRow?.repo_full_name || 'Select a repo'}
+                icon={<FiShield />}
+                className="opa-watch-inspector"
+                actions={selectedWatchRow ? (
+                  <button type="button" className="opa-btn ghost" onClick={() => { setWatchMode('run'); setReviewRepos((p) => ({ ...p, [selectedWatchRow.repo_full_name]: true })) }}>
+                    Run review…
+                  </button>
+                ) : null}
+              >
+                {!selectedWatchRow && (
+                  <div className="opa-muted">Pick a watched repository to edit its gate, checks, and AI prefs.</div>
+                )}
+                {selectedWatchRow && (
+                  <div className="opa-watch-inspector-body">
+                    <PrefRow
+                      label="Enabled"
+                      hint="Master gate — whether PR webhooks create paid jobs for this repo."
+                      on={!!selectedWatchRow.enabled}
+                      effectOn="PR events enqueue jobs and agent children."
+                      effectOff="Receipts only — no AI spend."
+                      as="label"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!selectedWatchRow.enabled}
+                        onChange={() => toggleWatchedEnabled(selectedWatchRow.repo_full_name)}
+                      />
+                    </PrefRow>
+                    <PrefRow
+                      label="AI blocking"
+                      hint="Fail the GitHub Check Run when Bugbot/approval blocks."
+                      on={!!selectedWatchRow.ai_blocking}
+                      effectOn="OPA Review check fails when AI blocks."
+                      effectOff="Findings stay advisory."
+                      as="label"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!selectedWatchRow.ai_blocking}
+                        disabled={!selectedWatchRow.enabled}
+                        onChange={(e) => patchWatchedRow(selectedWatchRow.repo_full_name, { ai_blocking: e.target.checked })}
+                      />
+                    </PrefRow>
+                    <PrefRow
+                      label="Auto-request as reviewer"
+                      hint="Request the OPA Review bot on PR open/reopen."
+                      on={!!selectedWatchRow.auto_request_reviewer}
+                      effectOn="Bot appears in the reviewers list."
+                      effectOff="Checks/comments only — no reviewer request."
+                      as="label"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!selectedWatchRow.auto_request_reviewer}
+                        disabled={!selectedWatchRow.enabled}
+                        onChange={(e) => patchWatchedRow(selectedWatchRow.repo_full_name, { auto_request_reviewer: e.target.checked })}
+                      />
+                    </PrefRow>
+                    <PrefRow label="Min approve score" hint="0 = COMMENT only; 1–100 = APPROVE when confidence ≥ score.">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        style={{ width: 64 }}
+                        disabled={!selectedWatchRow.enabled}
+                        value={Number(selectedWatchRow.auto_approve_min_score) || 0}
+                        onChange={(e) => patchWatchedRow(selectedWatchRow.repo_full_name, {
+                          auto_approve_min_score: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                        })}
+                      />
+                    </PrefRow>
+                    <div className="opa-watch-checks-title">Checks for this repo</div>
+                    <div className="opa-watch-checks">
+                      {WATCH_CHECK_OPTS.map((c) => {
+                        const checks = parseChecksJson(selectedWatchRow.checks_json)
+                        const on = checks.includes(c.id)
+                        return (
+                          <CheckWithHint
+                            key={c.id}
+                            id={`watch-row-check-${c.id}`}
+                            label={c.label}
+                            hint={c.hint}
+                            checked={on}
+                            disabled={!selectedWatchRow.enabled}
+                            onChange={(checked) => {
+                              const next = checked
+                                ? [...new Set([...checks, c.id])]
+                                : checks.filter((id) => id !== c.id)
+                              patchWatchedRow(selectedWatchRow.repo_full_name, { checks_json: JSON.stringify(next) })
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                    <div className="opa-watch-meta-grid">
+                      <div><span>Profile</span><strong>{selectedWatchRow.profile || 'auto'}</strong></div>
+                      <div><span>Min sev</span><strong>{selectedWatchRow.min_severity || '—'}</strong></div>
+                      <div><span>Service</span><strong>{selectedWatchRow.service_name || '—'}</strong></div>
+                    </div>
+                    <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
+                      Defaults for newly added repos still use the gate prefs below when you add from catalog.
+                    </p>
+                    <div className="opa-watch-toggles" style={{ marginTop: 8 }}>
+                      <div className="opa-watch-checks-title">Defaults for new watches</div>
+                      {WATCH_CHECK_OPTS.map((c) => (
+                        <CheckWithHint
+                          key={`def-${c.id}`}
+                          id={`watch-def-check-${c.id}`}
+                          label={c.label}
+                          hint={c.hint}
+                          checked={!!watchPolicy.checks[c.id]}
+                          onChange={(checked) => setWatchPolicy((p) => ({
+                            ...p,
+                            checks: { ...p.checks, [c.id]: checked },
+                          }))}
+                        />
+                      ))}
+                      <PrefRow
+                        label="Default AI blocking"
+                        on={!!watchPolicy.ai_blocking}
+                        effectOn="New watches inherit AI blocking on."
+                        effectOff="New watches inherit advisory AI."
+                        as="label"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!watchPolicy.ai_blocking}
+                          onChange={(e) => setWatchPolicy((p) => ({ ...p, ai_blocking: e.target.checked }))}
+                        />
+                      </PrefRow>
+                      <PrefRow
+                        label="Default auto-request reviewer"
+                        on={!!watchPolicy.auto_request_reviewer}
+                        as="label"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!watchPolicy.auto_request_reviewer}
+                          onChange={(e) => setWatchPolicy((p) => ({ ...p, auto_request_reviewer: e.target.checked }))}
+                        />
+                      </PrefRow>
+                      <PrefRow label="Default min approve score">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          style={{ width: 64 }}
+                          value={watchPolicy.auto_approve_min_score}
+                          onChange={(e) => setWatchPolicy((p) => ({
+                            ...p,
+                            auto_approve_min_score: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                          }))}
+                        />
+                      </PrefRow>
                     </div>
                   </div>
-                )
-              })}
-              {!selectedReviewRepos.length && <span className="opa-muted">Select repos above</span>}
+                )}
+              </Panel>
             </div>
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Preview URL (optional, UI visual MCP)
-                <input
-                  className="opa-mono"
-                  value={aiReviewForm.preview_url}
-                  onChange={(e) => setAiReviewForm((f) => ({ ...f, preview_url: e.target.value }))}
-                  placeholder="https://preview.example.com"
-                />
-              </label>
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
-              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                <input type="checkbox" checked={!!aiReviewForm.force} onChange={(e) => setAiReviewForm((f) => ({ ...f, force: e.target.checked }))} />
-                Force (include drafts)
-              </label>
-              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                <input type="checkbox" checked={!!aiReviewForm.ai_only} onChange={(e) => setAiReviewForm((f) => ({ ...f, ai_only: e.target.checked }))} />
-                OPA Review only (skip AppSec scanners)
-              </label>
-            </div>
-            {!!appliedContexts.length && (
-              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                Contexts (primary + linked awareness):{' '}
-                {appliedContexts.map((c) => `${c.role}:${c.title || c.id}`).join(' · ')}
-              </div>
-            )}
-            {stackStatus && (
-              <div style={{ marginBottom: 10, padding: 8, background: 'var(--surface-2)', borderRadius: 6, fontSize: 12 }}>
-                <div>
-                  <strong>Stack</strong> <span className="opa-mono">{stackStatus.stack_id || stackStatus.id || lastStackId}</span>
-                  {' '}· {stackStatus.status}
-                  {stackStatus.note ? <span className="opa-muted"> · {stackStatus.note}</span> : null}
-                </div>
-                <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
-                  {(stackStatus.items || []).map((it, idx) => (
-                    <div key={`${it.repo_full_name}-${it.pr_number}-${idx}`} className="opa-mono">
-                      {it.repo_full_name}#{it.pr_number} → {it.status || '—'}
-                      {it.error ? ` (${it.error})` : ''}
-                      {it.job_id ? ` · ${String(it.job_id).slice(0, 14)}` : ''}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button
-                type="button"
-                className="opa-btn primary"
-                disabled={busy || !Object.values(reviewPrs).some(Boolean)}
-                onClick={runAiReview}
-              >
-                Run OPA Review stack
-              </button>
-              {lastStackId && (
-                <button type="button" className="opa-btn ghost" disabled={busy || jobActionBusy} onClick={cancelReviewStack}>
-                  Cancel stack
-                </button>
-              )}
-              {lastStackId && (
-                <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>
-                  Stack {String(lastStackId).slice(0, 16)}…
-                </button>
-              )}
-            </div>
-          </Panel>
+          )}
 
-          <Panel title="Reviewer contexts" icon={<FiCode />}>
-            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Per-repo briefs packed into OPA Review (full primary + linked awareness). Tag <code>design</code>/<code>ui</code> for design-system enforcement
-              (auto-prioritized when the PR touches JSX/CSS/components). Link watched repos so a review pulls all contexts in the group.
-            </p>
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Repo
-                <select
-                  className="opa-mono"
-                  value={ctxForm.repo_full_name}
-                  onChange={(e) => setCtxForm((f) => ({ ...f, repo_full_name: e.target.value }))}
-                >
-                  <option value="">Select…</option>
-                  <option value="*">* (org-level)</option>
-                  {watchedRows.map((r) => (
-                    <option key={r.repo_full_name} value={r.repo_full_name}>{r.repo_full_name}</option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Title
-                <input value={ctxForm.title} onChange={(e) => setCtxForm((f) => ({ ...f, title: e.target.value }))} placeholder="Auth & trust boundaries" />
-              </label>
-            </div>
-            <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
-              <input
-                type="checkbox"
-                checked={!!ctxForm.tags_design}
-                onChange={(e) => setCtxForm((f) => ({ ...f, tags_design: e.target.checked }))}
-              />
-              Design / UI enforcement context (tags: design, ui)
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, marginBottom: 8 }}>
-              Body (markdown)
-              <textarea
-                className="opa-mono"
-                rows={8}
-                style={{ width: '100%', fontSize: 12 }}
-                value={ctxForm.body_markdown}
-                onChange={(e) => setCtxForm((f) => ({ ...f, body_markdown: e.target.value }))}
-                placeholder={"## System\n## PR intent\n## Scope\n## Important invariants\n## Risk areas\n## Testing context\n## Operational\n"}
-              />
-            </label>
-            {genDraft?.source === 'skipped' && (
-              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                Generate skipped — {genDraft?.honesty || 'save a CLI agent API key under Account (personal or org), or unset SKIP_CURSOR_AI'}.
-                {' '}Routing “auto” still uses Cursor when a CLI key is set.
+          {watchMode === 'run' && (
+            <Panel title="Run OPA Review" icon={<FiPlay />}>
+              <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
+                Select watched repos and open PRs, then enqueue an <strong>OPA Review stack</strong>
+                (one job per repo×PR). Large selections stay in one stack — extras <strong>wait</strong> and drain
+                with stack concurrency (default serial).
+                {!scmSettings.data?.cursor_key_set && (
+                  <>
+                    {' '}
+                    <span style={{ color: 'var(--danger, #c44)' }}>No CLI agent API key</span>
+                    {' '}— manage under <Link to="/settings/account">Account</Link>.
+                  </>
+                )}
+                {scmSettings.data?.cursor_key_set && scmSettings.data?.cursor_key_scope && (
+                  <> CLI key scope: <code>{scmSettings.data.cursor_key_scope}</code>.</>
+                )}
+              </p>
+              <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+                <div className="cell-strong">Watched repos</div>
+                <MultiSelectActions
+                  disabled={!watchedRows.length}
+                  onSelectAll={() => setAllReviewRepos(true)}
+                  onClear={() => setAllReviewRepos(false)}
+                />
               </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-              <button type="button" className="opa-btn primary" disabled={busy} onClick={saveContext}>
-                {ctxEditingId ? 'Update context' : 'Save context'}
-              </button>
-              <button type="button" className="opa-btn ghost" disabled={busy} onClick={generateContext}>
-                Generate with AI
-              </button>
-              {ctxEditingId && (
-                <button type="button" className="opa-btn ghost" onClick={() => { setCtxEditingId(''); setCtxForm({ title: '', body_markdown: '', repo_full_name: ctxForm.repo_full_name, tags_design: false }) }}>
-                  Cancel edit
-                </button>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
+                {watchedRows.map((r) => (
+                  <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!reviewRepos[r.repo_full_name]}
+                      onChange={(e) => {
+                        const on = e.target.checked
+                        setReviewRepos((p) => ({ ...p, [r.repo_full_name]: on }))
+                        if (!on) {
+                          setReviewPrs((prev) => {
+                            const next = { ...prev }
+                            const prefix = `${r.repo_full_name}#`
+                            for (const key of Object.keys(next)) {
+                              if (key.startsWith(prefix)) next[key] = false
+                            }
+                            return next
+                          })
+                        }
+                      }}
+                    />
+                    <span className="opa-mono">{r.repo_full_name}</span>
+                  </label>
+                ))}
+                {!watchedRows.length && <span className="opa-muted">Watch a repo first</span>}
+              </div>
+              <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+                <div className="cell-strong">
+                  Open PRs {pullsLoading ? '(loading…)' : ''}
+                  {!!Object.values(reviewPrs).filter(Boolean).length && (
+                    <span className="opa-muted"> · {Object.values(reviewPrs).filter(Boolean).length} selected
+                      {Object.values(reviewPrs).filter(Boolean).length > 40 ? ' (will wait in one stack)' : ''}
+                    </span>
+                  )}
+                </div>
+                <MultiSelectActions
+                  disabled={!selectedReviewRepos.length || pullsLoading || !selectedReviewRepos.some((repo) => (pullsByRepo[repo] || []).length)}
+                  onSelectAll={() => setReviewPrsForRepos(selectedReviewRepos, true)}
+                  onClear={() => setReviewPrsForRepos(selectedReviewRepos, false)}
+                />
+              </div>
+              <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
+                {selectedReviewRepos.map((repo) => {
+                  const pulls = pullsByRepo[repo] || []
+                  return (
+                    <div key={repo} style={{ padding: 8, background: 'var(--surface-2)', borderRadius: 6 }}>
+                      <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+                        <div className="opa-mono" style={{ fontSize: 12 }}>{repo}</div>
+                        <MultiSelectActions
+                          disabled={!pulls.length || pullsLoading}
+                          onSelectAll={() => setReviewPrsForRepos([repo], true)}
+                          onClear={() => setReviewPrsForRepos([repo], false)}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
+                        {pulls.map((p) => {
+                          const key = `${repo}#${p.number}`
+                          return (
+                            <label key={key} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={!!reviewPrs[key]}
+                                onChange={(e) => setReviewPrs((prev) => ({ ...prev, [key]: e.target.checked }))}
+                              />
+                              #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
+                            </label>
+                          )
+                        })}
+                        {!pulls.length && !pullsLoading && <span className="opa-muted">No open PRs</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+                {!selectedReviewRepos.length && <span className="opa-muted">Select repos above</span>}
+              </div>
+              <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                  Preview URL (optional, UI visual MCP)
+                  <input
+                    className="opa-mono"
+                    value={aiReviewForm.preview_url}
+                    onChange={(e) => setAiReviewForm((f) => ({ ...f, preview_url: e.target.value }))}
+                    placeholder="https://preview.example.com"
+                  />
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
+                <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                  <input type="checkbox" checked={!!aiReviewForm.force} onChange={(e) => setAiReviewForm((f) => ({ ...f, force: e.target.checked }))} />
+                  Force (include drafts)
+                </label>
+                <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                  <input type="checkbox" checked={!!aiReviewForm.ai_only} onChange={(e) => setAiReviewForm((f) => ({ ...f, ai_only: e.target.checked }))} />
+                  OPA Review only (skip AppSec scanners)
+                </label>
+              </div>
+              {!!appliedContexts.length && (
+                <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                  Contexts (primary + linked awareness):{' '}
+                  {appliedContexts.map((c) => `${c.role}:${c.title || c.id}`).join(' · ')}
+                </div>
               )}
-            </div>
-            <div className="opa-multiselect-head" style={{ marginBottom: 8 }}>
-              <div className="cell-strong">Link repos (shared context pack)</div>
-              <MultiSelectActions
-                disabled={!watchedRows.length}
-                onSelectAll={() => setAllLinkPick(true)}
-                onClear={() => setAllLinkPick(false)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
-              {watchedRows.map((r) => (
-                <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              {stackStatus && (
+                <div style={{ marginBottom: 10, padding: 8, background: 'var(--surface-2)', borderRadius: 6, fontSize: 12 }}>
+                  <div>
+                    <strong>Stack</strong> <span className="opa-mono">{stackStatus.stack_id || stackStatus.id || lastStackId}</span>
+                    {' '}· {stackStatus.status}
+                    {stackStatus.note ? <span className="opa-muted"> · {stackStatus.note}</span> : null}
+                  </div>
+                  <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                    {(stackStatus.items || []).map((it, idx) => (
+                      <div key={`${it.repo_full_name}-${it.pr_number}-${idx}`} className="opa-mono">
+                        {it.repo_full_name}#{it.pr_number} → {it.status || '—'}
+                        {it.error ? ` (${it.error})` : ''}
+                        {it.job_id ? ` · ${String(it.job_id).slice(0, 14)}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="opa-btn primary"
+                  disabled={busy || !Object.values(reviewPrs).some(Boolean)}
+                  onClick={runAiReview}
+                >
+                  Run OPA Review stack
+                </button>
+                {lastStackId && (
+                  <button type="button" className="opa-btn ghost" disabled={busy || jobActionBusy} onClick={cancelReviewStack}>
+                    Cancel stack
+                  </button>
+                )}
+                {lastStackId && (
+                  <button type="button" className="opa-btn ghost" onClick={() => selectOpsMode('jobs')}>
+                    Stack {String(lastStackId).slice(0, 16)}…
+                  </button>
+                )}
+              </div>
+            </Panel>
+          )}
+
+          {watchMode === 'contexts' && (
+            <>
+              <Panel title="Reviewer contexts" icon={<FiCode />}>
+                <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
+                  Per-repo briefs packed into OPA Review (full primary + linked awareness). Tag <code>design</code>/<code>ui</code> for design-system enforcement.
+                </p>
+                <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                    Repo
+                    <select
+                      className="opa-mono"
+                      value={ctxForm.repo_full_name}
+                      onChange={(e) => setCtxForm((f) => ({ ...f, repo_full_name: e.target.value }))}
+                    >
+                      <option value="">Select…</option>
+                      <option value="*">* (org-level)</option>
+                      {watchedRows.map((r) => (
+                        <option key={r.repo_full_name} value={r.repo_full_name}>{r.repo_full_name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                    Title
+                    <input value={ctxForm.title} onChange={(e) => setCtxForm((f) => ({ ...f, title: e.target.value }))} placeholder="Auth & trust boundaries" />
+                  </label>
+                </div>
+                <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
                   <input
                     type="checkbox"
-                    checked={!!linkPick[r.repo_full_name]}
-                    onChange={(e) => setLinkPick((p) => ({ ...p, [r.repo_full_name]: e.target.checked }))}
+                    checked={!!ctxForm.tags_design}
+                    onChange={(e) => setCtxForm((f) => ({ ...f, tags_design: e.target.checked }))}
                   />
-                  <span className="opa-mono">{r.repo_full_name}</span>
-                  {r.link_group_id ? <Badge>{r.link_group_id.slice(0, 10)}</Badge> : null}
+                  Design / UI enforcement context (tags: design, ui)
                 </label>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-              <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(false)}>Link selected</button>
-              <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(true)}>Clear links</button>
-            </div>
-            <DataTable
-              columns={[
-                { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
-                { key: 'title', header: 'Title' },
-                { key: 'source', header: 'Source', render: (r) => <Badge>{r.source || 'manual'}</Badge> },
-                {
-                  key: 'tags_json', header: 'Tags',
-                  render: (r) => {
-                    let tags = []
-                    try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
-                    if (!tags.length) return '—'
-                    return tags.map((t) => <Badge key={t}>{t}</Badge>)
-                  },
-                },
-                { key: 'link_group_id', header: 'Group', render: (r) => (r.link_group_id ? <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.link_group_id).slice(0, 12)}</span> : '—') },
-                {
-                  key: 'actions', header: '',
-                  render: (r) => {
-                    let tags = []
-                    try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
-                    const isDesign = tags.some((t) => ['design', 'ui', 'design-system'].includes(String(t)))
-                    return (
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        type="button"
-                        className="opa-btn ghost"
-                        onClick={() => {
-                          setCtxEditingId(r.id)
-                          setCtxForm({
-                            title: r.title || '',
-                            body_markdown: r.body_markdown || '',
-                            repo_full_name: r.repo_full_name || '',
-                            tags_design: isDesign,
-                          })
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button type="button" className="opa-btn ghost" onClick={() => deleteContext(r.id)}>Delete</button>
-                    </div>
-                    )
-                  },
-                },
-              ]}
-              rows={contexts}
-              rowKey={(r) => r.id}
-              maxHeight={280}
-            />
-          </Panel>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, marginBottom: 8 }}>
+                  Body (markdown)
+                  <textarea
+                    className="opa-mono"
+                    rows={8}
+                    style={{ width: '100%', fontSize: 12 }}
+                    value={ctxForm.body_markdown}
+                    onChange={(e) => setCtxForm((f) => ({ ...f, body_markdown: e.target.value }))}
+                    placeholder={"## System\n## PR intent\n## Scope\n## Important invariants\n## Risk areas\n## Testing context\n## Operational\n"}
+                  />
+                </label>
+                {genDraft?.source === 'skipped' && (
+                  <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                    Generate skipped — {genDraft?.honesty || 'save a CLI agent API key under Account (personal or org), or unset SKIP_CURSOR_AI'}.
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <button type="button" className="opa-btn primary" disabled={busy} onClick={saveContext}>
+                    {ctxEditingId ? 'Update context' : 'Save context'}
+                  </button>
+                  <button type="button" className="opa-btn ghost" disabled={busy} onClick={generateContext}>
+                    Generate with AI
+                  </button>
+                  {ctxEditingId && (
+                    <button type="button" className="opa-btn ghost" onClick={() => { setCtxEditingId(''); setCtxForm({ title: '', body_markdown: '', repo_full_name: ctxForm.repo_full_name, tags_design: false }) }}>
+                      Cancel edit
+                    </button>
+                  )}
+                </div>
+                <div className="opa-multiselect-head" style={{ marginBottom: 8 }}>
+                  <div className="cell-strong">Link repos (shared context pack)</div>
+                  <MultiSelectActions
+                    disabled={!watchedRows.length}
+                    onSelectAll={() => setAllLinkPick(true)}
+                    onClear={() => setAllLinkPick(false)}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
+                  {watchedRows.map((r) => (
+                    <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!linkPick[r.repo_full_name]}
+                        onChange={(e) => setLinkPick((p) => ({ ...p, [r.repo_full_name]: e.target.checked }))}
+                      />
+                      <span className="opa-mono">{r.repo_full_name}</span>
+                      {r.link_group_id ? <Badge>{r.link_group_id.slice(0, 10)}</Badge> : null}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(false)}>Link selected</button>
+                  <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(true)}>Clear links</button>
+                </div>
+                <DataTable
+                  columns={[
+                    { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
+                    { key: 'title', header: 'Title' },
+                    { key: 'source', header: 'Source', render: (r) => <Badge>{r.source || 'manual'}</Badge> },
+                    {
+                      key: 'tags_json', header: 'Tags',
+                      render: (r) => {
+                        let tags = []
+                        try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
+                        if (!tags.length) return '—'
+                        return tags.map((t) => <Badge key={t}>{t}</Badge>)
+                      },
+                    },
+                    { key: 'link_group_id', header: 'Group', render: (r) => (r.link_group_id ? <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.link_group_id).slice(0, 12)}</span> : '—') },
+                    {
+                      key: 'actions', header: '',
+                      render: (r) => {
+                        let tags = []
+                        try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
+                        const isDesign = tags.some((t) => ['design', 'ui', 'design-system'].includes(String(t)))
+                        return (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            type="button"
+                            className="opa-btn ghost"
+                            onClick={() => {
+                              setCtxEditingId(r.id)
+                              setCtxForm({
+                                title: r.title || '',
+                                body_markdown: r.body_markdown || '',
+                                repo_full_name: r.repo_full_name || '',
+                                tags_design: isDesign,
+                              })
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button type="button" className="opa-btn ghost" onClick={() => deleteContext(r.id)}>Delete</button>
+                        </div>
+                        )
+                      },
+                    },
+                  ]}
+                  rows={contexts}
+                  rowKey={(r) => r.id}
+                  maxHeight={280}
+                />
+              </Panel>
 
-          <Panel title="OPA Review AI" icon={<FiKey />}>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <StatusPill tone={scmSettings.data?.cursor_key_set ? 'ok' : 'warn'} title="CLI agent key for OPA Review">
-                CLI key {scmSettings.data?.cursor_key_set ? 'set' : 'not set'}
-                {scmSettings.data?.cursor_key_scope ? ` · ${scmSettings.data.cursor_key_scope}` : ''}
-              </StatusPill>
-              <span className="opa-muted" style={{ fontSize: 12 }}>
-                model {scmSettings.data?.cursor_model || 'auto'}
-                {scmSettings.data?.user_id ? <> · user <code>{scmSettings.data.user_id}</code></> : null}
-                {scmSettings.data?.organization_id ? <> · org <code>{scmSettings.data.organization_id}</code></> : null}
-              </span>
-              <Link to="/settings/account" className="opa-btn ghost" style={{ textDecoration: 'none' }}>
-                Manage in Account
-              </Link>
-            </div>
-            <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
-              Watch-specific <code>ai_review</code> / <code>ai_blocking</code> toggles stay here. API keys live under Account (user → org inheritance; per signed-in username).
-              {!scmSettings.data?.cursor_key_set && scmSettings.data?.honesty ? (
-                <> {String(scmSettings.data.honesty)}</>
-              ) : null}
-            </p>
-          </Panel>
+              <Panel title="OPA Review AI" icon={<FiKey />}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <StatusPill tone={scmSettings.data?.cursor_key_set ? 'ok' : 'warn'} title="CLI agent key for OPA Review">
+                    CLI key {scmSettings.data?.cursor_key_set ? 'set' : 'not set'}
+                    {scmSettings.data?.cursor_key_scope ? ` · ${scmSettings.data.cursor_key_scope}` : ''}
+                  </StatusPill>
+                  <span className="opa-muted" style={{ fontSize: 12 }}>
+                    model {scmSettings.data?.cursor_model || 'auto'}
+                    {scmSettings.data?.user_id ? <> · user <code>{scmSettings.data.user_id}</code></> : null}
+                    {scmSettings.data?.organization_id ? <> · org <code>{scmSettings.data.organization_id}</code></> : null}
+                  </span>
+                  <Link to="/settings/account" className="opa-btn ghost" style={{ textDecoration: 'none' }}>
+                    Manage in Account
+                  </Link>
+                </div>
+                <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
+                  Per-repo <code>ai_review</code> / <code>ai_blocking</code> live under Watch. API keys live under Account.
+                  {!scmSettings.data?.cursor_key_set && scmSettings.data?.honesty ? (
+                    <> {String(scmSettings.data.honesty)}</>
+                  ) : null}
+                </p>
+              </Panel>
+            </>
+          )}
         </>
       )}
 
-      {tab === 'jobs' && (
-        <Panel title="SCM / PR jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading && !scmJobRows.length} error={scmJobs.error}
+      {onOpsJobs && (
+        <Panel title="PR Jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading && !scmJobRows.length} error={scmJobs.error}
           empty={!scmJobs.loading && !scmJobRows.length}
           emptyText={
             scmJobs.data?.honesty
-              || (orgAll
-                ? 'No jobs visible — with tenant All, admins see every org; pick an organization if you still see nothing after a stack queue'
-                : `No jobs for org ${organizationId} — stacks inherit the watched repo’s organization (often default-org). Try tenant All or that org.`)
+              || (opsConnectorId
+                ? 'No jobs for this connector yet — open/synchronize a watched PR or queue an OPA Review.'
+                : (orgAll
+                  ? 'No jobs visible — with tenant All, admins see every org; pick an organization if you still see nothing after a stack queue'
+                  : `No jobs for org ${organizationId} — App webhook jobs land on the org that owns the GitHub App install (often default-org). Pick a connector below or switch tenant to All.`))
           }
           actions={(
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -2254,12 +2699,23 @@ export default function Security() {
               <button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>
             </div>
           )}>
-          {!scmJobs.loading && scmJobRows.length > 0 && scmJobs.data?.honesty && (
+          <div className="opa-watch-conn" style={{ margin: '8px 12px 0' }}>
+            <ConnectorPicker
+              connectors={connectorList}
+              loading={connectors.loading}
+              value={activeConnector}
+              onChange={selectConnector}
+              onReload={() => { connectors.reload?.(); scmJobs.reload?.() }}
+              missing={connectorMissing}
+              needsReconnect={connectorNeedsReconnect}
+            />
+          </div>
+          {!scmJobs.loading && scmJobs.data?.honesty && (
             <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>{String(scmJobs.data.honesty)}</p>
           )}
           <div className="opa-jobs-summary">
             <span className="opa-muted">{fmtNum(scmJobTotal)} total</span>
-            {['running', 'queued', 'waiting', 'completed', 'cancelled', 'failed', 'error'].map((st) => (
+            {['running', 'queued', 'waiting', 'completed', 'cancelled', 'failed', 'error', 'skipped'].map((st) => (
               scmJobCounts[st] ? (
                 <button
                   key={st}
@@ -2294,6 +2750,7 @@ export default function Security() {
                 <option value="completed">completed</option>
                 <option value="failed">failed</option>
                 <option value="cancelled">cancelled</option>
+                <option value="skipped">skipped</option>
               </select>
             </label>
             <label className="opa-jobs-filter">
@@ -2510,16 +2967,7 @@ export default function Security() {
         </Panel>
       )}
 
-      {tab === 'agents' && (
-        <AgentsTab
-          connectors={connectorList}
-          toast={toast}
-          activeConnector={activeConnector}
-          onConnectorChange={setActiveConnector}
-        />
-      )}
-
-      {tab === 'webhooks' && (
+      {onOpsHooks && (
         <Panel
           title="GitHub webhooks"
           icon={<FiGitPullRequest />}
@@ -2529,14 +2977,40 @@ export default function Security() {
           empty={!scmWebhooks.loading && !scmWebhookRows.length}
           emptyText={
             scmWebhooks.data?.honesty
-              || (orgAll
-                ? 'No webhook deliveries yet — live captures start after orchestrator deploy; historical PR/push jobs are backfilled on boot'
-                : `No webhooks for org ${organizationId}`)
+              || (opsConnectorId
+                ? 'No deliveries for this App connector yet — open/update a PR on an installed repo to verify intake.'
+                : (orgAll
+                  ? 'No webhook deliveries yet — live captures start after orchestrator deploy; historical PR/push jobs are backfilled on boot'
+                  : `No webhooks for org ${organizationId} — App deliveries land on the org that owns the GitHub App installation (often default-org). Pick the App connector below or switch tenant to All.`))
           }
           actions={<button type="button" className="opa-btn ghost" onClick={() => scmWebhooks.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}
         >
-          {!scmWebhooks.loading && scmWebhookRows.length > 0 && scmWebhooks.data?.honesty && (
-            <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>{String(scmWebhooks.data.honesty)}</p>
+          <div className="opa-watch-conn" style={{ margin: '8px 12px 0' }}>
+            <ConnectorPicker
+              connectors={connectorList}
+              loading={connectors.loading}
+              value={activeConnector}
+              onChange={selectConnector}
+              onReload={() => { connectors.reload?.(); scmWebhooks.reload?.() }}
+              missing={connectorMissing}
+              needsReconnect={connectorNeedsReconnect}
+            />
+          </div>
+          {!scmWebhooks.loading && (
+            <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>
+              {scmWebhooks.data?.honesty ? `${String(scmWebhooks.data.honesty)} · ` : null}
+              Live intake is <code className="opa-mono">POST /v1/scm/github/webhook</code> on the Orchestrator
+              (public URL from SCM settings). GitHub App deliveries attach to the App connector — not a PAT.
+              {opsConnectorId
+                ? ` Requested connector ${opsConnectorId.slice(0, 22)}${opsConnectorId.length > 22 ? '…' : ''}.`
+                : null}
+              {scmWebhooks.data?.connector_id && scmWebhooks.data.connector_id !== opsConnectorId
+                ? ` Remapped to App ${String(scmWebhooks.data.connector_id).slice(0, 22)}…`
+                : null}
+              {activeConnectorRow?.kind === 'github_pat' && scmWebhooks.data?.connector_id === opsConnectorId
+                ? ' No sibling App install found for this PAT account.'
+                : null}
+            </p>
           )}
           <div className="opa-jobs-summary">
             <span className="opa-muted">{fmtNum(scmWebhookTotal)} total</span>
@@ -2647,7 +3121,7 @@ export default function Security() {
               {webhookDetail.job_id ? (
                 <div>
                   <Link to={scmJobHref(webhookDetail.job_id)} className="opa-btn ghost">Open related job</Link>
-                  <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>PR Jobs</button>
+                  <button type="button" className="opa-btn ghost" onClick={() => selectOpsMode('jobs')}>PR Jobs</button>
                 </div>
               ) : null}
             </div>

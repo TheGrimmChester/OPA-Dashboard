@@ -48,9 +48,9 @@ describe('entityLinks', () => {
     expect(perfRunHref('run-9', { tab: 'results' })).toBe('/perf-lab?run=run-9&tab=results')
     expect(securityRunHref('srun-1')).toBe('/security?run=srun-1&tab=scans')
     expect(scmJobHref('job-1')).toBe('/security/jobs/job-1')
-    expect(securityJobsHref()).toBe('/security?tab=jobs')
+    expect(securityJobsHref()).toBe('/security?tab=ops&mode=jobs')
     expect(securityJobsHref({ status: 'running', q: 'smoke' })).toBe(
-      '/security?tab=jobs&status=running&q=smoke',
+      '/security?tab=ops&mode=jobs&status=running&q=smoke',
     )
     expect(connectorsHref()).toBe('/settings/connectors')
     expect(connectorsHref({ edit: 'conn-1' })).toBe('/settings/connectors?edit=conn-1')

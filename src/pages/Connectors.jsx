@@ -27,7 +27,7 @@ export default function Connectors() {
         </h1>
         <div className="opa-page-sub">
           SCM connections (GitHub App, PAT) shared by{' '}
-          <Link to="/security?tab=watch">Security · Repo Watch</Link>
+          <Link to="/security?tab=ops&mode=watch">Security · Repo Watch</Link>
           {' '}and other tools.
           {!isAdmin && <> Non-admins manage personal connectors; org defaults are on <Link to="/settings/account">Account</Link>.</>}
         </div>
