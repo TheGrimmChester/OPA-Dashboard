@@ -5,9 +5,10 @@ import {
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
-  Panel, DataTable, StatusPill, SegmentedControl, TimeSeriesChart,
+  Panel, DataTable, StatusPill, SegmentedControl, TimeSeriesChart, EntityChip,
 } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
+import { serviceHref, traceHref } from '../utils/entityLinks'
 import './Logs.css'
 
 const LIMIT = 100
@@ -101,7 +102,9 @@ export default function Logs() {
     },
     {
       key: 'service', header: 'Service', width: 150,
-      render: (r) => <span className="opa-mono">{r.service || '—'}</span>,
+      render: (r) => (r.service
+        ? <EntityChip to={serviceHref(r.service)} title={`Service ${r.service}`}>{r.service}</EntityChip>
+        : <span className="opa-muted">—</span>),
       sortValue: (r) => r.service,
     },
     {
@@ -112,7 +115,7 @@ export default function Logs() {
     {
       key: 'trace_id', header: 'Trace', width: 118,
       render: (r) => (r.trace_id
-        ? <span className="opa-mono cell-strong">{String(r.trace_id).slice(0, 12)}</span>
+        ? <EntityChip to={traceHref(r.trace_id)} title={`Open trace ${r.trace_id}`}>{String(r.trace_id).slice(0, 12)}</EntityChip>
         : <span className="opa-muted">—</span>),
       sortValue: (r) => r.trace_id || '',
     },
@@ -270,8 +273,15 @@ export default function Logs() {
             <div className="logs-detail">
               <div className="logs-detail-head">
                 <StatusPill tone={levelTone(row.level)}>{row.level || '—'}</StatusPill>
-                <span className="opa-mono">{row.service || '—'}</span>
+                {row.service
+                  ? <EntityChip to={serviceHref(row.service)}>{row.service}</EntityChip>
+                  : <span className="opa-mono">—</span>}
                 <span className="opa-muted">{clockOf(row.timestamp)}</span>
+                {row.trace_id && (
+                  <EntityChip to={traceHref(row.trace_id)} title={row.trace_id}>
+                    {String(row.trace_id).slice(0, 16)}
+                  </EntityChip>
+                )}
               </div>
               <pre className="logs-pre">{row.message || ''}</pre>
               {row.fields && Object.keys(row.fields).length > 0 && (

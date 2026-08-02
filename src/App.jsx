@@ -26,6 +26,7 @@ import {
 import ErrorBoundary from './components/ErrorBoundary'
 import { TenantProvider } from './contexts/TenantContext'
 import { TimeRangeProvider } from './contexts/TimeRangeContext'
+import { I18nProvider } from './contexts/I18nContext'
 import AppShell from './components/shell/AppShell'
 import './App.css'
 
@@ -34,7 +35,7 @@ import './App.css'
 // split into their own chunks instead of the main bundle.
 const CompareTraces = lazy(() => import('./pages/CompareTraces'))
 const Stats = lazy(() => import('./pages/Stats'))
-const Overview = lazy(() => import('./pages/Overview'))
+const Services = lazy(() => import('./pages/Services'))
 const ServiceDetail = lazy(() => import('./pages/ServiceDetail'))
 const TraceDetail = lazy(() => import('./pages/TraceDetail'))
 const ProfilingView = lazy(() => import('./pages/ProfilingView'))
@@ -47,6 +48,18 @@ const ExternalHttp = lazy(() => import('./pages/ExternalHttp'))
 const HttpEndpointDetail = lazy(() => import('./pages/HttpEndpointDetail'))
 const PerformanceView = lazy(() => import('./pages/PerformanceView'))
 const LiveHub = lazy(() => import('./pages/LiveHub'))
+const PlatformOps = lazy(() => import('./pages/PlatformOps'))
+const Serverless = lazy(() => import('./pages/Serverless'))
+const Security = lazy(() => import('./pages/Security'))
+const OPAReviewJob = lazy(() => import('./pages/OPAReviewJob'))
+const Catalog = lazy(() => import('./pages/Catalog'))
+const Automation = lazy(() => import('./pages/Automation'))
+const Cloud = lazy(() => import('./pages/Cloud'))
+const Network = lazy(() => import('./pages/Network'))
+const Federation = lazy(() => import('./pages/Federation'))
+const Collaborate = lazy(() => import('./pages/Collaborate'))
+const Diagnostics = lazy(() => import('./pages/Diagnostics'))
+const PerfLab = lazy(() => import('./pages/PerfLab'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -57,10 +70,15 @@ const Commands = lazy(() => import('./pages/Commands'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
+const AISettings = lazy(() => import('./pages/AISettings'))
+const Connectors = lazy(() => import('./pages/Connectors'))
+const Account = lazy(() => import('./pages/Account'))
 const Slos = lazy(() => import('./pages/Slos'))
 const Alerts = lazy(() => import('./pages/Alerts'))
 const Anomalies = lazy(() => import('./pages/Anomalies'))
 const Synthetics = lazy(() => import('./pages/Synthetics'))
+const QueryExplorer = lazy(() => import('./pages/QueryExplorer'))
+const Dashboards = lazy(() => import('./pages/Dashboards'))
 
 // Result of the one-time auth probe, cached for the lifetime of the page so
 // client-side navigations never re-probe. `true` = render the app (auth off or
@@ -128,16 +146,15 @@ function App() {
       <RequireAuth>
       <TenantProvider>
         <TimeRangeProvider>
+        <I18nProvider>
         <AppShell>
           <Suspense fallback={<div className="route-loading" style={{ padding: 24, color: 'var(--text-muted)' }}>Loading…</div>}>
           <Routes>
-            <Route
-              path="/"
-              element={<Overview />}
-            />
+            <Route path="/" element={<Navigate to="/services" replace />} />
+            <Route path="/overview" element={<Navigate to="/services" replace />} />
             <Route
               path="/services"
-              element={<Overview />}
+              element={<Services />}
             />
             <Route
               path="/services/:serviceName"
@@ -161,7 +178,31 @@ function App() {
             />
             <Route
               path="/system"
-              element={<Stats autoRefresh={autoRefresh} />}
+              element={<PlatformOps />}
+            />
+            <Route
+              path="/serverless"
+              element={<Serverless />}
+            />
+            <Route
+              path="/security"
+              element={<Security />}
+            />
+            <Route
+              path="/security/jobs/:jobId"
+              element={<OPAReviewJob />}
+            />
+            <Route
+              path="/catalog"
+              element={<Catalog />}
+            />
+            <Route
+              path="/automation"
+              element={<Automation />}
+            />
+            <Route
+              path="/cloud"
+              element={<Cloud />}
             />
             <Route
               path="/traces/:traceId"
@@ -177,8 +218,27 @@ function App() {
               path="/performance"
               element={<PerformanceView />}
             />
-            {/* Network folded into Performance (bandwidth panels) + Trace Detail I/O. */}
-            <Route path="/network" element={<Navigate to="/performance" replace />} />
+            <Route
+              path="/perf-lab"
+              element={<PerfLab />}
+            />
+            {/* App-level HTTP bandwidth stays on Performance; Wave 24 network obs is /network. */}
+            <Route
+              path="/network"
+              element={<Network />}
+            />
+            <Route
+              path="/federation"
+              element={<Federation />}
+            />
+            <Route
+              path="/collaborate"
+              element={<Collaborate />}
+            />
+            <Route
+              path="/diagnostics"
+              element={<Diagnostics />}
+            />
             <Route
               path="/profiling"
               element={<ProfilingView />}
@@ -194,6 +254,30 @@ function App() {
             <Route
               path="/api-keys"
               element={<ApiKeys />}
+            />
+            <Route
+              path="/settings/ai"
+              element={<AISettings />}
+            />
+            <Route
+              path="/settings/connectors"
+              element={<Connectors />}
+            />
+            <Route
+              path="/settings/account"
+              element={<Account />}
+            />
+            <Route
+              path="/account"
+              element={<Navigate to="/settings/account" replace />}
+            />
+            <Route
+              path="/connectors"
+              element={<Navigate to="/settings/connectors" replace />}
+            />
+            <Route
+              path="/ai"
+              element={<Navigate to="/settings/ai" replace />}
             />
             <Route
               path="/service-map"
@@ -252,6 +336,18 @@ function App() {
               element={<MetricsExplorer />}
             />
             <Route
+              path="/query"
+              element={<QueryExplorer />}
+            />
+            <Route
+              path="/dashboards"
+              element={<Dashboards />}
+            />
+            <Route
+              path="/dashboards/:id"
+              element={<Dashboards />}
+            />
+            <Route
               path="/infrastructure"
               element={<Infrastructure />}
             />
@@ -266,6 +362,7 @@ function App() {
           </Routes>
           </Suspense>
         </AppShell>
+        </I18nProvider>
         </TimeRangeProvider>
       </TenantProvider>
       </RequireAuth>

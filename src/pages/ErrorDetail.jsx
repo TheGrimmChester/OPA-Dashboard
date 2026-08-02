@@ -5,9 +5,10 @@ import {
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
-  Panel, KpiTile, TimeSeriesChart, EntityHeader, Badge, StatusPill, EmptyState,
+  Panel, KpiTile, TimeSeriesChart, EntityHeader, StatusPill, EmptyState, EntityChip,
 } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
+import { logsHref, serviceHref, traceHref, tracesHref } from '../utils/entityLinks'
 
 export default function ErrorDetail() {
   const { errorId } = useParams()
@@ -38,7 +39,9 @@ export default function ErrorDetail() {
         badges={
           <>
             <StatusPill tone="error">error</StatusPill>
-            {service && <Badge title="Service">{service}</Badge>}
+            {service
+              ? <EntityChip to={serviceHref(service)} title={`Service ${service}`} mono={false}>{service}</EntityChip>
+              : null}
           </>
         }
         meta={
@@ -47,9 +50,17 @@ export default function ErrorDetail() {
           </span>
         }
         actions={
-          <Link to="/errors" className="opa-row" style={{ gap: 'var(--sp-1)', fontSize: 'var(--fs-12)', color: 'var(--text-secondary)' }}>
-            <FiChevronLeft size={13} /> Errors
-          </Link>
+          <div className="opa-row" style={{ gap: 8 }}>
+            <Link className="opa-btn ghost" to={tracesHref({ service: service || undefined, status: 'error' })}>
+              Error traces
+            </Link>
+            {service && (
+              <Link className="opa-btn ghost" to={logsHref({ service, level: 'ERROR' })}>Logs</Link>
+            )}
+            <Link to="/errors" className="opa-row" style={{ gap: 'var(--sp-1)', fontSize: 'var(--fs-12)', color: 'var(--text-secondary)' }}>
+              <FiChevronLeft size={13} /> Errors
+            </Link>
+          </div>
         }
       />
 
@@ -131,9 +142,7 @@ export default function ErrorDetail() {
                 }}>
                   <FiList size={13} className="opa-muted" />
                   {tid ? (
-                    <Link to={`/traces/${encodeURIComponent(tid)}`} className="opa-mono cell-strong" style={{ color: 'var(--accent)' }}>
-                      {tid}
-                    </Link>
+                    <EntityChip to={traceHref(tid)} title={tid}>{tid}</EntityChip>
                   ) : (
                     <span className="opa-muted opa-mono">—</span>
                   )}

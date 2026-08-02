@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { FiUser, FiLogOut, FiChevronDown } from 'react-icons/fi'
+import { FiUser, FiLogOut, FiChevronDown, FiSettings } from 'react-icons/fi'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -40,6 +41,9 @@ export default function UserMenu() {
             <div className="opa-mono opa-usermenu-name">{username}</div>
             {role && <span className="opa-badge" style={{ marginTop: 6 }}>{role}</span>}
           </div>
+          <Link className="opa-usermenu-item" to="/settings/account" onClick={() => setOpen(false)}>
+            <FiSettings size={13} /> Account &amp; credentials
+          </Link>
           <button className="opa-usermenu-item" onClick={logout}><FiLogOut size={13} /> Log out</button>
         </div>
       )}
