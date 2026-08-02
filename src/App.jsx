@@ -53,6 +53,7 @@ const Infrastructure = lazy(() => import('./pages/Infrastructure'))
 const SqlQueryDetail = lazy(() => import('./pages/SqlQueryDetail'))
 const ErrorDetail = lazy(() => import('./pages/ErrorDetail'))
 const KeyTransactions = lazy(() => import('./pages/KeyTransactions'))
+const Commands = lazy(() => import('./pages/Commands'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
@@ -145,6 +146,10 @@ function App() {
             <Route
               path="/key-transactions"
               element={<KeyTransactions />}
+            />
+            <Route
+              path="/commands"
+              element={<Commands />}
             />
             <Route
               path="/traces"
