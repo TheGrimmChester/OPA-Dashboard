@@ -4,6 +4,21 @@ import { useTimeRange } from '../contexts/TimeRangeContext'
 import { useTenant } from '../contexts/TenantContext'
 import { apiUrl } from '../utils/apiBase'
 
+/** Prefer honesty over bare codes like Agent 410 `error: "moved"`. */
+export function formatApiError(e) {
+  const d = e?.response?.data
+  if (d && typeof d === 'object') {
+    const code = d.error != null ? String(d.error) : ''
+    const honesty = d.honesty != null ? String(d.honesty) : ''
+    if (code === 'moved' && honesty) return honesty
+    if (honesty && code) return `${code}: ${honesty}`
+    if (honesty) return honesty
+    if (code) return code
+  }
+  if (typeof d === 'string' && d) return d
+  return e?.message || 'Request failed'
+}
+
 // Fetch a JSON endpoint, auto-merging the global time range (from/to) and
 // re-fetching when the range, the selected tenant, the manual refresh tick, or
 // params change. The tenant travels as request headers (see TenantContext), so it
@@ -28,7 +43,7 @@ export function useApi(path, params = {}, opts = {}) {
       setState({ data: res.data, loading: false, error: null })
     } catch (e) {
       if (axios.isCancel?.(e) || e.name === 'CanceledError') return
-      setState({ data: null, loading: false, error: e.response?.data?.error || e.response?.data || e.message || 'Request failed' })
+      setState({ data: null, loading: false, error: formatApiError(e) })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, paramsKey, from, to, interval, skip, opts.noRange, organizationId, projectId])

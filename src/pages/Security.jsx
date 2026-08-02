@@ -14,6 +14,7 @@ import AgentsTab from '../components/security/AgentsTab'
 import CheckWithHint from '../components/security/CheckWithHint'
 import JobEvidencePanel, { findingsFromJob } from '../components/security/JobEvidencePanel'
 import PrefRow from '../components/security/PrefRow'
+import { parseChecksJson, WATCH_CHECK_OPTS, checksFromPolicyMap } from '../components/security/watchHelpers'
 import { useTenant } from '../contexts/TenantContext'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { securityRunHref, serviceHref, scmJobHref } from '../utils/entityLinks'
@@ -307,6 +308,9 @@ export default function Security() {
   })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
   const [watchRefresh, setWatchRefresh] = useState(0)
+  const [watchMode, setWatchMode] = useState('repos') // repos | run | contexts
+  const [selectedWatchRepo, setSelectedWatchRepo] = useState('')
+  const [addReposOpen, setAddReposOpen] = useState(false)
   const [aiReviewForm, setAiReviewForm] = useState({ force: true, ai_only: false, preview_url: '' })
   const [reviewRepos, setReviewRepos] = useState({}) // repo -> bool
   const [reviewPrs, setReviewPrs] = useState({}) // `${repo}#${pr}` -> bool
@@ -357,6 +361,9 @@ export default function Security() {
       setRepoPick(pick)
       if (watched.length) {
         const sample = watched.find((w) => w.enabled) || watched[0]
+        setSelectedWatchRepo((prev) => (
+          watched.some((w) => w.repo_full_name === prev) ? prev : sample.repo_full_name
+        ))
         setWatchPolicy((p) => ({
           ...p,
           ai_blocking: !!sample.ai_blocking,
@@ -365,6 +372,8 @@ export default function Security() {
             ? Number(sample.auto_approve_min_score) || 0
             : p.auto_approve_min_score,
         }))
+      } else {
+        setSelectedWatchRepo('')
       }
     }).catch((e) => {
       if (cancelled) return
@@ -684,44 +693,60 @@ export default function Security() {
     })
   }
 
+  const patchWatchedRow = (fullName, patch) => {
+    setWatchedRows((rows) => rows.map((r) => (
+      r.repo_full_name === fullName ? { ...r, ...patch } : r
+    )))
+  }
+
+  const selectedWatchRow = useMemo(
+    () => watchedRows.find((r) => r.repo_full_name === selectedWatchRepo) || watchedRows[0] || null,
+    [watchedRows, selectedWatchRepo],
+  )
+
   const saveWatched = async () => {
     if (!activeConnector) {
       flash('warn', 'Select a connector first')
       return
     }
-    const checks = Object.entries(watchPolicy.checks).filter(([, on]) => on).map(([id]) => id)
-    const defaultChecks = checks.length ? checks : ['secrets', 'sast', 'iac', 'sbom', 'ai_review']
+    const defaultChecks = checksFromPolicyMap(watchPolicy.checks)
     const byName = {}
     for (const w of watchedRows) {
       if (!w.repo_full_name) continue
+      const rowChecks = parseChecksJson(w.checks_json)
       byName[w.repo_full_name] = {
         repo_full_name: w.repo_full_name,
         repo_id: w.repo_id || '',
         enabled: !!w.enabled,
         service_name: w.service_name || '',
         profile: w.profile || form.profile || 'auto',
-        checks: defaultChecks,
+        checks: rowChecks.length ? rowChecks : defaultChecks,
         min_severity: w.min_severity || minSev,
-        ai_blocking: !!watchPolicy.ai_blocking,
-        auto_request_reviewer: !!watchPolicy.auto_request_reviewer,
-        auto_approve_min_score: Number(watchPolicy.auto_approve_min_score) || 0,
+        ai_blocking: !!w.ai_blocking,
+        auto_request_reviewer: !!w.auto_request_reviewer,
+        auto_approve_min_score: Number(w.auto_approve_min_score) || 0,
       }
     }
     for (const [name, on] of Object.entries(repoPick)) {
       if (!name) continue
       if (on) {
         const avail = availableRepos.find((r) => (r.full_name || r.repo_full_name) === name)
+        const existing = byName[name]
         byName[name] = {
-          ...(byName[name] || {}),
+          ...(existing || {}),
           repo_full_name: name,
-          repo_id: avail?.id || byName[name]?.repo_id || '',
+          repo_id: avail?.id || existing?.repo_id || '',
           enabled: true,
-          profile: form.profile || 'auto',
-          checks: defaultChecks,
-          min_severity: minSev,
-          ai_blocking: !!watchPolicy.ai_blocking,
-          auto_request_reviewer: !!watchPolicy.auto_request_reviewer,
-          auto_approve_min_score: Number(watchPolicy.auto_approve_min_score) || 0,
+          profile: existing?.profile || form.profile || 'auto',
+          checks: existing?.checks?.length ? existing.checks : defaultChecks,
+          min_severity: existing?.min_severity || minSev,
+          ai_blocking: existing ? !!existing.ai_blocking : !!watchPolicy.ai_blocking,
+          auto_request_reviewer: existing
+            ? !!existing.auto_request_reviewer
+            : !!watchPolicy.auto_request_reviewer,
+          auto_approve_min_score: existing
+            ? Number(existing.auto_approve_min_score) || 0
+            : Number(watchPolicy.auto_approve_min_score) || 0,
         }
       } else if (byName[name]) {
         byName[name].enabled = false
@@ -753,6 +778,7 @@ export default function Security() {
       setWatchedRows(data.watched || [])
       flash('ok', 'Watched repos updated', `${(data.watched || []).length} repos`)
       setWatchRefresh((n) => n + 1)
+      setAddReposOpen(false)
     } catch (e) {
       flash('error', 'Watch update failed', e.response?.data || e.message)
     } finally {
@@ -1671,24 +1697,7 @@ export default function Security() {
 
       {tab === 'watch' && (
         <>
-          <Panel title="Repo Watch" icon={<FiShield />}
-            loading={connectors.loading}
-            error={connectors.error}
-            actions={
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" className="opa-btn ghost" disabled={busy} onClick={simulateJob}>Simulate PR job</button>
-                <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
-                  <FiRefreshCw size={12} /> Refresh
-                </button>
-              </div>
-            }>
-            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Pick an SCM connector, then choose repositories to watch.
-              Connect / edit / delete connectors under{' '}
-              <Link to="/settings/connectors">Settings · Connectors</Link>.
-              {' '}App configured: {connectors.data?.github_app_configured ? 'yes' : 'no'}.
-            </p>
-
+          <div className="opa-watch-conn">
             <ConnectorPicker
               connectors={connectorList}
               loading={connectors.loading}
@@ -1705,535 +1714,641 @@ export default function Security() {
                     : ' — no decryptable PAT. Replace the token or reconnect on the Connectors page.'
               }
             />
-
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, marginBottom: 12, maxWidth: 420 }}>
-              Extra repos (optional)
-              <input
-                className="opa-mono"
-                value={extraRepos}
-                onChange={(e) => setExtraRepos(e.target.value)}
-                placeholder="org/name … if not in list"
-              />
-            </label>
-
-            <div className="opa-watch-checks">
-              <div className="opa-watch-checks-title">Checks included in each PR job</div>
-              {[
-                { id: 'secrets', label: 'Secrets', hint: 'Scan the PR diff for leaked credentials and API keys before merge.' },
-                { id: 'sast', label: 'SAST', hint: 'Static analysis for common insecure patterns in changed files.' },
-                { id: 'iac', label: 'IaC', hint: 'Check Terraform / K8s / CloudFormation diffs for misconfigurations.' },
-                { id: 'sbom', label: 'SBOM', hint: 'Generate or update dependency inventory for this PR’s lockfiles.' },
-                { id: 'ai_review', label: 'OPA Review (AI)', hint: 'Enqueue the Bugbot AI review child when this repo is watched.' },
-              ].map((c) => (
-                <CheckWithHint
-                  key={c.id}
-                  id={`watch-check-${c.id}`}
-                  label={c.label}
-                  hint={c.hint}
-                  checked={!!watchPolicy.checks[c.id]}
-                  onChange={(checked) => setWatchPolicy((p) => ({
-                    ...p,
-                    checks: { ...p.checks, [c.id]: checked },
-                  }))}
-                />
-              ))}
+            <div className="opa-watch-conn-meta">
+              <span className="opa-muted" style={{ fontSize: 12 }}>
+                Installed ≠ watched ≠ spend · App configured: {connectors.data?.github_app_configured ? 'yes' : 'no'}
+              </span>
+              <button type="button" className="opa-btn ghost" disabled={busy} onClick={simulateJob}>Simulate PR job</button>
+              <button type="button" className="opa-btn ghost" onClick={() => { connectors.reload?.(); setWatchRefresh((n) => n + 1) }}>
+                <FiRefreshCw size={12} /> Refresh
+              </button>
             </div>
-            <div className="opa-watch-toggles">
-              <PrefRow
-                label="AI blocking"
-                hint="Whether a failing Bugbot/approval child fails the GitHub Check Run and blocks merge."
-                on={!!watchPolicy.ai_blocking}
-                effectOn="OPA Review check fails when AI or approval blocks the PR."
-                effectOff="Findings stay advisory — gate can still pass independently."
-                as="label"
-              >
-                <input
-                  type="checkbox"
-                  checked={!!watchPolicy.ai_blocking}
-                  onChange={(e) => setWatchPolicy((p) => ({ ...p, ai_blocking: e.target.checked }))}
-                />
-              </PrefRow>
-              <PrefRow
-                label="Auto-request as reviewer"
-                hint="Ask GitHub to request the OPA Review bot as a reviewer when a PR opens."
-                on={!!watchPolicy.auto_request_reviewer}
-                effectOn="Bot is requested on open/reopen so humans see it in the reviewers list."
-                effectOff="Reviews still run via checks/comments — no reviewer request."
-                as="label"
-              >
-                <input
-                  type="checkbox"
-                  checked={!!watchPolicy.auto_request_reviewer}
-                  onChange={(e) => setWatchPolicy((p) => ({ ...p, auto_request_reviewer: e.target.checked }))}
-                />
-              </PrefRow>
-              <PrefRow
-                label="Min approve score"
-                hint="Lowest score that auto-approval may grant without a human (0 = COMMENT only)."
-              >
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  style={{ width: 64 }}
-                  value={watchPolicy.auto_approve_min_score}
-                  onChange={(e) => setWatchPolicy((p) => ({
-                    ...p,
-                    auto_approve_min_score: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
-                  }))}
-                  title="0 = COMMENT only; 1–100 = APPROVE when confidence ≥ score, else REQUEST_CHANGES"
-                />
-              </PrefRow>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" className="opa-btn primary" disabled={busy || !activeConnector} onClick={saveWatched}>Save watched repos</button>
-            </div>
-          </Panel>
+          </div>
 
-          <Panel title="Available repositories" icon={<FiEye />}
-            loading={reposLoading}
-            actions={
-              activeConnector ? (
-                <button type="button" className="opa-btn ghost" disabled={reposLoading} onClick={() => setWatchRefresh((n) => n + 1)}>
-                  <FiRefreshCw size={12} /> Reload list
-                </button>
-              ) : null
-            }>
-            {!activeConnector && (
-              <div className="opa-muted">Select or <Link to="/settings/connectors">connect a connector</Link> to load installable repos from <code>GET /api/connectors/{'{id}'}/repos</code>.</div>
-            )}
-            {activeConnector && reposMeta.error && (
-              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 13 }}>
-                Could not list repos: <span className="opa-mono">{String(reposMeta.error)}</span>
-                {reposMeta.note ? <> — {reposMeta.note}</> : null}
-                {reposMeta.error === 'connector_not_in_memory' || reposMeta.error === 'connector_token_unavailable' || reposMeta.error === 'connector_not_found' || reposMeta.error === 'connector_token_missing'
-                  ? <> <Link to={`/settings/connectors?edit=${encodeURIComponent(activeConnector)}`}>Replace token</Link> on Connectors (Agent needs stable JWT_SECRET / OPA_CONNECTOR_SECRET).</>
-                  : String(reposMeta.error).includes('401') || String(reposMeta.error).includes('403')
-                    ? <> Check PAT scopes / org SSO, then <Link to={`/settings/connectors?edit=${encodeURIComponent(activeConnector)}`}>replace the token</Link>.</>
-                    : <> Use checkboxes after listing, or type extra org/name above and Save.</>}
-              </div>
-            )}
-            {activeConnector && reposMeta.mock && !reposMeta.error && (
-              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 12 }}>
-                Mock list (<code>OPA_SCM_MOCK_GITHUB=1</code>) — not calling GitHub.
-                <Link to="/settings/connectors">Connect a real PAT</Link> to load your repos
-                (smoke mock is bypassed for real tokens).
-                {reposMeta.note ? <> {reposMeta.note}</> : null}
-              </div>
-            )}
-            {activeConnector && !reposMeta.mock && !reposMeta.error && reposMeta.note && (
-              <div className="opa-muted" style={{ marginBottom: 8, fontSize: 12 }}>{reposMeta.note}</div>
-            )}
-            {activeConnector && !reposLoading && availableRepos.length === 0 && !reposMeta.error && (
-              <div className="opa-muted">No installable repos returned. Add org/name in Extra repos and Save, or check PAT scopes.</div>
-            )}
-            {availableRepos.length > 0 && (
-              <>
-                <div className="opa-multiselect-head">
-                  <span className="opa-muted" style={{ fontSize: 12 }}>{availableRepos.length} repos</span>
-                  <MultiSelectActions
-                    disabled={reposLoading}
-                    onSelectAll={() => setAllAvailableRepos(true)}
-                    onClear={() => setAllAvailableRepos(false)}
-                  />
-                </div>
-                <div style={{ display: 'grid', gap: 6, maxHeight: 280, overflow: 'auto' }}>
-                  {availableRepos.map((r) => {
-                    const name = r.full_name || r.repo_full_name
-                    if (!name) return null
+          <div className="opa-watch-kpi">
+            <div className="opa-watch-kpi-card">
+              <span className="opa-watch-kpi-label">Watched & enabled</span>
+              <span className="opa-watch-kpi-val ok">{watchedRows.filter((r) => r.enabled).length}</span>
+            </div>
+            <div className="opa-watch-kpi-card">
+              <span className="opa-watch-kpi-label">Disabled</span>
+              <span className="opa-watch-kpi-val">{watchedRows.filter((r) => !r.enabled).length}</span>
+            </div>
+            <div className="opa-watch-kpi-card">
+              <span className="opa-watch-kpi-label">Jobs (loaded)</span>
+              <span className="opa-watch-kpi-val info">{fmtNum(scmJobTotal)}</span>
+            </div>
+            <div className="opa-watch-kpi-card">
+              <span className="opa-watch-kpi-label">AI blocking on</span>
+              <span className="opa-watch-kpi-val">{watchedRows.filter((r) => r.enabled && r.ai_blocking).length}</span>
+            </div>
+          </div>
+
+          <div className="opa-watch-modes" role="tablist" aria-label="Repo Watch modes">
+            {[
+              { id: 'repos', label: 'Watch', hint: 'Repos & per-repo gate' },
+              { id: 'run', label: 'Run', hint: 'OPA Review stack' },
+              { id: 'contexts', label: 'Contexts', hint: 'Briefs & AI key' },
+            ].map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                role="tab"
+                aria-selected={watchMode === m.id}
+                className={`opa-watch-mode${watchMode === m.id ? ' active' : ''}`}
+                onClick={() => setWatchMode(m.id)}
+              >
+                <strong>{m.label}</strong>
+                <span>{m.hint}</span>
+              </button>
+            ))}
+          </div>
+
+          {watchMode === 'repos' && (
+            <div className="opa-watch-split">
+              <Panel title="Watched repositories" icon={<FiEye />} flush
+                loading={reposLoading && !watchedRows.length}
+                empty={!reposLoading && !watchedRows.length && !addReposOpen}
+                emptyText="Add repos from the catalog, then Save watch set"
+                actions={(
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" className="opa-btn ghost" onClick={() => setAddReposOpen((v) => !v)}>
+                      {addReposOpen ? 'Hide catalog' : 'Add repos'}
+                    </button>
+                    <button type="button" className="opa-btn primary" disabled={busy || !activeConnector} onClick={saveWatched}>
+                      Save watch set
+                    </button>
+                  </div>
+                )}>
+                <div className="opa-watch-list">
+                  {watchedRows.map((r) => {
+                    const checks = parseChecksJson(r.checks_json)
+                    const selected = r.repo_full_name === selectedWatchRepo
                     return (
-                      <label key={name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                        <input type="checkbox" checked={!!repoPick[name]} onChange={() => toggleRepoPick(name)} />
-                        <span className="opa-mono cell-strong">{name}</span>
-                        {r.private ? <Badge>private</Badge> : null}
-                        {r.mock ? <span className="opa-muted" style={{ fontSize: 11 }}>mock</span> : null}
-                      </label>
+                      <button
+                        key={r.id || r.repo_full_name}
+                        type="button"
+                        className={`opa-watch-list-row${selected ? ' selected' : ''}${r.enabled ? '' : ' dim'}`}
+                        onClick={() => setSelectedWatchRepo(r.repo_full_name)}
+                      >
+                        <div>
+                          <div className="opa-mono cell-strong">{r.repo_full_name}</div>
+                          <div className="opa-muted" style={{ fontSize: 11 }}>
+                            {(checks.length ? checks.join(' · ') : 'no checks')}
+                            {r.service_name ? ` · ${r.service_name}` : ''}
+                          </div>
+                        </div>
+                        <div className="opa-watch-list-badges">
+                          {r.ai_blocking ? <StatusPill tone="warn">AI block</StatusPill> : null}
+                          <StatusPill tone={r.enabled ? 'ok' : 'neutral'}>{r.enabled ? 'on' : 'off'}</StatusPill>
+                        </div>
+                      </button>
                     )
                   })}
                 </div>
-              </>
-            )}
-          </Panel>
-
-          <Panel title="Watched repositories" icon={<FiEye />} flush
-            empty={!reposLoading && !watchedRows.length}
-            emptyText="Pick repos above and click Save watched repos">
-            <DataTable
-              columns={[
-                { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono cell-strong">{r.repo_full_name}</span> },
-                { key: 'service_name', header: 'Service', render: (r) => (r.service_name ? <Link to={serviceHref(r.service_name)}>{r.service_name}</Link> : '—') },
-                { key: 'profile', header: 'Profile', render: (r) => <Badge>{r.profile || 'auto'}</Badge> },
-                { key: 'checks_json', header: 'Checks', render: (r) => <span className="opa-muted" style={{ fontSize: 11 }}>{r.checks_json || '—'}</span> },
-                {
-                  key: 'min_severity', header: 'Min sev',
-                  render: (r) => (r.min_severity
-                    ? <StatusPill tone={sevTone(r.min_severity)}>{r.min_severity}</StatusPill>
-                    : '—'),
-                },
-                { key: 'ai_blocking', header: 'AI block', render: (r) => (r.ai_blocking ? 'yes' : 'no') },
-                { key: 'auto_request_reviewer', header: 'Auto reviewer', render: (r) => (r.auto_request_reviewer ? 'yes' : 'no') },
-                {
-                  key: 'auto_approve_min_score', header: 'Min score',
-                  render: (r) => (Number(r.auto_approve_min_score) > 0 ? String(r.auto_approve_min_score) : '—'),
-                },
-                {
-                  key: 'enabled',
-                  header: 'On',
-                  render: (r) => (
-                    <input
-                      type="checkbox"
-                      checked={!!r.enabled}
-                      onChange={() => toggleWatchedEnabled(r.repo_full_name)}
-                      aria-label={`Enable ${r.repo_full_name}`}
-                    />
-                  ),
-                },
-              ]}
-              rows={watchedRows}
-              rowKey={(r) => r.id || r.repo_full_name}
-              maxHeight={320}
-            />
-          </Panel>
-
-          <Panel title="Run OPA Review" icon={<FiPlay />}>
-            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Select one or more watched repos and open PRs, then enqueue an <strong>OPA Review stack</strong>
-              (one job per repo×PR). Large selections stay in one stack — extras <strong>wait</strong> and drain
-              with stack concurrency (default serial). Each job packs <strong>full primary</strong> context for that repo plus
-              <strong>linked awareness</strong>. Findings post inline (re-runs add/update/resolve); the global PR message is a narrative résumé upserted in place.
-              Related repos are shallow-cloned under the job checkout for cross-repo context. Open a job’s findings page from PR Jobs for experimental Auto-fix / Create fix PR (requires OPA-AI-Orchestrator).
-              {!scmSettings.data?.cursor_key_set && (
-                <>
-                  {' '}
-                  <span style={{ color: 'var(--danger, #c44)' }}>No CLI agent API key</span>
-                  {' '}for user <code>{scmSettings.data?.user_id || '—'}</code>
-                  {' '}in org <code>{scmSettings.data?.organization_id || '—'}</code>
-                  {' '}— manage under <Link to="/settings/account">Account</Link> (personal for this username, or org).
-                  {' '}Keys do not transfer across usernames. Jobs still run with <code>ai.status=skipped</code>.
-                </>
-              )}
-              {scmSettings.data?.cursor_key_set && scmSettings.data?.cursor_key_scope && (
-                <> CLI key scope: <code>{scmSettings.data.cursor_key_scope}</code>
-                  {scmSettings.data?.user_id ? <> · user <code>{scmSettings.data.user_id}</code></> : null}.
-                </>
-              )}
-              {scmSettings.data?.skip_cursor_ai && <> Agent has OPA Review skipped (<code>SKIP_CURSOR_AI=1</code>).</>}
-            </p>
-            <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
-              <div className="cell-strong">Watched repos</div>
-              <MultiSelectActions
-                disabled={!watchedRows.length}
-                onSelectAll={() => setAllReviewRepos(true)}
-                onClear={() => setAllReviewRepos(false)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
-              {watchedRows.map((r) => (
-                <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={!!reviewRepos[r.repo_full_name]}
-                    onChange={(e) => {
-                      const on = e.target.checked
-                      setReviewRepos((p) => ({ ...p, [r.repo_full_name]: on }))
-                      if (!on) {
-                        setReviewPrs((prev) => {
-                          const next = { ...prev }
-                          const prefix = `${r.repo_full_name}#`
-                          for (const key of Object.keys(next)) {
-                            if (key.startsWith(prefix)) next[key] = false
-                          }
-                          return next
-                        })
-                      }
-                    }}
-                  />
-                  <span className="opa-mono">{r.repo_full_name}</span>
-                </label>
-              ))}
-              {!watchedRows.length && <span className="opa-muted">Watch a repo first</span>}
-            </div>
-            <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
-              <div className="cell-strong">
-                Open PRs {pullsLoading ? '(loading…)' : ''}
-                {!!Object.values(reviewPrs).filter(Boolean).length && (
-                  <span className="opa-muted"> · {Object.values(reviewPrs).filter(Boolean).length} selected
-                    {Object.values(reviewPrs).filter(Boolean).length > 40 ? ' (will wait in one stack)' : ''}
-                  </span>
-                )}
-              </div>
-              <MultiSelectActions
-                disabled={!selectedReviewRepos.length || pullsLoading || !selectedReviewRepos.some((repo) => (pullsByRepo[repo] || []).length)}
-                onSelectAll={() => setReviewPrsForRepos(selectedReviewRepos, true)}
-                onClear={() => setReviewPrsForRepos(selectedReviewRepos, false)}
-              />
-            </div>
-            <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
-              {selectedReviewRepos.map((repo) => {
-                const pulls = pullsByRepo[repo] || []
-                return (
-                  <div key={repo} style={{ padding: 8, background: 'var(--surface-2)', borderRadius: 6 }}>
-                    <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
-                      <div className="opa-mono" style={{ fontSize: 12 }}>{repo}</div>
+                {addReposOpen && (
+                  <div className="opa-watch-catalog">
+                    <div className="opa-multiselect-head">
+                      <span className="opa-muted" style={{ fontSize: 12 }}>
+                        {!activeConnector ? 'Select a connector first' : `${availableRepos.length} available`}
+                      </span>
                       <MultiSelectActions
-                        disabled={!pulls.length || pullsLoading}
-                        onSelectAll={() => setReviewPrsForRepos([repo], true)}
-                        onClear={() => setReviewPrsForRepos([repo], false)}
+                        disabled={reposLoading || !availableRepos.length}
+                        onSelectAll={() => setAllAvailableRepos(true)}
+                        onClear={() => setAllAvailableRepos(false)}
                       />
                     </div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
-                      {pulls.map((p) => {
-                        const key = `${repo}#${p.number}`
+                    {activeConnector && reposMeta.error && (
+                      <div className="opa-muted" style={{ margin: '0 12px 8px', fontSize: 12 }}>
+                        Could not list repos: <span className="opa-mono">{String(reposMeta.error)}</span>
+                        {reposMeta.note ? <> — {reposMeta.note}</> : null}
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gap: 4, maxHeight: 200, overflow: 'auto', padding: '0 12px 10px' }}>
+                      {availableRepos.map((r) => {
+                        const name = r.full_name || r.repo_full_name
+                        if (!name) return null
+                        const already = watchedRows.some((w) => w.repo_full_name === name)
                         return (
-                          <label key={key} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                            <input
-                              type="checkbox"
-                              checked={!!reviewPrs[key]}
-                              onChange={(e) => setReviewPrs((prev) => ({ ...prev, [key]: e.target.checked }))}
-                            />
-                            #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
+                          <label key={name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                            <input type="checkbox" checked={!!repoPick[name]} onChange={() => toggleRepoPick(name)} />
+                            <span className="opa-mono cell-strong">{name}</span>
+                            {already ? <Badge>watched</Badge> : null}
+                            {r.private ? <Badge>private</Badge> : null}
                           </label>
                         )
                       })}
-                      {!pulls.length && !pullsLoading && <span className="opa-muted">No open PRs</span>}
+                    </div>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, margin: '0 12px 12px', maxWidth: 420 }}>
+                      Extra repos (optional)
+                      <input
+                        className="opa-mono"
+                        value={extraRepos}
+                        onChange={(e) => setExtraRepos(e.target.value)}
+                        placeholder="org/name … if not in list"
+                      />
+                    </label>
+                  </div>
+                )}
+              </Panel>
+
+              <Panel
+                title={selectedWatchRow?.repo_full_name || 'Select a repo'}
+                icon={<FiShield />}
+                className="opa-watch-inspector"
+                actions={selectedWatchRow ? (
+                  <button type="button" className="opa-btn ghost" onClick={() => { setWatchMode('run'); setReviewRepos((p) => ({ ...p, [selectedWatchRow.repo_full_name]: true })) }}>
+                    Run review…
+                  </button>
+                ) : null}
+              >
+                {!selectedWatchRow && (
+                  <div className="opa-muted">Pick a watched repository to edit its gate, checks, and AI prefs.</div>
+                )}
+                {selectedWatchRow && (
+                  <div className="opa-watch-inspector-body">
+                    <PrefRow
+                      label="Enabled"
+                      hint="Master gate — whether PR webhooks create paid jobs for this repo."
+                      on={!!selectedWatchRow.enabled}
+                      effectOn="PR events enqueue jobs and agent children."
+                      effectOff="Receipts only — no AI spend."
+                      as="label"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!selectedWatchRow.enabled}
+                        onChange={() => toggleWatchedEnabled(selectedWatchRow.repo_full_name)}
+                      />
+                    </PrefRow>
+                    <PrefRow
+                      label="AI blocking"
+                      hint="Fail the GitHub Check Run when Bugbot/approval blocks."
+                      on={!!selectedWatchRow.ai_blocking}
+                      effectOn="OPA Review check fails when AI blocks."
+                      effectOff="Findings stay advisory."
+                      as="label"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!selectedWatchRow.ai_blocking}
+                        disabled={!selectedWatchRow.enabled}
+                        onChange={(e) => patchWatchedRow(selectedWatchRow.repo_full_name, { ai_blocking: e.target.checked })}
+                      />
+                    </PrefRow>
+                    <PrefRow
+                      label="Auto-request as reviewer"
+                      hint="Request the OPA Review bot on PR open/reopen."
+                      on={!!selectedWatchRow.auto_request_reviewer}
+                      effectOn="Bot appears in the reviewers list."
+                      effectOff="Checks/comments only — no reviewer request."
+                      as="label"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!selectedWatchRow.auto_request_reviewer}
+                        disabled={!selectedWatchRow.enabled}
+                        onChange={(e) => patchWatchedRow(selectedWatchRow.repo_full_name, { auto_request_reviewer: e.target.checked })}
+                      />
+                    </PrefRow>
+                    <PrefRow label="Min approve score" hint="0 = COMMENT only; 1–100 = APPROVE when confidence ≥ score.">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        style={{ width: 64 }}
+                        disabled={!selectedWatchRow.enabled}
+                        value={Number(selectedWatchRow.auto_approve_min_score) || 0}
+                        onChange={(e) => patchWatchedRow(selectedWatchRow.repo_full_name, {
+                          auto_approve_min_score: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                        })}
+                      />
+                    </PrefRow>
+                    <div className="opa-watch-checks-title">Checks for this repo</div>
+                    <div className="opa-watch-checks">
+                      {WATCH_CHECK_OPTS.map((c) => {
+                        const checks = parseChecksJson(selectedWatchRow.checks_json)
+                        const on = checks.includes(c.id)
+                        return (
+                          <CheckWithHint
+                            key={c.id}
+                            id={`watch-row-check-${c.id}`}
+                            label={c.label}
+                            hint={c.hint}
+                            checked={on}
+                            disabled={!selectedWatchRow.enabled}
+                            onChange={(checked) => {
+                              const next = checked
+                                ? [...new Set([...checks, c.id])]
+                                : checks.filter((id) => id !== c.id)
+                              patchWatchedRow(selectedWatchRow.repo_full_name, { checks_json: JSON.stringify(next) })
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                    <div className="opa-watch-meta-grid">
+                      <div><span>Profile</span><strong>{selectedWatchRow.profile || 'auto'}</strong></div>
+                      <div><span>Min sev</span><strong>{selectedWatchRow.min_severity || '—'}</strong></div>
+                      <div><span>Service</span><strong>{selectedWatchRow.service_name || '—'}</strong></div>
+                    </div>
+                    <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
+                      Defaults for newly added repos still use the gate prefs below when you add from catalog.
+                    </p>
+                    <div className="opa-watch-toggles" style={{ marginTop: 8 }}>
+                      <div className="opa-watch-checks-title">Defaults for new watches</div>
+                      {WATCH_CHECK_OPTS.map((c) => (
+                        <CheckWithHint
+                          key={`def-${c.id}`}
+                          id={`watch-def-check-${c.id}`}
+                          label={c.label}
+                          hint={c.hint}
+                          checked={!!watchPolicy.checks[c.id]}
+                          onChange={(checked) => setWatchPolicy((p) => ({
+                            ...p,
+                            checks: { ...p.checks, [c.id]: checked },
+                          }))}
+                        />
+                      ))}
+                      <PrefRow
+                        label="Default AI blocking"
+                        on={!!watchPolicy.ai_blocking}
+                        effectOn="New watches inherit AI blocking on."
+                        effectOff="New watches inherit advisory AI."
+                        as="label"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!watchPolicy.ai_blocking}
+                          onChange={(e) => setWatchPolicy((p) => ({ ...p, ai_blocking: e.target.checked }))}
+                        />
+                      </PrefRow>
+                      <PrefRow
+                        label="Default auto-request reviewer"
+                        on={!!watchPolicy.auto_request_reviewer}
+                        as="label"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!watchPolicy.auto_request_reviewer}
+                          onChange={(e) => setWatchPolicy((p) => ({ ...p, auto_request_reviewer: e.target.checked }))}
+                        />
+                      </PrefRow>
+                      <PrefRow label="Default min approve score">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          style={{ width: 64 }}
+                          value={watchPolicy.auto_approve_min_score}
+                          onChange={(e) => setWatchPolicy((p) => ({
+                            ...p,
+                            auto_approve_min_score: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                          }))}
+                        />
+                      </PrefRow>
                     </div>
                   </div>
-                )
-              })}
-              {!selectedReviewRepos.length && <span className="opa-muted">Select repos above</span>}
+                )}
+              </Panel>
             </div>
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Preview URL (optional, UI visual MCP)
-                <input
-                  className="opa-mono"
-                  value={aiReviewForm.preview_url}
-                  onChange={(e) => setAiReviewForm((f) => ({ ...f, preview_url: e.target.value }))}
-                  placeholder="https://preview.example.com"
-                />
-              </label>
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
-              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                <input type="checkbox" checked={!!aiReviewForm.force} onChange={(e) => setAiReviewForm((f) => ({ ...f, force: e.target.checked }))} />
-                Force (include drafts)
-              </label>
-              <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                <input type="checkbox" checked={!!aiReviewForm.ai_only} onChange={(e) => setAiReviewForm((f) => ({ ...f, ai_only: e.target.checked }))} />
-                OPA Review only (skip AppSec scanners)
-              </label>
-            </div>
-            {!!appliedContexts.length && (
-              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                Contexts (primary + linked awareness):{' '}
-                {appliedContexts.map((c) => `${c.role}:${c.title || c.id}`).join(' · ')}
-              </div>
-            )}
-            {stackStatus && (
-              <div style={{ marginBottom: 10, padding: 8, background: 'var(--surface-2)', borderRadius: 6, fontSize: 12 }}>
-                <div>
-                  <strong>Stack</strong> <span className="opa-mono">{stackStatus.stack_id || stackStatus.id || lastStackId}</span>
-                  {' '}· {stackStatus.status}
-                  {stackStatus.note ? <span className="opa-muted"> · {stackStatus.note}</span> : null}
-                </div>
-                <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
-                  {(stackStatus.items || []).map((it, idx) => (
-                    <div key={`${it.repo_full_name}-${it.pr_number}-${idx}`} className="opa-mono">
-                      {it.repo_full_name}#{it.pr_number} → {it.status || '—'}
-                      {it.error ? ` (${it.error})` : ''}
-                      {it.job_id ? ` · ${String(it.job_id).slice(0, 14)}` : ''}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button
-                type="button"
-                className="opa-btn primary"
-                disabled={busy || !Object.values(reviewPrs).some(Boolean)}
-                onClick={runAiReview}
-              >
-                Run OPA Review stack
-              </button>
-              {lastStackId && (
-                <button type="button" className="opa-btn ghost" disabled={busy || jobActionBusy} onClick={cancelReviewStack}>
-                  Cancel stack
-                </button>
-              )}
-              {lastStackId && (
-                <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>
-                  Stack {String(lastStackId).slice(0, 16)}…
-                </button>
-              )}
-            </div>
-          </Panel>
+          )}
 
-          <Panel title="Reviewer contexts" icon={<FiCode />}>
-            <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Per-repo briefs packed into OPA Review (full primary + linked awareness). Tag <code>design</code>/<code>ui</code> for design-system enforcement
-              (auto-prioritized when the PR touches JSX/CSS/components). Link watched repos so a review pulls all contexts in the group.
-            </p>
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Repo
-                <select
-                  className="opa-mono"
-                  value={ctxForm.repo_full_name}
-                  onChange={(e) => setCtxForm((f) => ({ ...f, repo_full_name: e.target.value }))}
-                >
-                  <option value="">Select…</option>
-                  <option value="*">* (org-level)</option>
-                  {watchedRows.map((r) => (
-                    <option key={r.repo_full_name} value={r.repo_full_name}>{r.repo_full_name}</option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                Title
-                <input value={ctxForm.title} onChange={(e) => setCtxForm((f) => ({ ...f, title: e.target.value }))} placeholder="Auth & trust boundaries" />
-              </label>
-            </div>
-            <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
-              <input
-                type="checkbox"
-                checked={!!ctxForm.tags_design}
-                onChange={(e) => setCtxForm((f) => ({ ...f, tags_design: e.target.checked }))}
-              />
-              Design / UI enforcement context (tags: design, ui)
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, marginBottom: 8 }}>
-              Body (markdown)
-              <textarea
-                className="opa-mono"
-                rows={8}
-                style={{ width: '100%', fontSize: 12 }}
-                value={ctxForm.body_markdown}
-                onChange={(e) => setCtxForm((f) => ({ ...f, body_markdown: e.target.value }))}
-                placeholder={"## System\n## PR intent\n## Scope\n## Important invariants\n## Risk areas\n## Testing context\n## Operational\n"}
-              />
-            </label>
-            {genDraft?.source === 'skipped' && (
-              <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                Generate skipped — {genDraft?.honesty || 'save a CLI agent API key under Account (personal or org), or unset SKIP_CURSOR_AI'}.
-                {' '}Routing “auto” still uses Cursor when a CLI key is set.
+          {watchMode === 'run' && (
+            <Panel title="Run OPA Review" icon={<FiPlay />}>
+              <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
+                Select watched repos and open PRs, then enqueue an <strong>OPA Review stack</strong>
+                (one job per repo×PR). Large selections stay in one stack — extras <strong>wait</strong> and drain
+                with stack concurrency (default serial).
+                {!scmSettings.data?.cursor_key_set && (
+                  <>
+                    {' '}
+                    <span style={{ color: 'var(--danger, #c44)' }}>No CLI agent API key</span>
+                    {' '}— manage under <Link to="/settings/account">Account</Link>.
+                  </>
+                )}
+                {scmSettings.data?.cursor_key_set && scmSettings.data?.cursor_key_scope && (
+                  <> CLI key scope: <code>{scmSettings.data.cursor_key_scope}</code>.</>
+                )}
+              </p>
+              <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+                <div className="cell-strong">Watched repos</div>
+                <MultiSelectActions
+                  disabled={!watchedRows.length}
+                  onSelectAll={() => setAllReviewRepos(true)}
+                  onClear={() => setAllReviewRepos(false)}
+                />
               </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-              <button type="button" className="opa-btn primary" disabled={busy} onClick={saveContext}>
-                {ctxEditingId ? 'Update context' : 'Save context'}
-              </button>
-              <button type="button" className="opa-btn ghost" disabled={busy} onClick={generateContext}>
-                Generate with AI
-              </button>
-              {ctxEditingId && (
-                <button type="button" className="opa-btn ghost" onClick={() => { setCtxEditingId(''); setCtxForm({ title: '', body_markdown: '', repo_full_name: ctxForm.repo_full_name, tags_design: false }) }}>
-                  Cancel edit
-                </button>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
+                {watchedRows.map((r) => (
+                  <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!reviewRepos[r.repo_full_name]}
+                      onChange={(e) => {
+                        const on = e.target.checked
+                        setReviewRepos((p) => ({ ...p, [r.repo_full_name]: on }))
+                        if (!on) {
+                          setReviewPrs((prev) => {
+                            const next = { ...prev }
+                            const prefix = `${r.repo_full_name}#`
+                            for (const key of Object.keys(next)) {
+                              if (key.startsWith(prefix)) next[key] = false
+                            }
+                            return next
+                          })
+                        }
+                      }}
+                    />
+                    <span className="opa-mono">{r.repo_full_name}</span>
+                  </label>
+                ))}
+                {!watchedRows.length && <span className="opa-muted">Watch a repo first</span>}
+              </div>
+              <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+                <div className="cell-strong">
+                  Open PRs {pullsLoading ? '(loading…)' : ''}
+                  {!!Object.values(reviewPrs).filter(Boolean).length && (
+                    <span className="opa-muted"> · {Object.values(reviewPrs).filter(Boolean).length} selected
+                      {Object.values(reviewPrs).filter(Boolean).length > 40 ? ' (will wait in one stack)' : ''}
+                    </span>
+                  )}
+                </div>
+                <MultiSelectActions
+                  disabled={!selectedReviewRepos.length || pullsLoading || !selectedReviewRepos.some((repo) => (pullsByRepo[repo] || []).length)}
+                  onSelectAll={() => setReviewPrsForRepos(selectedReviewRepos, true)}
+                  onClear={() => setReviewPrsForRepos(selectedReviewRepos, false)}
+                />
+              </div>
+              <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
+                {selectedReviewRepos.map((repo) => {
+                  const pulls = pullsByRepo[repo] || []
+                  return (
+                    <div key={repo} style={{ padding: 8, background: 'var(--surface-2)', borderRadius: 6 }}>
+                      <div className="opa-multiselect-head" style={{ marginBottom: 6 }}>
+                        <div className="opa-mono" style={{ fontSize: 12 }}>{repo}</div>
+                        <MultiSelectActions
+                          disabled={!pulls.length || pullsLoading}
+                          onSelectAll={() => setReviewPrsForRepos([repo], true)}
+                          onClear={() => setReviewPrsForRepos([repo], false)}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
+                        {pulls.map((p) => {
+                          const key = `${repo}#${p.number}`
+                          return (
+                            <label key={key} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={!!reviewPrs[key]}
+                                onChange={(e) => setReviewPrs((prev) => ({ ...prev, [key]: e.target.checked }))}
+                              />
+                              #{p.number} {p.title}{p.draft ? ' (draft)' : ''}
+                            </label>
+                          )
+                        })}
+                        {!pulls.length && !pullsLoading && <span className="opa-muted">No open PRs</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+                {!selectedReviewRepos.length && <span className="opa-muted">Select repos above</span>}
+              </div>
+              <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                  Preview URL (optional, UI visual MCP)
+                  <input
+                    className="opa-mono"
+                    value={aiReviewForm.preview_url}
+                    onChange={(e) => setAiReviewForm((f) => ({ ...f, preview_url: e.target.value }))}
+                    placeholder="https://preview.example.com"
+                  />
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
+                <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                  <input type="checkbox" checked={!!aiReviewForm.force} onChange={(e) => setAiReviewForm((f) => ({ ...f, force: e.target.checked }))} />
+                  Force (include drafts)
+                </label>
+                <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                  <input type="checkbox" checked={!!aiReviewForm.ai_only} onChange={(e) => setAiReviewForm((f) => ({ ...f, ai_only: e.target.checked }))} />
+                  OPA Review only (skip AppSec scanners)
+                </label>
+              </div>
+              {!!appliedContexts.length && (
+                <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                  Contexts (primary + linked awareness):{' '}
+                  {appliedContexts.map((c) => `${c.role}:${c.title || c.id}`).join(' · ')}
+                </div>
               )}
-            </div>
-            <div className="opa-multiselect-head" style={{ marginBottom: 8 }}>
-              <div className="cell-strong">Link repos (shared context pack)</div>
-              <MultiSelectActions
-                disabled={!watchedRows.length}
-                onSelectAll={() => setAllLinkPick(true)}
-                onClear={() => setAllLinkPick(false)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
-              {watchedRows.map((r) => (
-                <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              {stackStatus && (
+                <div style={{ marginBottom: 10, padding: 8, background: 'var(--surface-2)', borderRadius: 6, fontSize: 12 }}>
+                  <div>
+                    <strong>Stack</strong> <span className="opa-mono">{stackStatus.stack_id || stackStatus.id || lastStackId}</span>
+                    {' '}· {stackStatus.status}
+                    {stackStatus.note ? <span className="opa-muted"> · {stackStatus.note}</span> : null}
+                  </div>
+                  <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                    {(stackStatus.items || []).map((it, idx) => (
+                      <div key={`${it.repo_full_name}-${it.pr_number}-${idx}`} className="opa-mono">
+                        {it.repo_full_name}#{it.pr_number} → {it.status || '—'}
+                        {it.error ? ` (${it.error})` : ''}
+                        {it.job_id ? ` · ${String(it.job_id).slice(0, 14)}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="opa-btn primary"
+                  disabled={busy || !Object.values(reviewPrs).some(Boolean)}
+                  onClick={runAiReview}
+                >
+                  Run OPA Review stack
+                </button>
+                {lastStackId && (
+                  <button type="button" className="opa-btn ghost" disabled={busy || jobActionBusy} onClick={cancelReviewStack}>
+                    Cancel stack
+                  </button>
+                )}
+                {lastStackId && (
+                  <button type="button" className="opa-btn ghost" onClick={() => selectTab('jobs')}>
+                    Stack {String(lastStackId).slice(0, 16)}…
+                  </button>
+                )}
+              </div>
+            </Panel>
+          )}
+
+          {watchMode === 'contexts' && (
+            <>
+              <Panel title="Reviewer contexts" icon={<FiCode />}>
+                <p className="opa-muted" style={{ marginTop: 0, fontSize: 13 }}>
+                  Per-repo briefs packed into OPA Review (full primary + linked awareness). Tag <code>design</code>/<code>ui</code> for design-system enforcement.
+                </p>
+                <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 12 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                    Repo
+                    <select
+                      className="opa-mono"
+                      value={ctxForm.repo_full_name}
+                      onChange={(e) => setCtxForm((f) => ({ ...f, repo_full_name: e.target.value }))}
+                    >
+                      <option value="">Select…</option>
+                      <option value="*">* (org-level)</option>
+                      {watchedRows.map((r) => (
+                        <option key={r.repo_full_name} value={r.repo_full_name}>{r.repo_full_name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                    Title
+                    <input value={ctxForm.title} onChange={(e) => setCtxForm((f) => ({ ...f, title: e.target.value }))} placeholder="Auth & trust boundaries" />
+                  </label>
+                </div>
+                <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 8 }}>
                   <input
                     type="checkbox"
-                    checked={!!linkPick[r.repo_full_name]}
-                    onChange={(e) => setLinkPick((p) => ({ ...p, [r.repo_full_name]: e.target.checked }))}
+                    checked={!!ctxForm.tags_design}
+                    onChange={(e) => setCtxForm((f) => ({ ...f, tags_design: e.target.checked }))}
                   />
-                  <span className="opa-mono">{r.repo_full_name}</span>
-                  {r.link_group_id ? <Badge>{r.link_group_id.slice(0, 10)}</Badge> : null}
+                  Design / UI enforcement context (tags: design, ui)
                 </label>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-              <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(false)}>Link selected</button>
-              <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(true)}>Clear links</button>
-            </div>
-            <DataTable
-              columns={[
-                { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
-                { key: 'title', header: 'Title' },
-                { key: 'source', header: 'Source', render: (r) => <Badge>{r.source || 'manual'}</Badge> },
-                {
-                  key: 'tags_json', header: 'Tags',
-                  render: (r) => {
-                    let tags = []
-                    try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
-                    if (!tags.length) return '—'
-                    return tags.map((t) => <Badge key={t}>{t}</Badge>)
-                  },
-                },
-                { key: 'link_group_id', header: 'Group', render: (r) => (r.link_group_id ? <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.link_group_id).slice(0, 12)}</span> : '—') },
-                {
-                  key: 'actions', header: '',
-                  render: (r) => {
-                    let tags = []
-                    try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
-                    const isDesign = tags.some((t) => ['design', 'ui', 'design-system'].includes(String(t)))
-                    return (
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        type="button"
-                        className="opa-btn ghost"
-                        onClick={() => {
-                          setCtxEditingId(r.id)
-                          setCtxForm({
-                            title: r.title || '',
-                            body_markdown: r.body_markdown || '',
-                            repo_full_name: r.repo_full_name || '',
-                            tags_design: isDesign,
-                          })
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button type="button" className="opa-btn ghost" onClick={() => deleteContext(r.id)}>Delete</button>
-                    </div>
-                    )
-                  },
-                },
-              ]}
-              rows={contexts}
-              rowKey={(r) => r.id}
-              maxHeight={280}
-            />
-          </Panel>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, marginBottom: 8 }}>
+                  Body (markdown)
+                  <textarea
+                    className="opa-mono"
+                    rows={8}
+                    style={{ width: '100%', fontSize: 12 }}
+                    value={ctxForm.body_markdown}
+                    onChange={(e) => setCtxForm((f) => ({ ...f, body_markdown: e.target.value }))}
+                    placeholder={"## System\n## PR intent\n## Scope\n## Important invariants\n## Risk areas\n## Testing context\n## Operational\n"}
+                  />
+                </label>
+                {genDraft?.source === 'skipped' && (
+                  <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                    Generate skipped — {genDraft?.honesty || 'save a CLI agent API key under Account (personal or org), or unset SKIP_CURSOR_AI'}.
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <button type="button" className="opa-btn primary" disabled={busy} onClick={saveContext}>
+                    {ctxEditingId ? 'Update context' : 'Save context'}
+                  </button>
+                  <button type="button" className="opa-btn ghost" disabled={busy} onClick={generateContext}>
+                    Generate with AI
+                  </button>
+                  {ctxEditingId && (
+                    <button type="button" className="opa-btn ghost" onClick={() => { setCtxEditingId(''); setCtxForm({ title: '', body_markdown: '', repo_full_name: ctxForm.repo_full_name, tags_design: false }) }}>
+                      Cancel edit
+                    </button>
+                  )}
+                </div>
+                <div className="opa-multiselect-head" style={{ marginBottom: 8 }}>
+                  <div className="cell-strong">Link repos (shared context pack)</div>
+                  <MultiSelectActions
+                    disabled={!watchedRows.length}
+                    onSelectAll={() => setAllLinkPick(true)}
+                    onClear={() => setAllLinkPick(false)}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
+                  {watchedRows.map((r) => (
+                    <label key={r.repo_full_name} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!linkPick[r.repo_full_name]}
+                        onChange={(e) => setLinkPick((p) => ({ ...p, [r.repo_full_name]: e.target.checked }))}
+                      />
+                      <span className="opa-mono">{r.repo_full_name}</span>
+                      {r.link_group_id ? <Badge>{r.link_group_id.slice(0, 10)}</Badge> : null}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(false)}>Link selected</button>
+                  <button type="button" className="opa-btn ghost" disabled={busy} onClick={() => linkSelectedRepos(true)}>Clear links</button>
+                </div>
+                <DataTable
+                  columns={[
+                    { key: 'repo_full_name', header: 'Repo', render: (r) => <span className="opa-mono">{r.repo_full_name}</span> },
+                    { key: 'title', header: 'Title' },
+                    { key: 'source', header: 'Source', render: (r) => <Badge>{r.source || 'manual'}</Badge> },
+                    {
+                      key: 'tags_json', header: 'Tags',
+                      render: (r) => {
+                        let tags = []
+                        try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
+                        if (!tags.length) return '—'
+                        return tags.map((t) => <Badge key={t}>{t}</Badge>)
+                      },
+                    },
+                    { key: 'link_group_id', header: 'Group', render: (r) => (r.link_group_id ? <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.link_group_id).slice(0, 12)}</span> : '—') },
+                    {
+                      key: 'actions', header: '',
+                      render: (r) => {
+                        let tags = []
+                        try { tags = JSON.parse(r.tags_json || '[]') } catch { /* ignore */ }
+                        const isDesign = tags.some((t) => ['design', 'ui', 'design-system'].includes(String(t)))
+                        return (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            type="button"
+                            className="opa-btn ghost"
+                            onClick={() => {
+                              setCtxEditingId(r.id)
+                              setCtxForm({
+                                title: r.title || '',
+                                body_markdown: r.body_markdown || '',
+                                repo_full_name: r.repo_full_name || '',
+                                tags_design: isDesign,
+                              })
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button type="button" className="opa-btn ghost" onClick={() => deleteContext(r.id)}>Delete</button>
+                        </div>
+                        )
+                      },
+                    },
+                  ]}
+                  rows={contexts}
+                  rowKey={(r) => r.id}
+                  maxHeight={280}
+                />
+              </Panel>
 
-          <Panel title="OPA Review AI" icon={<FiKey />}>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <StatusPill tone={scmSettings.data?.cursor_key_set ? 'ok' : 'warn'} title="CLI agent key for OPA Review">
-                CLI key {scmSettings.data?.cursor_key_set ? 'set' : 'not set'}
-                {scmSettings.data?.cursor_key_scope ? ` · ${scmSettings.data.cursor_key_scope}` : ''}
-              </StatusPill>
-              <span className="opa-muted" style={{ fontSize: 12 }}>
-                model {scmSettings.data?.cursor_model || 'auto'}
-                {scmSettings.data?.user_id ? <> · user <code>{scmSettings.data.user_id}</code></> : null}
-                {scmSettings.data?.organization_id ? <> · org <code>{scmSettings.data.organization_id}</code></> : null}
-              </span>
-              <Link to="/settings/account" className="opa-btn ghost" style={{ textDecoration: 'none' }}>
-                Manage in Account
-              </Link>
-            </div>
-            <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
-              Watch-specific <code>ai_review</code> / <code>ai_blocking</code> toggles stay here. API keys live under Account (user → org inheritance; per signed-in username).
-              {!scmSettings.data?.cursor_key_set && scmSettings.data?.honesty ? (
-                <> {String(scmSettings.data.honesty)}</>
-              ) : null}
-            </p>
-          </Panel>
+              <Panel title="OPA Review AI" icon={<FiKey />}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <StatusPill tone={scmSettings.data?.cursor_key_set ? 'ok' : 'warn'} title="CLI agent key for OPA Review">
+                    CLI key {scmSettings.data?.cursor_key_set ? 'set' : 'not set'}
+                    {scmSettings.data?.cursor_key_scope ? ` · ${scmSettings.data.cursor_key_scope}` : ''}
+                  </StatusPill>
+                  <span className="opa-muted" style={{ fontSize: 12 }}>
+                    model {scmSettings.data?.cursor_model || 'auto'}
+                    {scmSettings.data?.user_id ? <> · user <code>{scmSettings.data.user_id}</code></> : null}
+                    {scmSettings.data?.organization_id ? <> · org <code>{scmSettings.data.organization_id}</code></> : null}
+                  </span>
+                  <Link to="/settings/account" className="opa-btn ghost" style={{ textDecoration: 'none' }}>
+                    Manage in Account
+                  </Link>
+                </div>
+                <p className="opa-muted" style={{ fontSize: 12, marginBottom: 0 }}>
+                  Per-repo <code>ai_review</code> / <code>ai_blocking</code> live under Watch. API keys live under Account.
+                  {!scmSettings.data?.cursor_key_set && scmSettings.data?.honesty ? (
+                    <> {String(scmSettings.data.honesty)}</>
+                  ) : null}
+                </p>
+              </Panel>
+            </>
+          )}
         </>
       )}
 
       {tab === 'jobs' && (
-        <Panel title="SCM / PR jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading && !scmJobRows.length} error={scmJobs.error}
+        <Panel title="PR Jobs" icon={<FiRefreshCw />} flush loading={scmJobs.loading && !scmJobRows.length} error={scmJobs.error}
           empty={!scmJobs.loading && !scmJobRows.length}
           emptyText={
             scmJobs.data?.honesty
