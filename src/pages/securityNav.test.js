@@ -10,47 +10,44 @@ describe('securityNav', () => {
     expect(resolveSecurityNav(new URLSearchParams()).tab).toBe('findings')
   })
 
-  it('maps legacy finding tabs to findings+type', () => {
-    expect(resolveSecurityNav(new URLSearchParams('tab=secrets'))).toMatchObject({
+  it('resolves canonical pillars and params', () => {
+    expect(resolveSecurityNav(new URLSearchParams('tab=findings&type=secrets'))).toMatchObject({
       tab: 'findings',
       type: 'secrets',
     })
-    expect(resolveSecurityNav(new URLSearchParams('tab=vulns'))).toMatchObject({
-      tab: 'findings',
-      type: 'cve',
-    })
-  })
-
-  it('maps legacy jobs/watch/webhooks to ops+mode', () => {
-    expect(resolveSecurityNav(new URLSearchParams('tab=jobs'))).toMatchObject({
+    expect(resolveSecurityNav(new URLSearchParams('tab=ops&mode=jobs'))).toMatchObject({
       tab: 'ops',
       mode: 'jobs',
     })
-    expect(resolveSecurityNav(new URLSearchParams('tab=watch'))).toMatchObject({
-      tab: 'ops',
-      mode: 'watch',
-    })
-  })
-
-  it('maps legacy policies/pr/agents to control+section', () => {
-    expect(resolveSecurityNav(new URLSearchParams('tab=pr'))).toMatchObject({
+    expect(resolveSecurityNav(new URLSearchParams('tab=control&section=gate'))).toMatchObject({
       tab: 'control',
       section: 'gate',
     })
-    expect(resolveSecurityNav(new URLSearchParams('tab=agents'))).toMatchObject({
-      tab: 'control',
-      section: 'agents',
+  })
+
+  it('ignores unknown tabs (defaults to findings)', () => {
+    expect(resolveSecurityNav(new URLSearchParams('tab=secrets'))).toMatchObject({
+      tab: 'findings',
+      type: 'all',
+    })
+    expect(resolveSecurityNav(new URLSearchParams('tab=jobs'))).toMatchObject({
+      tab: 'findings',
+    })
+    expect(resolveSecurityNav(new URLSearchParams('tab=pr'))).toMatchObject({
+      tab: 'findings',
     })
   })
 
   it('opens scans for bare run=', () => {
     expect(resolveSecurityNav(new URLSearchParams('run=srun-1')).tab).toBe('scans')
     expect(resolveSecurityRunId(new URLSearchParams('run=srun-1'), 'scans')).toBe('srun-1')
-    expect(resolveSecurityRunId(new URLSearchParams('run=srun-1&tab=watch'), 'ops')).toBe('')
+    expect(resolveSecurityRunId(new URLSearchParams('run=srun-1&tab=ops'), 'ops')).toBe('')
   })
 
-  it('normalizes legacy jobs URL', () => {
-    const { params } = normalizeSecuritySearchParams(new URLSearchParams('tab=jobs&status=running'))
+  it('normalizes ops/jobs URL', () => {
+    const { params } = normalizeSecuritySearchParams(
+      new URLSearchParams('tab=ops&mode=jobs&status=running'),
+    )
     expect(params.get('tab')).toBe('ops')
     expect(params.get('mode')).toBe('jobs')
     expect(params.get('status')).toBe('running')

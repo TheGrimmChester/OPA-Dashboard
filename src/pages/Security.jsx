@@ -131,6 +131,7 @@ function scmJobStatusTone(status) {
     case 'queued': return 'info'
     case 'waiting': return 'neutral'
     case 'cancelled': return 'neutral'
+    case 'skipped': return 'neutral'
     case 'failed':
     case 'error': return 'error'
     default: return 'neutral'
@@ -208,7 +209,7 @@ const PROFILE_HINTS = {
 
 /** PR Jobs table URL filters (`?tab=ops&mode=jobs&status=…`). */
 const JOB_FILTER_KEYS = ['status', 'severity', 'repo', 'q']
-const JOB_STATUS_FILTERS = new Set(['running', 'queued', 'waiting', 'completed', 'failed', 'cancelled'])
+const JOB_STATUS_FILTERS = new Set(['running', 'queued', 'waiting', 'completed', 'failed', 'cancelled', 'skipped'])
 const JOB_SEV_FILTERS = new Set(['blocker|critical', 'high', 'medium', 'low', 'none'])
 
 function resolveJobStatusFilter(params) {
@@ -250,7 +251,7 @@ function MultiSelectActions({ onSelectAll, onClear, disabled = false, selectLabe
   )
 }
 
-/** Security: Findings · Scans · PR Ops · Control (legacy tab= deep-links still resolve). */
+/** Security: Findings · Scans · PR Ops · Control. */
 export default function Security() {
   const toast = useToast()
   const { organizationId } = useTenant()
@@ -325,15 +326,6 @@ export default function Security() {
     noRange: true,
     skip: !(onOps || (onControl && controlSection === 'agents')),
   })
-  const scmJobs = useApi('/api/scm/jobs', { limit: 200 }, {
-    noRange: true,
-    skip: !(onOpsJobs || onOpsWatch),
-  })
-  const scmWebhooks = useApi('/api/scm/webhooks', { limit: 200 }, { noRange: true, skip: !onOpsHooks })
-  const scmSettings = useApi('/api/scm/settings', {}, {
-    noRange: true,
-    skip: !(onOps || (onControl && (controlSection === 'gate' || controlSection === 'agents'))),
-  })
   const [webhookDetailId, setWebhookDetailId] = useState('')
   const [selectedJobId, setSelectedJobId] = useState('')
   const [selectedJobDetail, setSelectedJobDetail] = useState(null)
@@ -353,6 +345,35 @@ export default function Security() {
   })
   const [activeConnector, setActiveConnector] = useState(() => searchParams.get('connector') || '')
   const [watchRefresh, setWatchRefresh] = useState(0)
+  const connectorRows = connectors.data?.connectors || []
+  /**
+   * Pass selected connector (PAT or App) for Jobs + Webhooks.
+   * Orchestrator remaps PAT → sibling App by account_login across tenant orgs.
+   * Do not guess among multiple Apps — wrong install hides the running review.
+   */
+  const opsConnectorId = useMemo(() => {
+    if (!(onOpsJobs || onOpsHooks)) return ''
+    if (activeConnector) return activeConnector
+    const list = Array.isArray(connectorRows) ? connectorRows : []
+    const apps = list.filter((c) => String(c.kind || '').toLowerCase() === 'github_app')
+    if (apps.length === 1) return apps[0].id
+    return ''
+  }, [onOpsJobs, onOpsHooks, connectorRows, activeConnector])
+  const scmJobs = useApi('/api/scm/jobs', {
+    limit: 200,
+    ...(opsConnectorId ? { connector_id: opsConnectorId } : {}),
+  }, {
+    noRange: true,
+    skip: !(onOpsJobs || onOpsWatch),
+  })
+  const scmWebhooks = useApi('/api/scm/webhooks', {
+    limit: 200,
+    ...(opsConnectorId ? { connector_id: opsConnectorId } : {}),
+  }, { noRange: true, skip: !onOpsHooks })
+  const scmSettings = useApi('/api/scm/settings', {}, {
+    noRange: true,
+    skip: !(onOps || (onControl && (controlSection === 'gate' || controlSection === 'agents'))),
+  })
   /** Derived from opsMode: watch → repos list, run → OPA Review, contexts → briefs. */
   const watchMode = opsMode === 'run' ? 'run' : opsMode === 'contexts' ? 'contexts' : 'repos'
   const [selectedWatchRepo, setSelectedWatchRepo] = useState('')
@@ -524,7 +545,7 @@ export default function Security() {
     if (nextRun !== activeRunId) setActiveRunId(nextRun)
     if (nextConnector && nextConnector !== activeConnector) setActiveConnector(nextConnector)
 
-    // Rewrite legacy tab= secrets|jobs|… into canonical pillar URLs once.
+    // Canonicalize pillar URL params (drop stale type/mode/section/run).
     const cur = searchParams.toString()
     const next = normalized.toString()
     if (cur !== next) {
@@ -870,10 +891,14 @@ export default function Security() {
 
   const selectConnector = (id) => {
     setActiveConnector(id)
-    setTab('watch')
+    // Stay on PR Ops — never use legacy tab=watch (four-pillar IA).
+    const mode = onOpsWatch || onOpsJobs || onOpsHooks ? opsMode : 'watch'
+    setTab('ops')
+    setOpsMode(OPS_MODES.includes(mode) ? mode : 'watch')
     setActiveRunId('')
     const p = new URLSearchParams(searchParams)
-    p.set('tab', 'watch')
+    p.set('tab', 'ops')
+    p.set('mode', OPS_MODES.includes(mode) ? mode : 'watch')
     p.delete('run')
     if (id) p.set('connector', id)
     else p.delete('connector')
@@ -1371,6 +1396,7 @@ export default function Security() {
       case 'waiting': return 'Backlog — waiting for a free slot or prior stack item'
       case 'completed': return 'Finished successfully'
       case 'cancelled': return 'Cancelled before or during run'
+      case 'skipped': return 'Skipped (already reviewed, or policy skip)'
       case 'failed':
       case 'error': return 'Finished with an error'
       default: return ''
@@ -1385,8 +1411,9 @@ export default function Security() {
       case 'failed':
       case 'error': return 3
       case 'cancelled': return 4
-      case 'completed': return 5
-      default: return 6
+      case 'skipped': return 5
+      case 'completed': return 6
+      default: return 7
     }
   }
 
@@ -1982,7 +2009,7 @@ export default function Security() {
       {(onControl && controlSection === 'gate') && (
         <Panel title="AppSec Gate" icon={<FiCheckCircle />} loading={prCheck.loading} error={prCheck.error}>
           <p className="opa-muted" style={{ marginTop: 0 }}>
-            <strong>Tenant gate</strong> aggregates all findings (legacy CI). Prefer <strong>scoped</strong> checks with
+            <strong>Tenant gate</strong> aggregates all findings (tenant-wide). Prefer <strong>scoped</strong> checks with
             {' '}<code>security_run_id</code> from Repo Watch / Scans.
             CI: <code>POST /v1/security/pr-check</code> with <code>X-OPA-Security-Token</code>.
           </p>
@@ -2653,9 +2680,11 @@ export default function Security() {
           empty={!scmJobs.loading && !scmJobRows.length}
           emptyText={
             scmJobs.data?.honesty
-              || (orgAll
-                ? 'No jobs visible — with tenant All, admins see every org; pick an organization if you still see nothing after a stack queue'
-                : `No jobs for org ${organizationId} — stacks inherit the watched repo’s organization (often default-org). Try tenant All or that org.`)
+              || (opsConnectorId
+                ? 'No jobs for this connector yet — open/synchronize a watched PR or queue an OPA Review.'
+                : (orgAll
+                  ? 'No jobs visible — with tenant All, admins see every org; pick an organization if you still see nothing after a stack queue'
+                  : `No jobs for org ${organizationId} — App webhook jobs land on the org that owns the GitHub App install (often default-org). Pick a connector below or switch tenant to All.`))
           }
           actions={(
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -2670,12 +2699,23 @@ export default function Security() {
               <button type="button" className="opa-btn ghost" onClick={() => scmJobs.reload?.()}><FiRefreshCw size={12} /> Refresh</button>
             </div>
           )}>
-          {!scmJobs.loading && scmJobRows.length > 0 && scmJobs.data?.honesty && (
+          <div className="opa-watch-conn" style={{ margin: '8px 12px 0' }}>
+            <ConnectorPicker
+              connectors={connectorList}
+              loading={connectors.loading}
+              value={activeConnector}
+              onChange={selectConnector}
+              onReload={() => { connectors.reload?.(); scmJobs.reload?.() }}
+              missing={connectorMissing}
+              needsReconnect={connectorNeedsReconnect}
+            />
+          </div>
+          {!scmJobs.loading && scmJobs.data?.honesty && (
             <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>{String(scmJobs.data.honesty)}</p>
           )}
           <div className="opa-jobs-summary">
             <span className="opa-muted">{fmtNum(scmJobTotal)} total</span>
-            {['running', 'queued', 'waiting', 'completed', 'cancelled', 'failed', 'error'].map((st) => (
+            {['running', 'queued', 'waiting', 'completed', 'cancelled', 'failed', 'error', 'skipped'].map((st) => (
               scmJobCounts[st] ? (
                 <button
                   key={st}
@@ -2710,6 +2750,7 @@ export default function Security() {
                 <option value="completed">completed</option>
                 <option value="failed">failed</option>
                 <option value="cancelled">cancelled</option>
+                <option value="skipped">skipped</option>
               </select>
             </label>
             <label className="opa-jobs-filter">
@@ -2936,14 +2977,40 @@ export default function Security() {
           empty={!scmWebhooks.loading && !scmWebhookRows.length}
           emptyText={
             scmWebhooks.data?.honesty
-              || (orgAll
-                ? 'No webhook deliveries yet — live captures start after orchestrator deploy; historical PR/push jobs are backfilled on boot'
-                : `No webhooks for org ${organizationId}`)
+              || (opsConnectorId
+                ? 'No deliveries for this App connector yet — open/update a PR on an installed repo to verify intake.'
+                : (orgAll
+                  ? 'No webhook deliveries yet — live captures start after orchestrator deploy; historical PR/push jobs are backfilled on boot'
+                  : `No webhooks for org ${organizationId} — App deliveries land on the org that owns the GitHub App installation (often default-org). Pick the App connector below or switch tenant to All.`))
           }
           actions={<button type="button" className="opa-btn ghost" onClick={() => scmWebhooks.reload?.()}><FiRefreshCw size={12} /> Refresh</button>}
         >
-          {!scmWebhooks.loading && scmWebhookRows.length > 0 && scmWebhooks.data?.honesty && (
-            <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>{String(scmWebhooks.data.honesty)}</p>
+          <div className="opa-watch-conn" style={{ margin: '8px 12px 0' }}>
+            <ConnectorPicker
+              connectors={connectorList}
+              loading={connectors.loading}
+              value={activeConnector}
+              onChange={selectConnector}
+              onReload={() => { connectors.reload?.(); scmWebhooks.reload?.() }}
+              missing={connectorMissing}
+              needsReconnect={connectorNeedsReconnect}
+            />
+          </div>
+          {!scmWebhooks.loading && (
+            <p className="opa-muted" style={{ margin: '8px 12px 0', fontSize: 12 }}>
+              {scmWebhooks.data?.honesty ? `${String(scmWebhooks.data.honesty)} · ` : null}
+              Live intake is <code className="opa-mono">POST /v1/scm/github/webhook</code> on the Orchestrator
+              (public URL from SCM settings). GitHub App deliveries attach to the App connector — not a PAT.
+              {opsConnectorId
+                ? ` Requested connector ${opsConnectorId.slice(0, 22)}${opsConnectorId.length > 22 ? '…' : ''}.`
+                : null}
+              {scmWebhooks.data?.connector_id && scmWebhooks.data.connector_id !== opsConnectorId
+                ? ` Remapped to App ${String(scmWebhooks.data.connector_id).slice(0, 22)}…`
+                : null}
+              {activeConnectorRow?.kind === 'github_pat' && scmWebhooks.data?.connector_id === opsConnectorId
+                ? ' No sibling App install found for this PAT account.'
+                : null}
+            </p>
           )}
           <div className="opa-jobs-summary">
             <span className="opa-muted">{fmtNum(scmWebhookTotal)} total</span>

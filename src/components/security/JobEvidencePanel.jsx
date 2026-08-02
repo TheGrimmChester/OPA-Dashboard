@@ -140,10 +140,25 @@ export default function JobEvidencePanel({
         </div>
       </div>
 
-      {(honesty || degraded) ? (
-        <div className={`opa-jobs-evidence-callout${degraded ? ' warn' : ''}`}>
-          <strong>{degraded ? 'Degraded' : 'Honesty'}</strong>
-          <span>{String(degraded || honesty)}</span>
+      {(honesty || degraded || summary.skip_reason) ? (
+        <div className={`opa-jobs-evidence-callout${degraded || summary.skip_reason ? ' warn' : ''}`}>
+          <strong>{degraded ? 'Degraded' : summary.skip_reason ? 'Skipped' : 'Honesty'}</strong>
+          <span>{String(degraded || summary.skip_reason || honesty)}</span>
+        </div>
+      ) : null}
+
+      {(gate.status === 'fail' || (Array.isArray(gate.reasons) && gate.reasons.length) || (ai.status && ai.status !== 'completed')) ? (
+        <div className={`opa-jobs-evidence-callout${gate.status === 'fail' || ai.status === 'skipped' || ai.status === 'error' ? ' warn' : ''}`}>
+          <strong>{gate.status === 'fail' ? 'Gate' : 'Review'}</strong>
+          <span>
+            {gate.status === 'fail'
+              ? `AppSec gate ${gate.status}${(Array.isArray(gate.reasons) && gate.reasons.length) ? `: ${gate.reasons.join('; ')}` : ''}${gate.security_run_id ? ` · run ${gate.security_run_id}` : ''}`
+              : null}
+            {gate.status === 'fail' && ai.summary ? ' · ' : null}
+            {ai.summary
+              ? String(ai.summary)
+              : (ai.status && ai.status !== 'completed' ? `AI ${ai.status}` : null)}
+          </span>
         </div>
       ) : null}
 
@@ -189,7 +204,11 @@ export default function JobEvidencePanel({
       <section className="opa-jobs-evidence-section">
         <h3>Findings ({findings.length})</h3>
         {findings.length === 0 ? (
-          <p className="opa-muted" style={{ margin: 0, fontSize: 12 }}>No findings on the list summary for this SHA.</p>
+          <p className="opa-muted" style={{ margin: 0, fontSize: 12 }}>
+            {gate.status === 'fail'
+              ? 'Gate failed but findings were not attached to this job row — open the security run or full job page for the ledger.'
+              : 'No findings on the list summary for this SHA.'}
+          </p>
         ) : (
           <ul className="opa-jobs-evidence-findings">
             {findings.slice(0, 5).map((f, i) => (
