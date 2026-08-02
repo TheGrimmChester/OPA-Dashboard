@@ -6,7 +6,7 @@ import { Panel } from './index'
 
 const API = import.meta.env.VITE_API_URL || ''
 
-/** Wave 14-4: related-context rail for entity detail pages. */
+/** Dashboards: related-context rail for entity detail pages. */
 export default function RelatedContextRail({ query, title = 'Related' }) {
   const [items, setItems] = useState([])
   useEffect(() => {

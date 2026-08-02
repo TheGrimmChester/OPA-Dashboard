@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useState } from 'react'
 
-// Wave 27-4: lightweight i18n — extract strings early; translations can land later.
+// Diagnostics: lightweight i18n — extract strings early; translations can land later.
 
 const MESSAGES = {
   en: {

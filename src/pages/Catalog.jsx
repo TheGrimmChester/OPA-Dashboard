@@ -10,7 +10,7 @@ import { fmtNum, fmtPct, fmtMs, fmtAgo } from '../theme/format'
 
 const API = import.meta.env.VITE_API_URL || ''
 
-/** Wave 21: Service catalog with ownership and scorecards. */
+/** Service catalog: Service catalog with ownership and scorecards. */
 export default function Catalog() {
   const [tab, setTab] = useState('entities')
   const [kind, setKind] = useState('')

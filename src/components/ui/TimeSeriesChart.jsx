@@ -39,7 +39,7 @@ export function parseChartTime(row, xKey = 'time') {
 }
 
 /**
- * Wave 14-3: optional brush-to-zoom writes an absolute window into TimeRangeContext.
+ * Dashboards: optional brush-to-zoom writes an absolute window into TimeRangeContext.
  * annotations: [{ occurred_at|t, title, kind }]
  */
 export default function TimeSeriesChart({
