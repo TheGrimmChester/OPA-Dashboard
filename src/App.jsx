@@ -49,6 +49,7 @@ const PerformanceView = lazy(() => import('./pages/PerformanceView'))
 const LiveHub = lazy(() => import('./pages/LiveHub'))
 const PlatformOps = lazy(() => import('./pages/PlatformOps'))
 const Serverless = lazy(() => import('./pages/Serverless'))
+const Security = lazy(() => import('./pages/Security'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -170,6 +171,10 @@ function App() {
             <Route
               path="/serverless"
               element={<Serverless />}
+            />
+            <Route
+              path="/security"
+              element={<Security />}
             />
             <Route
               path="/traces/:traceId"
