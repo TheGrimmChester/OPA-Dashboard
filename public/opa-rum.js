@@ -325,7 +325,31 @@
     // flush. First flush always fires; later flushes only fire if something
     // changed — this satisfies "flush once per dirty state, re-flush on new data".
     var dirty = true;
-    function markDirty() { dirty = true; }
+    function markDirty() {
+        if (CONSENT !== 'granted') return;
+        dirty = true;
+    }
+
+    function clearTelemetryBuffers() {
+        ajaxRequests.length = 0;
+        errors.length = 0;
+        customEvents.length = 0;
+        longTasks.length = 0;
+        replayBuf.length = 0;
+        replayChunks.length = 0;
+        vitalElements = { lcp: null, cls: [], inp: null };
+        customTimings = {};
+        dirty = false;
+    }
+
+    function applyConsent(next) {
+        CONSENT = String(next || 'denied');
+        if (CONSENT !== 'granted') {
+            clearTelemetryBuffers();
+            return;
+        }
+        markDirty();
+    }
 
     function pushCapped(arr, item, cap) {
         if (arr.length < cap) arr.push(item);
@@ -1034,7 +1058,7 @@
     function flush() {
         // Only send if new data has accrued since the last flush.
         if (!dirty) { log('flush skipped (not dirty)'); return; }
-        if (CONSENT === 'denied') { log('flush skipped (consent denied)'); dirty = false; return; }
+        if (CONSENT !== 'granted') { log('flush skipped (consent ' + CONSENT + ')'); dirty = false; return; }
 
         var payload = buildPayload();
         var json;
@@ -1128,8 +1152,7 @@
             markDirty();
         },
         setConsent: function (c) {
-            CONSENT = String(c || 'denied');
-            markDirty();
+            applyConsent(c);
         },
         getConsent: function () { return CONSENT; },
         // Framework hooks: call on every SPA route change if History API is not used.
