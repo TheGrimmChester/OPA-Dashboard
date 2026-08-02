@@ -26,6 +26,7 @@ import {
 import ErrorBoundary from './components/ErrorBoundary'
 import { TenantProvider } from './contexts/TenantContext'
 import { TimeRangeProvider } from './contexts/TimeRangeContext'
+import { I18nProvider } from './contexts/I18nContext'
 import AppShell from './components/shell/AppShell'
 import './App.css'
 
@@ -56,6 +57,7 @@ const Cloud = lazy(() => import('./pages/Cloud'))
 const Network = lazy(() => import('./pages/Network'))
 const Federation = lazy(() => import('./pages/Federation'))
 const Collaborate = lazy(() => import('./pages/Collaborate'))
+const Diagnostics = lazy(() => import('./pages/Diagnostics'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -139,6 +141,7 @@ function App() {
       <RequireAuth>
       <TenantProvider>
         <TimeRangeProvider>
+        <I18nProvider>
         <AppShell>
           <Suspense fallback={<div className="route-loading" style={{ padding: 24, color: 'var(--text-muted)' }}>Loading…</div>}>
           <Routes>
@@ -220,6 +223,10 @@ function App() {
             <Route
               path="/collaborate"
               element={<Collaborate />}
+            />
+            <Route
+              path="/diagnostics"
+              element={<Diagnostics />}
             />
             <Route
               path="/profiling"
@@ -320,6 +327,7 @@ function App() {
           </Routes>
           </Suspense>
         </AppShell>
+        </I18nProvider>
         </TimeRangeProvider>
       </TenantProvider>
       </RequireAuth>

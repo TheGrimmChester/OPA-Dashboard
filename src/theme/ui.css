@@ -35,7 +35,7 @@
 .opa-breadcrumb a:hover { color: var(--text-primary); }
 .opa-breadcrumb .crumb-sep { color: var(--text-disabled); flex: 0 0 auto; }
 .opa-breadcrumb .crumb-current { color: var(--text-primary); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.opa-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); flex: 0 0 auto; }
+.opa-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
 
 /* user menu */
 .opa-usermenu { position: relative; }
