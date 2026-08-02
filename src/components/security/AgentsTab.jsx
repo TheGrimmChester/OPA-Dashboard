@@ -9,7 +9,7 @@ import PrefRow from './PrefRow'
 import { inheritOptionLabel } from '../../utils/scmRuns'
 
 const LEVELS = [
-  { value: 'org', label: 'Organization' },
+  { value: 'org', label: 'Global (all repos)' },
   { value: 'installation', label: 'Installation' },
   { value: 'repo', label: 'Repository' },
 ]
@@ -110,7 +110,7 @@ export default function AgentsTab({
   activeConnector = '',
   onConnectorChange,
 }) {
-  const [level, setLevel] = useState('repo')
+  const [level, setLevel] = useState('org')
   const [connectorId, setConnectorId] = useState(activeConnector || '')
   const [repo, setRepo] = useState('')
   const [watchedRepos, setWatchedRepos] = useState([])
@@ -191,7 +191,31 @@ export default function AgentsTab({
     })
   }
 
+  const resolveScopeKey = () => {
+    const cid = connectorId || activeConnector || ''
+    if (level === 'org') {
+      const fromPayload = String(payload?.scope_key || '').trim()
+      if (fromPayload) return fromPayload
+      const org = String(payload?.organization_id || '').trim()
+      const proj = String(payload?.project_id || '').trim()
+      if (org && proj) return `${org}/${proj}`
+      return ''
+    }
+    if (level === 'installation') return String(cid || '').trim()
+    return String(repo || '').trim()
+  }
+
   const save = async () => {
+    const scopeKey = resolveScopeKey()
+    if (!scopeKey) {
+      const hint = level === 'installation'
+        ? 'Select an installation connector before saving.'
+        : level === 'repo'
+          ? 'Select a repository before saving — or switch Scope to Global (all repos).'
+          : 'Organization scope is not ready yet — Refresh, then try again.'
+      toast?.push?.(hint, { tone: 'error' })
+      return
+    }
     setBusy(true)
     try {
       const prefs = {}
@@ -203,21 +227,25 @@ export default function AgentsTab({
       }
       const body = {
         level,
+        scope_key: scopeKey,
         prefs,
         connector_id: connectorId || activeConnector || '',
         repo: repo || '',
       }
-      if (level === 'installation') body.scope_key = body.connector_id
-      if (level === 'repo') body.scope_key = repo
       const { data } = await axios.put(apiUrl('/api/agents/prefs'), body)
       setPayload((p) => ({
         ...(p || {}),
         prefs: data.prefs || draft,
         effective: data.effective || p?.effective,
         sources: data.sources || p?.sources,
+        scope_key: data.scope_key || scopeKey,
+        level: data.level || level,
       }))
       setDraft(data.prefs && typeof data.prefs === 'object' ? { ...data.prefs } : { ...draft })
-      toast?.push?.('Agent preferences saved', { tone: 'neutral' })
+      toast?.push?.(
+        level === 'org' ? 'Global agent preferences saved (all repos)' : 'Agent preferences saved',
+        { tone: 'neutral' },
+      )
     } catch (e) {
       toast?.push?.(
         typeof e.response?.data === 'string' ? e.response.data : (e.message || 'Save failed'),
@@ -451,7 +479,7 @@ export default function AgentsTab({
       <>
         <PrefRow
           label="Cloud enabled"
-          hint="Capability flag — unset/inherit fails closed (no cloud child)."
+          hint="Builtin default is on — set Off to disable the Cloud child for this scope."
           on={!!effective.cloud_enabled}
           effectOn="Cloud child may run after Bugbot when autofix mode allows."
           effectOff="Cloud/autofix actions are disabled for this scope."
@@ -516,7 +544,7 @@ export default function AgentsTab({
             <button type="button" className="opa-btn ghost" onClick={loadPrefs} disabled={loading}>
               <FiRefreshCw size={12} /> Refresh
             </button>
-            <button type="button" className="opa-btn primary" onClick={save} disabled={busy || loading}>
+            <button type="button" className="opa-btn primary" onClick={save} disabled={busy || loading || !resolveScopeKey()}>
               Save
             </button>
           </div>
@@ -528,12 +556,21 @@ export default function AgentsTab({
             <select
               className="opa-select"
               value={level}
-              onChange={(e) => setLevel(e.target.value)}
+              onChange={(e) => {
+                setLevel(e.target.value)
+                setPayload(null)
+              }}
               aria-label="Preference scope"
             >
               {LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
             </select>
           </label>
+          {level === 'org' ? (
+            <span className="opa-muted opa-agents-scope-hint">
+              Applies to every watched repo unless Installation/Repository overrides.
+              {payload?.scope_key ? <> · <code>{payload.scope_key}</code></> : null}
+            </span>
+          ) : null}
           {(level === 'installation' || level === 'repo') ? (
             <label className="opa-agents-filter opa-agents-filter-wide">
               <span className="opa-muted">Installation</span>

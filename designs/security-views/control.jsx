@@ -60,7 +60,7 @@ function AgentsScopeBar({ level, setLevel, connectorId, setConnectorId, repo, se
       <label className="ag-scope-field">
         <span>Scope</span>
         <select value={level} onChange={(e) => setLevel(e.target.value)} aria-label="Preference scope">
-          <option value="org">Organization</option>
+          <option value="org">Global (all repos)</option>
           <option value="installation">Installation</option>
           <option value="repo">Repository</option>
         </select>
@@ -214,7 +214,7 @@ function DomainFields({ domainId, draft, setField, effective, sources }) {
   }
   return (
     <>
-      <PrefBool label="Cloud enabled" hint="Capability flag — unset/inherit fails closed (no cloud child)." field="cloud_enabled" draft={draft} setField={setField} effective={effective} sources={sources} />
+      <PrefBool label="Cloud enabled" hint="Builtin default is on — set Off to disable the Cloud child for this scope." field="cloud_enabled" draft={draft} setField={setField} effective={effective} sources={sources} />
       <PrefString label="Autofix Mode" hint="off = never · suggest = proposal only · branch = open a fix PR." field="autofix_mode" draft={draft} setField={setField} effective={effective} sources={sources} options={AUTOFIX_OPTS} />
       <PrefString label="Autofix Severity Threshold" hint="Minimum finding severity that may trigger autofix work." field="autofix_severity_threshold" draft={draft} setField={setField} effective={effective} sources={sources} options={SEV_OPTS} />
       <PrefBool label="Run tests before land" hint="Execute project tests in the docker sandbox before proposing a land." field="cloud_run_tests" draft={draft} setField={setField} effective={effective} sources={sources} />
@@ -454,7 +454,7 @@ function AgentsLayoutC(props) {
 }
 
 function AgentsWorkbench({ variant, onVariant, flash }) {
-  const [level, setLevel] = useState("repo");
+  const [level, setLevel] = useState("org");
   const [connectorId, setConnectorId] = useState(CONNECTORS[0].id);
   const [repo, setRepo] = useState("acme/checkout-api");
   const [draft, setDraft] = useState({});
