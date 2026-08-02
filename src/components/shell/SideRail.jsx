@@ -46,6 +46,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/infrastructure', label: 'Hosts', icon: FiHardDrive },
       { to: '/metrics', label: 'Metrics Explorer', icon: FiBarChart2 },
+      { to: '/query', label: 'Query', icon: FiTerminal },
     ],
   },
   {

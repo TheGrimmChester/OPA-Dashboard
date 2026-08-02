@@ -11,7 +11,7 @@ import ThemeToggle from './ThemeToggle'
 import FullscreenToggle from './FullscreenToggle'
 
 const LABELS = (() => {
-  const m = { '': 'Overview', services: 'Services', traces: 'Traces', profiling: 'Profiling', errors: 'Errors', sql: 'Databases', http: 'External HTTP', 'service-map': 'Service Map', rum: 'Browser', performance: 'Performance', live: 'Live', system: 'System', users: 'Users & Roles', 'api-keys': 'API Keys', compare: 'Compare' }
+  const m = { '': 'Overview', services: 'Services', traces: 'Traces', profiling: 'Profiling', errors: 'Errors', sql: 'Databases', http: 'External HTTP', 'service-map': 'Service Map', rum: 'Browser', performance: 'Performance', live: 'Live', system: 'System', users: 'Users & Roles', 'api-keys': 'API Keys', compare: 'Compare', query: 'Query', metrics: 'Metrics Explorer' }
   NAV_GROUPS.forEach((g) => g.items.forEach((i) => { m[i.to.replace('/', '')] = i.label }))
   return m
 })()
