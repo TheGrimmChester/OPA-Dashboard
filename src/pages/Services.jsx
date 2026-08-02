@@ -1,16 +1,17 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiActivity, FiClock, FiAlertTriangle, FiZap, FiServer, FiDatabase, FiCpu } from 'react-icons/fi'
+import { FiActivity, FiClock, FiAlertTriangle, FiZap, FiServer } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import {
   Panel, KpiTile, DataTable, TimeSeriesChart, InlineBar, HealthDot, LanguageBadge,
 } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtBytes, latencyStatus, errorRateStatus } from '../theme/format'
 
-export default function Overview() {
+/** Service inventory + golden signals (canonical home; formerly also labeled Overview). */
+export default function Services() {
   const navigate = useNavigate()
   // (No /api/stats call here: its result was never read, so it was a wasted
-  // request on every Overview load — the KPIs come from /api/services.)
+  // request on every load — the KPIs come from /api/services.)
   const services = useApi('/api/services')
   const perf = useApi('/api/metrics/performance')
 
@@ -63,7 +64,7 @@ export default function Overview() {
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
-          <h1 className="opa-page-title">Overview</h1>
+          <h1 className="opa-page-title">Service</h1>
           <div className="opa-page-sub">Golden signals across {svc.length} service{svc.length === 1 ? '' : 's'}</div>
         </div>
       </div>

@@ -1,15 +1,43 @@
-/* Core Web Vitals card row — dense, data-ink, matches OPA design system */
+/* Core Web Vitals — CrUX-style field cards */
+
+.cwv-honesty {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-12);
+  line-height: 1.4;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.cwv-section-label {
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 8px 0 6px;
+}
+
 .cwv-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
   gap: 10px;
 }
 
-@media (max-width: 1100px) {
-  .cwv-grid { grid-template-columns: repeat(3, 1fr); }
+.cwv-grid-core {
+  grid-template-columns: repeat(3, 1fr);
 }
-@media (max-width: 640px) {
-  .cwv-grid { grid-template-columns: repeat(2, 1fr); }
+
+.cwv-grid-support {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 900px) {
+  .cwv-grid-core,
+  .cwv-grid-support { grid-template-columns: 1fr; }
 }
 
 .cwv-card {
@@ -21,6 +49,18 @@
   border: 1px solid var(--border-subtle);
   border-left: 3px solid var(--text-muted);
   border-radius: 6px;
+}
+
+.cwv-core {
+  padding: 14px 16px;
+}
+
+.cwv-core .cwv-value {
+  font-size: 26px;
+}
+
+.cwv-legacy {
+  opacity: 0.85;
 }
 
 .cwv-ok { border-left-color: var(--ok); }
@@ -52,4 +92,63 @@
 .cwv-name {
   font-size: var(--fs-11);
   line-height: 1.2;
+}
+
+.cwv-meta,
+.cwv-budget {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.cwv-budget-good { color: var(--ok); }
+.cwv-budget-poor { color: var(--error); }
+
+.cwv-hist {
+  display: flex;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--border-subtle);
+  gap: 1px;
+}
+
+.cwv-hist-good { background: var(--ok); min-width: 0; }
+.cwv-hist-ni { background: var(--warn); min-width: 0; }
+.cwv-hist-poor { background: var(--error); min-width: 0; }
+
+.cwv-slo-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cwv-attr-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.cwv-attr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cwv-attr-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.cwv-attr-el {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }

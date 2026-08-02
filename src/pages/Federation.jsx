@@ -6,21 +6,22 @@ import {
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
+import { useI18n } from '../contexts/I18nContext'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 const TABS = [
-  { value: 'federation', label: 'Federation', icon: <FiShare2 size={13} /> },
-  { value: 'residency', label: 'Residency', icon: <FiShield size={13} /> },
-  { value: 'transfers', label: 'Transfers', icon: <FiGlobe size={13} /> },
+  { value: 'federation', labelKey: 'fed.federation', icon: <FiShare2 size={13} /> },
+  { value: 'residency', labelKey: 'fed.residency', icon: <FiShield size={13} /> },
+  { value: 'transfers', labelKey: 'fed.transfers', icon: <FiGlobe size={13} /> },
 ]
 
-function Tabs({ tabs = [], value, onChange }) {
+function Tabs({ tabs = [], value, onChange, t }) {
   return (
     <div className="opa-tabs">
-      {tabs.map((t) => (
-        <button key={t.value} className={`opa-tab ${value === t.value ? 'active' : ''}`} onClick={() => onChange(t.value)}>
-          {t.icon}{t.label}
+      {tabs.map((tab) => (
+        <button key={tab.value} className={`opa-tab ${value === tab.value ? 'active' : ''}`} onClick={() => onChange(tab.value)}>
+          {tab.icon}{t(tab.labelKey)}
         </button>
       ))}
     </div>
@@ -29,9 +30,11 @@ function Tabs({ tabs = [], value, onChange }) {
 
 /** Wave 25: Multi-region federation & residency. */
 export default function Federation() {
+  const { t } = useI18n()
   const [tab, setTab] = useState('federation')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [tqlQuery, setTqlQuery] = useState('SELECT count() FROM spans SINCE 1h')
   const [policyForm, setPolicyForm] = useState({
     organization_id: 'default-org',
     project_id: 'default-project',
@@ -61,7 +64,14 @@ export default function Federation() {
   const runFederationQuery = async (kind) => {
     setBusy(true); setMsg(null)
     try {
-      const { data } = await axios.get(`${API}/api/federation/query`, { params: { kind } })
+      let data
+      if (kind === 'tql') {
+        const res = await axios.post(`${API}/api/federation/query`, { query: tqlQuery }, { params: { kind: 'tql' } })
+        data = res.data
+      } else {
+        const res = await axios.get(`${API}/api/federation/query`, { params: { kind } })
+        data = res.data
+      }
       setMsg(data)
     } catch (e) {
       setMsg({ error: e.response?.data || e.message })
@@ -150,8 +160,8 @@ export default function Federation() {
     <div className="opa-stack">
       <div className="opa-page-head">
         <div>
-          <h1 className="opa-page-title">Federation</h1>
-          <div className="opa-page-sub">Regions · residency · cross-border transfers · federated summaries</div>
+          <h1 className="opa-page-title">{t('fed.title')}</h1>
+          <div className="opa-page-sub">{t('fed.subtitle')}</div>
         </div>
         <StatusPill tone="ok">{s.region || topology.data?.region || '…'}</StatusPill>
       </div>
@@ -165,7 +175,7 @@ export default function Federation() {
           footer={<span className="opa-muted" style={{ fontSize: 11 }}>denies {fmtNum(s.residency_denies || 0)}</span>} />
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
+      <Tabs tabs={TABS} value={tab} onChange={setTab} t={t} />
 
       {msg && (
         <Panel title="Result">
@@ -175,10 +185,20 @@ export default function Federation() {
 
       {tab === 'federation' && (
         <>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="opa-btn" disabled={busy} onClick={() => runFederationQuery('summary')}>Query peers (summary)</button>
-            <button className="opa-btn" disabled={busy} onClick={() => runFederationQuery('residency')}>Query peers (residency)</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="opa-btn" disabled={busy} onClick={() => runFederationQuery('summary')}>{t('fed.querySummary')}</button>
+            <button className="opa-btn" disabled={busy} onClick={() => runFederationQuery('residency')}>{t('fed.queryResidency')}</button>
           </div>
+          <Panel title="Federated TQL">
+            <div className="opa-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+              Fan-out only — rows stay in-region and are tagged with _region / _peer_id (not a global warehouse join).
+            </div>
+            <textarea className="opa-input" rows={3} style={{ width: '100%', fontFamily: 'var(--opa-mono, monospace)' }}
+              value={tqlQuery} onChange={(e) => setTqlQuery(e.target.value)} />
+            <div style={{ marginTop: 8 }}>
+              <button className="opa-btn" disabled={busy || !tqlQuery.trim()} onClick={() => runFederationQuery('tql')}>{t('fed.queryTql')}</button>
+            </div>
+          </Panel>
           <Panel title="Peers" icon={<FiShare2 />} flush loading={peers.loading} error={peers.error}
             empty={!peers.loading && peerRows.length === 0} emptyText="Set OPA_FEDERATION_PEERS or POST /api/federation/peers/upsert">
             <DataTable columns={peerCols} rows={peerRows} rowKey={(r) => r.id} maxHeight={320} />

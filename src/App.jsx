@@ -35,7 +35,7 @@ import './App.css'
 // split into their own chunks instead of the main bundle.
 const CompareTraces = lazy(() => import('./pages/CompareTraces'))
 const Stats = lazy(() => import('./pages/Stats'))
-const Overview = lazy(() => import('./pages/Overview'))
+const Services = lazy(() => import('./pages/Services'))
 const ServiceDetail = lazy(() => import('./pages/ServiceDetail'))
 const TraceDetail = lazy(() => import('./pages/TraceDetail'))
 const ProfilingView = lazy(() => import('./pages/ProfilingView'))
@@ -51,6 +51,7 @@ const LiveHub = lazy(() => import('./pages/LiveHub'))
 const PlatformOps = lazy(() => import('./pages/PlatformOps'))
 const Serverless = lazy(() => import('./pages/Serverless'))
 const Security = lazy(() => import('./pages/Security'))
+const OPAReviewJob = lazy(() => import('./pages/OPAReviewJob'))
 const Catalog = lazy(() => import('./pages/Catalog'))
 const Automation = lazy(() => import('./pages/Automation'))
 const Cloud = lazy(() => import('./pages/Cloud'))
@@ -58,6 +59,7 @@ const Network = lazy(() => import('./pages/Network'))
 const Federation = lazy(() => import('./pages/Federation'))
 const Collaborate = lazy(() => import('./pages/Collaborate'))
 const Diagnostics = lazy(() => import('./pages/Diagnostics'))
+const PerfLab = lazy(() => import('./pages/PerfLab'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MetricsExplorer = lazy(() => import('./pages/MetricsExplorer'))
 const Infrastructure = lazy(() => import('./pages/Infrastructure'))
@@ -68,6 +70,9 @@ const Commands = lazy(() => import('./pages/Commands'))
 const Login = lazy(() => import('./pages/Login'))
 const Users = lazy(() => import('./pages/Users'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
+const AISettings = lazy(() => import('./pages/AISettings'))
+const Connectors = lazy(() => import('./pages/Connectors'))
+const Account = lazy(() => import('./pages/Account'))
 const Slos = lazy(() => import('./pages/Slos'))
 const Alerts = lazy(() => import('./pages/Alerts'))
 const Anomalies = lazy(() => import('./pages/Anomalies'))
@@ -145,13 +150,11 @@ function App() {
         <AppShell>
           <Suspense fallback={<div className="route-loading" style={{ padding: 24, color: 'var(--text-muted)' }}>Loading…</div>}>
           <Routes>
-            <Route
-              path="/"
-              element={<Overview />}
-            />
+            <Route path="/" element={<Navigate to="/services" replace />} />
+            <Route path="/overview" element={<Navigate to="/services" replace />} />
             <Route
               path="/services"
-              element={<Overview />}
+              element={<Services />}
             />
             <Route
               path="/services/:serviceName"
@@ -186,6 +189,10 @@ function App() {
               element={<Security />}
             />
             <Route
+              path="/security/jobs/:jobId"
+              element={<OPAReviewJob />}
+            />
+            <Route
               path="/catalog"
               element={<Catalog />}
             />
@@ -210,6 +217,10 @@ function App() {
             <Route
               path="/performance"
               element={<PerformanceView />}
+            />
+            <Route
+              path="/perf-lab"
+              element={<PerfLab />}
             />
             {/* App-level HTTP bandwidth stays on Performance; Wave 24 network obs is /network. */}
             <Route
@@ -243,6 +254,30 @@ function App() {
             <Route
               path="/api-keys"
               element={<ApiKeys />}
+            />
+            <Route
+              path="/settings/ai"
+              element={<AISettings />}
+            />
+            <Route
+              path="/settings/connectors"
+              element={<Connectors />}
+            />
+            <Route
+              path="/settings/account"
+              element={<Account />}
+            />
+            <Route
+              path="/account"
+              element={<Navigate to="/settings/account" replace />}
+            />
+            <Route
+              path="/connectors"
+              element={<Navigate to="/settings/connectors" replace />}
+            />
+            <Route
+              path="/ai"
+              element={<Navigate to="/settings/ai" replace />}
             />
             <Route
               path="/service-map"

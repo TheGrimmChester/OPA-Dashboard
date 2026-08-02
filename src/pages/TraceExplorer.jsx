@@ -33,6 +33,9 @@ const URI_PARAMS = [
   { param: 'host', field: 'tags.http_request.host', substring: true },
   { param: 'scheme', field: 'tags.http_request.scheme', substring: false },
   { param: 'query_string', field: 'tags.http_request.query_string', substring: true },
+  { param: 'load_run_id', field: 'tags.load_run_id', substring: false },
+  { param: 'session_id', field: 'tags.session_id', substring: false },
+  { param: 'check_id', field: 'tags.check_id', substring: false },
 ]
 
 // Values are double-quoted for the DSL lexer; escaping keeps a stray quote from
@@ -121,6 +124,9 @@ export default function TraceExplorer() {
   }
   const clearFilters = () => { setSearchParams(new URLSearchParams(), { replace: true }); setOffset(0) }
   const hasFilters = !!(service || status || filter || facetDSL(facets))
+  const loadRunEmptyHint = /tags\.load_run_id\s*:/.test(combinedFilter)
+    ? 'No APM spans carry this load_run_id. JMeter must hit an OPA-instrumented service (not example.com) so X-OPA-Load-Run-Id / baggage is recorded on spans.'
+    : 'No traces match these filters'
 
   // Editable draft of the raw DSL filter. Kept local so typing doesn't thrash
   // the URL on every keystroke; committed to ?filter on Enter/blur. Re-syncs
@@ -299,7 +305,7 @@ export default function TraceExplorer() {
             title="Traces" icon={<FiGitBranch />} flush
             loading={q.loading} error={q.error}
             empty={!q.loading && traces.length === 0}
-            emptyText="No traces match these filters"
+            emptyText={loadRunEmptyHint}
             actions={(
               <div className="opa-row" style={{ fontSize: 'var(--fs-12)' }}>
                 <span className="opa-muted opa-tnum">
@@ -325,7 +331,7 @@ export default function TraceExplorer() {
               initialSort={{ key: 'duration_ms', dir: 'desc' }}
               onRowClick={(r) => r.trace_id && navigate(`/traces/${encodeURIComponent(r.trace_id)}`)}
               maxHeight="60vh"
-              emptyText="No traces match these filters"
+              emptyText={loadRunEmptyHint}
             />
           </Panel>
         </div>

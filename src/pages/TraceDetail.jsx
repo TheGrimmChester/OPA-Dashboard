@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   FiGitBranch, FiClock, FiDatabase, FiServer, FiActivity, FiX,
   FiArrowUp, FiArrowDown, FiChevronLeft, FiChevronRight, FiFileText, FiGlobe, FiCpu, FiCode,
@@ -7,6 +7,7 @@ import {
 import { useApi } from '../hooks/useApi'
 import {
   Panel, DataTable, EntityHeader, Badge, StatusPill, LanguageBadge, SegmentedControl,
+  EntityChip, EntityChipRow,
 } from '../components/ui'
 import FlameGraph from '../components/FlameGraph'
 import CallGraph from '../components/CallGraph'
@@ -14,6 +15,13 @@ import ExecutionStackTree from '../components/ExecutionStackTree'
 import { useProfileModel, ProfileToolbar, ProfileSummary, HotSpots } from '../components/profile'
 import { fmtMs, fmtBytes, fmtNum, fmtAgo, tierColor, statusColor, latencyStatus, SERIES } from '../theme/format'
 import { mergeCallStacks } from '../utils/mergeCallStacks'
+import { flattenTree } from '../utils/waterfallRows'
+import {
+  collectCorrelationTags, compareTracesHref, logsHref, rumSessionHref, serviceHref,
+  spanAttributeLinks, tracesHref as buildTracesHref,
+} from '../utils/entityLinks'
+import TraceWaterfall from '../components/TraceWaterfall'
+import TraceReplayPanel from '../components/TraceReplayPanel'
 import './TraceDetail.css'
 
 const TIERS = ['app', 'db', 'redis', 'http']
@@ -52,32 +60,6 @@ function toneForLevel(level) {
   return 'neutral'
 }
 
-// Flatten a span tree (root.children) into rows carrying depth + the tree
-// parent's service (so cross-service hops are detectable even when the explicit
-// parent_id link was broken and the agent stitched the subtree in). Any spans
-// not reachable from the root (orphans from a partial/broken distributed trace)
-// are appended so every service still renders.
-function flattenTree(root, flat) {
-  const out = []
-  const seen = new Set()
-  const walk = (node, depth, parentSvc) => {
-    if (!node) return
-    out.push({ ...node, _depth: depth, _parentService: parentSvc })
-    if (node.span_id) seen.add(node.span_id)
-    ;(node.children || []).forEach((c) => walk(c, depth + 1, node.service))
-  }
-  if (root) walk(root, 0, null)
-  if (Array.isArray(flat)) {
-    flat.forEach((s) => {
-      if (s && s.span_id && seen.has(s.span_id)) return
-      if (!s) return
-      out.push({ ...s, _depth: 0, _parentService: null })
-      if (s.span_id) seen.add(s.span_id)
-    })
-  }
-  return out
-}
-
 export default function TraceDetail() {
   const { traceId } = useParams()
   const navigate = useNavigate()
@@ -100,6 +82,18 @@ export default function TraceDetail() {
   const [query, setQuery] = useState('')
   const [minPct, setMinPct] = useState(0)
   const [focusKey, setFocusKey] = useState(null)
+  // Collapse self-recursive / micro-span runs in the waterfall (e.g. fib × N).
+  const [collapseNoise, setCollapseNoise] = useState(true)
+  // Trace replay mode from ?replay= (waterfall | rum_session | perf_lab | …).
+  const replayMode = searchParams.get('replay') || null
+  const setReplayMode = useCallback((mode) => {
+    const p = new URLSearchParams(searchParams)
+    if (mode) p.set('replay', mode)
+    else p.delete('replay')
+    setSearchParams(p, { replace: true })
+  }, [searchParams, setSearchParams])
+  const [replayPlayhead, setReplayPlayhead] = useState(0)
+  const [replayHighlightIds, setReplayHighlightIds] = useState(null)
 
   // /full carries the per-span call stacks (span.stack) that the flame/call
   // views need; the shape is otherwise identical to /api/traces/{id}, so the
@@ -253,9 +247,12 @@ export default function TraceDetail() {
   // are wrapped in double quotes and URLSearchParams handles the encoding.
   const opService = services.length === 1 ? services[0] : null
   const goTraces = (filter) => {
-    const params = opService ? { service: opService, filter } : { filter }
-    navigate('/traces?' + new URLSearchParams(params).toString())
+    navigate(buildTracesHref(opService ? { service: opService, filter } : { filter }))
   }
+
+  // Correlation IDs from span tags (load run, RUM session, synthetic check, …).
+  const correlations = useMemo(() => collectCorrelationTags(rows), [rows])
+  const rootResource = root?.name || root?.url_path || null
 
   // ---- op tables ----
   const sqlCols = [
@@ -313,12 +310,19 @@ export default function TraceDetail() {
           <>
             <StatusPill tone={anyError ? 'error' : statusPillTone(root?.status)}>{anyError ? 'ERROR' : String(root?.status || 'ok').toUpperCase()}</StatusPill>
             {(multiService ? services : [root?.service].filter(Boolean)).map((svc) => (
-              <span key={svc} className="opa-badge" title={multiService ? 'service in this distributed trace' : 'service'}>
-                <span className="opa-dot" style={{ background: multiService ? serviceColor[svc] : 'var(--tier-app)', width: 7, height: 7 }} />{svc}
-              </span>
+              <EntityChip
+                key={svc}
+                to={serviceHref(svc)}
+                title={multiService ? `Service in this distributed trace: ${svc}` : `Service ${svc}`}
+                mono={false}
+              >
+                <span className="opa-dot" style={{ background: multiService ? serviceColor[svc] : 'var(--tier-app)', width: 7, height: 7 }} />
+                {svc}
+              </EntityChip>
             ))}
             {multiService && <Badge title="distributed trace spanning multiple services">{services.length} services</Badge>}
             {root?.language && <LanguageBadge language={root.language} version={root.language_version} />}
+            <EntityChipRow items={correlations} />
           </>
         }
         meta={
@@ -329,54 +333,59 @@ export default function TraceDetail() {
             <div className="td-metastat"><span className="k">Ingress</span><span className="v">{fmtBytes(net.bytes_in)}</span></div>
           </div>
         }
+        actions={(
+          <div className="opa-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            {opService && (
+              <Link className="opa-btn ghost" to={buildTracesHref({ service: opService })}>Related traces</Link>
+            )}
+            {rootResource && (
+              <Link className="opa-btn ghost" to={buildTracesHref({ filter: `name:"${String(rootResource).replace(/(["\\])/g, '\\$1')}"`, service: opService || undefined })}>
+                Same resource
+              </Link>
+            )}
+            {anyError && (
+              <Link className="opa-btn ghost" to={buildTracesHref({ service: opService || undefined, status: 'error' })}>Error traces</Link>
+            )}
+            <Link className="opa-btn ghost" to={logsHref({ service: opService || undefined, q: traceId })}>Logs</Link>
+            {correlations.find((c) => c.kind === 'session') && (
+              <Link className="opa-btn ghost" to={rumSessionHref(correlations.find((c) => c.kind === 'session').value)}>RUM session</Link>
+            )}
+            <Link className="opa-btn ghost" to={compareTracesHref(traceId, '')}>Compare</Link>
+          </div>
+        )}
       />
 
-      {/* Waterfall */}
+      {/* Waterfall — virtualized + collapse noise so 10k-span traces stay usable */}
       <Panel title="Trace waterfall" icon={<FiGitBranch />} loading={loading} error={trace.error} empty={empty}
-        actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>click a span for detail</span>}>
-        <div className="tw-wrap">
-          <div className="tw-axis">
-            {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-              <div key={f} className="tw-axis-tick" style={{ left: `calc(240px + 10px + (100% - 240px - 10px - 74px - 10px) * ${f})` }}>
-                {fmtMs(totalMs * f)}
-              </div>
-            ))}
-          </div>
-          {rows.map((s) => {
-            const offset = totalMs > 0 ? ((s.start_ts - traceStart) / totalMs) * 100 : 0
-            const width = Math.max(0.8, ((s.duration_ms || 0) / totalMs) * 100)
-            const tier = spanTier(s)
-            const col = tierColor(tier)
-            const isSel = selected && selected.span_id === s.span_id
-            return (
-              <div
-                key={s.span_id}
-                className={`tw-row ${isSel ? 'is-selected' : ''}`}
-                role="button"
-                tabIndex={0}
-                aria-pressed={!!isSel}
-                onClick={() => setSelected(s)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(s) } }}
-              >
-                <div className="tw-label" style={{ paddingLeft: (s._depth || 0) * 14 }}>
-                  {multiService && <span className="tw-tierdot" style={{ background: serviceColor[s.service] || 'var(--neutral)' }} title={s.service} />}
-                  <span className="tw-tierdot" style={{ background: col }} />
-                  <span className="tw-label-name" title={`${s.name} · ${s.service || ''}`}>{s.name}</span>
-                  {isServiceEntry(s) && (
-                    <span className="opa-badge" style={{ marginLeft: 6, padding: '0 6px' }} title={`enters ${s.service}`}>
-                      <span className="opa-dot" style={{ background: serviceColor[s.service], width: 6, height: 6 }} />{s.service}
-                    </span>
-                  )}
-                </div>
-                <div className="tw-track">
-                  <div className="tw-bar" style={{ left: `${Math.min(99, Math.max(0, offset))}%`, width: `${width}%`, background: multiService ? (serviceColor[s.service] || col) : col }}
-                    title={`${s.name}${s.service ? ' · ' + s.service : ''}: ${fmtMs(s.duration_ms)} @ +${fmtMs(s.start_ts - traceStart)}`} />
-                </div>
-                <div className="tw-dur" style={{ color: `var(--${latencyStatus(s.duration_ms)})` }}>{fmtMs(s.duration_ms)}</div>
-              </div>
-            )
-          })}
-        </div>
+        actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>click a span for detail · use Trace replay below</span>}>
+        <TraceWaterfall
+          rows={rows}
+          totalMs={totalMs}
+          traceStart={traceStart}
+          selectedSpanId={selectedSpanId}
+          onSelect={setSelected}
+          multiService={multiService}
+          serviceColor={serviceColor}
+          isServiceEntry={isServiceEntry}
+          viewportHeight={listH}
+          collapseNoise={collapseNoise}
+          onToggleCollapse={setCollapseNoise}
+          truncatedMeta={data.meta || null}
+          highlightIds={replayMode === 'waterfall' ? replayHighlightIds : null}
+          playheadMs={replayMode === 'waterfall' ? replayPlayhead : null}
+        />
+        {!empty && (
+          <TraceReplayPanel
+            traceId={traceId}
+            rows={rows}
+            totalMs={totalMs}
+            traceStart={traceStart}
+            activeMode={replayMode}
+            onModeChange={setReplayMode}
+            onPlayheadChange={setReplayPlayhead}
+            onHighlightIds={setReplayHighlightIds}
+          />
+        )}
       </Panel>
 
       {/* Profile — ranked hot spots over every span's call stack, plus the
@@ -547,7 +556,11 @@ export default function TraceDetail() {
           columns={[
             { key: 'level', header: 'Level', width: 84, render: (r) => <StatusPill tone={toneForLevel(r.level)}>{String(r.level || '—').toUpperCase()}</StatusPill> },
             { key: 'message', header: 'Message', render: (r) => <span className="opa-mono" style={{ fontSize: 'var(--fs-12)' }}>{r.message || '—'}</span> },
-            { key: 'service', header: 'Service', render: (r) => <span className="opa-muted">{r.service || '—'}</span> },
+            { key: 'service', header: 'Service', render: (r) => (
+              r.service
+                ? <EntityChip to={serviceHref(r.service)} title={`Service ${r.service}`}>{r.service}</EntityChip>
+                : <span className="opa-muted">—</span>
+            ) },
             { key: 'timestamp', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.timestamp)}</span>, sortValue: (r) => Date.parse(r.timestamp) || 0 },
           ]}
           rows={logs} rowKey={(r, i) => r.id || i}
@@ -632,8 +645,7 @@ function sqlDrillFilter(op) {
 
 // Build a filtered Trace Explorer link from a DSL clause.
 function tracesHref(filter, service) {
-  const params = service ? { service, filter } : { filter }
-  return '/traces?' + new URLSearchParams(params).toString()
+  return buildTracesHref(service ? { service, filter } : { filter })
 }
 
 // A drawer value that navigates somewhere useful. Everything the drawer shows
@@ -684,6 +696,14 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
   }, [prev, next, onSelect, onClose])
 
   const urlPath = span.url_path || span.uri || null
+  const attrChips = spanAttributeLinks(span)
+  const tagEntries = (() => {
+    const t = span.tags
+    if (!t || typeof t !== 'object') return []
+    return Object.entries(t)
+      .filter(([, v]) => v != null && typeof v !== 'object')
+      .slice(0, 24)
+  })()
 
   return (
     <>
@@ -720,7 +740,8 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
                   {urlPath}
                 </DrillLink>
               )}
-              <span className="opa-mono opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{span.span_id}</span>
+              <EntityChip to={null} title={`span_id ${span.span_id}`}>{span.span_id}</EntityChip>
+              <EntityChipRow items={attrChips.filter((c) => c.kind === 'load_run' || c.kind === 'session' || c.kind === 'check' || c.kind === 'error')} />
             </div>
           </div>
           <div className="opa-row" style={{ gap: 4, alignItems: 'flex-start' }}>
@@ -777,6 +798,32 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
               <div className="opa-row" style={{ gap: 20 }}>
                 <span className="opa-mono"><FiArrowUp size={12} /> {fmtBytes(net.bytes_out)}</span>
                 <span className="opa-mono"><FiArrowDown size={12} /> {fmtBytes(net.bytes_in)}</span>
+              </div>
+            </div>
+          )}
+
+          {tagEntries.length > 0 && (
+            <div>
+              <div className="td-drawer-sub">Attributes</div>
+              <div className="td-taggrid">
+                {tagEntries.map(([k, v]) => {
+                  const link = attrChips.find((c) => String(c.value) === String(v) && (c.key === k || c.key.endsWith(k)))
+                    || (k === 'http.url' || k === 'url' ? { to: tracesHref(`http.url:"${v}"`) } : null)
+                  const known = ['load_run_id', 'session_id', 'check_id', 'service', 'url_path'].includes(k)
+                    || k.endsWith('load_run_id') || k.endsWith('session_id')
+                  return (
+                    <div key={k} className="td-tagrow">
+                      <span className="opa-muted opa-mono">{k}</span>
+                      {known || link?.to ? (
+                        <EntityChip to={link?.to || tracesHref(`tags.${k}:"${String(v).replace(/(["\\])/g, '\\$1')}"`)} title={`${k}=${v}`}>
+                          {String(v)}
+                        </EntityChip>
+                      ) : (
+                        <span className="opa-mono">{String(v)}</span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
