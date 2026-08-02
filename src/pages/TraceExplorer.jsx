@@ -145,7 +145,7 @@ export default function TraceExplorer() {
 
   const services = meta.data?.services || []
   // A deep link can scope to a service the metadata list doesn't carry — a RUM
-  // origin like https://community-users.chargemap-test.com, or a service whose
+  // origin like https://app.example.test, or a service whose
   // spans aged out of the range. Without its own option the <select> falls back
   // to the empty one and claims "All services" while the scope is still applied.
   const serviceOptions = useMemo(() => {
