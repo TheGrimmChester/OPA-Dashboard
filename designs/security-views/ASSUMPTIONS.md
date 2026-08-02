@@ -1,16 +1,24 @@
 # Security views redesign — assumptions
 
 **Project:** `designs/security-views/`  
-**Source:** canvas `security-views-redesign` + live `/security` · chrome from `security-repo-watch`  
-**Fidelity:** Hi-fi interactive preview (OPA tokens, IBM Plex)
+**Source:** live `/security?tab=control&section=agents` · chrome from `security-repo-watch`  
+**Fidelity:** Hi-fi interactive preview (OPA tokens)
 
 ## Brief
-Replace 13 flat tabs with four pillars: **Findings · Scans · PR Ops · Control**.
+Replace flat Security tabs with four pillars: **Findings · Scans · PR Ops · Control**.
+
+Control → **Agents** winner: **C · Detail** (domain rail + inspector).
+Ported to production `AgentsTab.jsx` / `Security.css`.
+
+Layouts explored:
+- **A · Cards** — capability strip + 2×2 domain cards
+- **B · Jump** — sticky domain chips + stacked sections
+- **C · Detail** — domain rail + inspector ← **shipped**
 
 ## Preview
-`preview.html?pillar=findings|scans|ops|control`  
-Ops modes: `?mode=watch|run|contexts|jobs|webhooks`  
-Control sections: `?section=agents|policies|gate|inventory`
+- Interactive: `preview.html?pillar=control&section=agents&variant=c`
+- Side-by-side: `agents-compare.html`
+- Control sections: `?section=agents|policies|gate|inventory`
 
 ## Out of scope
-Production port; real API wiring; NAS deploy.
+Real API changes; NAS deploy (use existing dashboard release path).

@@ -85,6 +85,106 @@ const INVENTORY_SEED = [
   { service: "infra", eco: "go", pkg: "aws-sdk-go", version: "1.44.0", release: "prod" },
 ];
 
+/** Effective agent prefs + provenance (mirrors /api/agents/prefs). */
+const AGENT_EFFECTIVE = {
+  trigger_mode: "pr_open",
+  review_draft_prs: false,
+  pr_summaries: true,
+  post_pr_risk_score: true,
+  incremental_review: true,
+  context_aware_analysis: true,
+  ai_reviewer_aware: true,
+  bugbot_max_units: 10,
+  security_auto_pr_reviews: true,
+  inline_findings: false,
+  repository_rules: true,
+  learned_rules: true,
+  auto_approve: false,
+  reviewer_routing: true,
+  policy_file_path: ".opa/approval-policy.json",
+  cloud_enabled: false,
+  autofix_mode: "suggest",
+  autofix_severity_threshold: "high",
+  cloud_run_tests: true,
+  checkup_enabled: false,
+};
+
+const AGENT_SOURCES = {
+  trigger_mode: "org",
+  review_draft_prs: "builtin",
+  pr_summaries: "installation",
+  post_pr_risk_score: "org",
+  incremental_review: "org",
+  context_aware_analysis: "org",
+  ai_reviewer_aware: "builtin",
+  bugbot_max_units: "builtin",
+  security_auto_pr_reviews: "org",
+  inline_findings: "builtin",
+  repository_rules: "repo",
+  learned_rules: "repo",
+  auto_approve: "org",
+  reviewer_routing: "installation",
+  policy_file_path: "builtin",
+  cloud_enabled: "builtin",
+  autofix_mode: "org",
+  autofix_severity_threshold: "org",
+  cloud_run_tests: "org",
+  checkup_enabled: "builtin",
+};
+
+const RULE_CANDIDATES = [
+  { id: "ctx-91", title: "Require secrets scan on .env* diffs", repo_full_name: "acme/checkout-api", kind: "should", status: "candidate" },
+  { id: "ctx-92", title: "Route auth/* to security-reviewers", repo_full_name: "acme/opa-agent", kind: "must", status: "candidate" },
+  { id: "ctx-93", title: "Skip AI on docs-only PRs", repo_full_name: "acme/docs-site", kind: "should", status: "candidate" },
+];
+
+const AGENT_DOMAINS = [
+  {
+    id: "bugbot",
+    label: "Bugbot",
+    blurb: "AI code review on pull requests — findings, summaries, and incremental re-review.",
+    fields: ["trigger_mode", "review_draft_prs", "pr_summaries", "post_pr_risk_score", "incremental_review", "context_aware_analysis", "ai_reviewer_aware", "bugbot_max_units"],
+  },
+  {
+    id: "security",
+    label: "Security",
+    blurb: "Secrets, SAST-lite, and gate checks — separate from Bugbot so scanners always run.",
+    fields: ["security_auto_pr_reviews", "inline_findings", "repository_rules", "learned_rules"],
+  },
+  {
+    id: "approval",
+    label: "Approval",
+    blurb: "Deterministic approve / comment from the shared findings ledger — never from model confidence alone.",
+    fields: ["auto_approve", "reviewer_routing", "policy_file_path"],
+  },
+  {
+    id: "cloud",
+    label: "Cloud",
+    blurb: "Autofix proposals and optional fix branches — gated patch, never trusts the agent working tree.",
+    fields: ["cloud_enabled", "autofix_mode", "autofix_severity_threshold", "cloud_run_tests", "checkup_enabled"],
+  },
+];
+
+const TRIGGER_OPTS = [
+  { value: "", label: "Inherit" },
+  { value: "every_push", label: "Every push" },
+  { value: "pr_open", label: "PR open" },
+  { value: "on_demand", label: "On demand" },
+  { value: "cron", label: "Cron" },
+];
+const AUTOFIX_OPTS = [
+  { value: "", label: "Inherit" },
+  { value: "off", label: "Off" },
+  { value: "suggest", label: "Suggest" },
+  { value: "branch", label: "Branch" },
+];
+const SEV_OPTS = [
+  { value: "", label: "Inherit" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
 function sevTone(sev) {
   if (sev === "critical" || sev === "high") return "error";
   if (sev === "medium") return "warn";
@@ -104,6 +204,13 @@ Object.assign(window, {
   RUNS_SEED,
   WEBHOOKS_SEED,
   INVENTORY_SEED,
+  AGENT_EFFECTIVE,
+  AGENT_SOURCES,
+  RULE_CANDIDATES,
+  AGENT_DOMAINS,
+  TRIGGER_OPTS,
+  AUTOFIX_OPTS,
+  SEV_OPTS,
   sevTone,
   findingCounts,
 });
