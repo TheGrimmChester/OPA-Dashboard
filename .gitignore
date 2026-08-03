@@ -22,3 +22,6 @@ Thumbs.db
 # Logs
 *.log
 
+
+# Local design prototypes / baoyu-design artifacts
+designs/

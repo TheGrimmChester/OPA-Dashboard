@@ -170,7 +170,7 @@ export default function Databases() {
           </div>
           <Panel title="Instance health" icon={<FiServer />} flush loading={instances.loading} error={instances.error}
             empty={!instances.loading && inst.length === 0}
-            emptyText="No DB monitors configured — set OPA_DB_MONITOR_CONFIG (see docs/wave17-db-monitoring.md)">
+            emptyText="No DB monitors configured — set OPA_DB_MONITOR_CONFIG (see docs/db-monitoring.md)">
             <DataTable columns={instanceColumns} rows={inst} rowKey={(r) => r.id} maxHeight={420} />
           </Panel>
           {unusedIdx.length > 0 && (

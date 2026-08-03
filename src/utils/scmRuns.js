@@ -17,10 +17,35 @@ export const AGENT_KIND_LABELS = {
   roadmap_publish: 'Roadmap Publish',
 }
 
+/** Pipeline order for stage timelines (Checkup optional between Bugbot and Approval). */
+export const AGENT_KIND_ORDER = [
+  'prepare',
+  'security',
+  'bugbot',
+  'checkup',
+  'approval',
+  'cloud',
+]
+
 export function agentKindLabel(kind) {
   const k = String(kind || '').toLowerCase()
   if (!k) return ''
   return AGENT_KIND_LABELS[k] || k
+}
+
+/** Sort run children into pipeline order; unknown kinds append at end. */
+export function sortRunChildren(children = []) {
+  const list = Array.isArray(children) ? [...children] : []
+  const rank = (k) => {
+    const i = AGENT_KIND_ORDER.indexOf(String(k || '').toLowerCase())
+    return i < 0 ? 1000 : i
+  }
+  list.sort((a, b) => {
+    const d = rank(a?.kind) - rank(b?.kind)
+    if (d !== 0) return d
+    return String(a?.id || '').localeCompare(String(b?.id || ''))
+  })
+  return list
 }
 
 /**

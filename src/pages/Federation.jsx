@@ -28,7 +28,7 @@ function Tabs({ tabs = [], value, onChange, t }) {
   )
 }
 
-/** Wave 25: Multi-region federation & residency. */
+/** Federation / residency: Multi-region federation & residency. */
 export default function Federation() {
   const { t } = useI18n()
   const [tab, setTab] = useState('federation')

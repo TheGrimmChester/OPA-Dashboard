@@ -26,7 +26,7 @@ function defaultSplit(from, to) {
 }
 
 /**
- * Wave 7B-5: population call-graph diff driven by /api/callgraph/compare.
+ * Call-graph: population call-graph diff driven by /api/callgraph/compare.
  * Splits the global time range in half (baseline vs candidate) unless explicit
  * windows are passed.
  */
