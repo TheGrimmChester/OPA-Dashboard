@@ -251,7 +251,7 @@ export default function OPAReviewJob() {
     return Array.isArray(list) ? list : []
   }, [job])
   const childStatus = job?.child_status || job?.summary?.child_status || {}
-  const runKind = String(job?.kind || job?.summary?.kind || '')
+  const runKind = String(job?.kind || job?.summary?.kind || '').toLowerCase()
   const isRunCentric = !!(runKind || children.length || job?.run_id)
   const frozenPrefs = job?.summary?.prefs || null
   const prefsSources = job?.summary?.prefs_sources || {}
