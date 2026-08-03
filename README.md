@@ -23,4 +23,6 @@ npm install
 npm run dev
 ```
 
-Point `VITE_API_URL` at a running agent (default empty = same origin / proxy).
+Point `VITE_API_URL` at OPA-Hub (default empty = same origin / nginx path proxy).
+
+This dashboard is profiling and observability only. Code review lives in ORA-Dashboard; AppSec in OSA-Dashboard; load testing in OPL-Dashboard.
