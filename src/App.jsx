@@ -54,7 +54,6 @@ const Security = lazy(() => import('./pages/Security'))
 const OPAReviewJob = lazy(() => import('./pages/OPAReviewJob'))
 const Catalog = lazy(() => import('./pages/Catalog'))
 const Automation = lazy(() => import('./pages/Automation'))
-const Roadmap = lazy(() => import('./pages/Roadmap'))
 const Cloud = lazy(() => import('./pages/Cloud'))
 const Network = lazy(() => import('./pages/Network'))
 const Federation = lazy(() => import('./pages/Federation'))
@@ -200,10 +199,6 @@ function App() {
             <Route
               path="/automation"
               element={<Automation />}
-            />
-            <Route
-              path="/roadmap"
-              element={<Roadmap />}
             />
             <Route
               path="/cloud"
