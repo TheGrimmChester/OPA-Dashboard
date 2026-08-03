@@ -83,31 +83,6 @@ export function rumSessionHref(sessionId, { tab } = {}) {
   })
 }
 
-export function perfRunHref(runId, { tab } = {}) {
-  if (!runId) return null
-  return withParams('/perf-lab', { run: runId, tab: tab || undefined })
-}
-
-export function securityRunHref(runId, { tab } = {}) {
-  if (!runId) return null
-  return withParams('/security', { run: runId, tab: tab || 'scans' })
-}
-
-/** OPA Review job findings + Auto-fix detail page. */
-export function scmJobHref(jobId) {
-  if (!jobId) return null
-  return `/security/jobs/${encodeURIComponent(jobId)}`
-}
-
-export function securityJobsHref({ status, severity, repo, q } = {}) {
-  return withParams('/security', { tab: 'ops', mode: 'jobs', status, severity, repo, q })
-}
-
-/** SCM connectors settings (GitHub App / PAT). */
-export function connectorsHref({ edit } = {}) {
-  return withParams('/settings/connectors', { edit })
-}
-
 export function traceReplayHref(traceId, mode = 'waterfall') {
   if (!traceId) return null
   const base = `/traces/${encodeURIComponent(traceId)}`
@@ -167,14 +142,6 @@ export function tagLink(key, value) {
         label: `load_run ${truncateId(v, 14)}`,
         title: `Traces for load run ${v}`,
         kind: 'load_run',
-      }
-    case 'security_run_id':
-    case 'opa.security_run_id':
-      return {
-        to: securityRunHref(v),
-        label: `security_run ${truncateId(v, 14)}`,
-        title: `Security scan run ${v}`,
-        kind: 'security_run',
       }
     case 'session_id':
     case 'rum.session_id':

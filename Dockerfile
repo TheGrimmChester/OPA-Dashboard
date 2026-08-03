@@ -7,13 +7,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-# Multi-service API bases (empty = same-origin nginx path proxy in smoke).
+# Single API base — OPA-Hub only (empty = same-origin nginx path proxy).
 ARG VITE_API_URL=
-ARG VITE_ORCHESTRATOR_URL=
-ARG VITE_PERF_LAB_URL=
 ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_ORCHESTRATOR_URL=$VITE_ORCHESTRATOR_URL
-ENV VITE_PERF_LAB_URL=$VITE_PERF_LAB_URL
 RUN npm run build
 
 # Runtime stage
@@ -30,4 +26,3 @@ RUN rm -f /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
-

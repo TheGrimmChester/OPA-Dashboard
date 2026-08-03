@@ -18,9 +18,7 @@ if (savedTheme === 'light') {
   document.documentElement.removeAttribute('data-theme')
 }
 
-// Attach bearer + identity to API requests (same-origin and known local service URLs).
-// Identity headers let the orchestrator resolve user-scoped AI secrets when auth is off
-// (middleware skipped) but the user is still signed in via the Agent.
+// Attach bearer + identity to API requests (same-origin and known local hub URLs).
 axios.interceptors.request.use((config) => {
   const url = config.url || ''
   let attach = false
