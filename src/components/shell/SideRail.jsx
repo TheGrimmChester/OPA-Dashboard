@@ -4,7 +4,7 @@ import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
   FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiUser, FiKey, FiTarget,
   FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield, FiBookOpen,
-  FiChevronsLeft, FiChevronsRight, FiTerminal, FiGitBranch,
+  FiChevronsLeft, FiChevronsRight, FiTerminal, FiGitBranch, FiMap,
 } from 'react-icons/fi'
 import { useI18n } from '../../contexts/I18nContext'
 
@@ -74,6 +74,7 @@ export const NAV_GROUPS = [
       { to: '/settings/ai', labelKey: 'nav.aiSettings', icon: FiCpu, adminOnly: true },
       { to: '/settings/connectors', labelKey: 'nav.connectors', icon: FiGitBranch },
       { to: '/automation', labelKey: 'nav.automation', icon: FiCpu },
+      { to: '/roadmap', labelKey: 'nav.roadmap', icon: FiMap },
       { to: '/federation', labelKey: 'nav.federation', icon: FiGlobe, adminOnly: true },
     ],
   },
