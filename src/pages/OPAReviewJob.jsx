@@ -6,7 +6,7 @@ import { apiUrl } from '../utils/apiBase'
 import { Panel, EntityHeader, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { scmJobHref } from '../utils/entityLinks'
-import { agentKindLabel } from '../utils/scmRuns'
+import { agentKindLabel, sortRunChildren } from '../utils/scmRuns'
 import './OPAReviewJob.css'
 
 const SEV_RANK = { blocker: 5, critical: 4, high: 3, medium: 2, low: 1, info: 0 }
@@ -85,6 +85,24 @@ function ExtLink({ href, children, className, title }) {
 
 function findingKey(f, i) {
   return f?.finding_key || `${f?.file || ''}:${f?.line || i}`
+}
+
+function evidenceFromJob(job) {
+  if (!job) return null
+  if (job.evidence && typeof job.evidence === 'object') return job.evidence
+  const sum = job.summary && typeof job.summary === 'object' ? job.summary : {}
+  if (sum.evidence && typeof sum.evidence === 'object') return sum.evidence
+  return null
+}
+
+function sectionFlags(ev) {
+  const s = ev?.sections || {}
+  return {
+    context: !!(s.has_context || ev?.context?.checkout_path || ev?.context?.prefs || ev?.context?.brief_preview),
+    chat: !!(s.has_chat || ev?.chat?.transcript || ev?.chat?.model || ev?.chat?.prompt_preview),
+    results: !!(s.has_results || (ev?.results && Object.keys(ev.results).length > 1)),
+    posts: !!(s.has_posts || (Array.isArray(ev?.posts) && ev.posts.length)),
+  }
 }
 
 function gateSummary(job) {
@@ -232,6 +250,7 @@ export default function OPAReviewJob() {
     return Array.isArray(list) ? list : []
   }, [job])
   const childStatus = job?.child_status || job?.summary?.child_status || {}
+  const childrenEvidence = Array.isArray(job?.children_evidence) ? job.children_evidence : []
   const runKind = String(job?.kind || job?.summary?.kind || '')
   const isRunCentric = !!(runKind || children.length || job?.run_id)
   const frozenPrefs = job?.summary?.prefs || null
@@ -242,23 +261,59 @@ export default function OPAReviewJob() {
   const approvalReasons = Array.isArray(job?.summary?.approval_reasons) ? job.summary.approval_reasons : []
   const approvalHonesty = job?.summary?.approval_honesty || ''
   const degraded = Array.isArray(job?.summary?.degraded) ? job.summary.degraded : []
+  const evidence = useMemo(() => evidenceFromJob(job), [job])
+  const [selectedStageId, setSelectedStageId] = useState('')
 
   const dagRows = useMemo(() => {
+    let rows = []
     if (children.length) {
-      return children.map((c) => ({
+      rows = children.map((c) => ({
         id: c.id,
         kind: c.kind,
         status: c.status,
         attempt: c.attempt,
+        started_at: c.started_at,
+        finished_at: c.finished_at,
+      }))
+    } else {
+      rows = Object.keys(childStatus).map((k) => ({
+        id: k,
+        kind: k,
+        status: childStatus[k],
+        attempt: '',
       }))
     }
-    return Object.keys(childStatus).map((k) => ({
-      id: k,
-      kind: k,
-      status: childStatus[k],
-      attempt: '',
-    }))
-  }, [children, childStatus])
+    // Merge compact evidence section flags from parent view.
+    const byId = new Map(childrenEvidence.map((e) => [String(e.id), e]))
+    rows = rows.map((r) => {
+      const ce = byId.get(String(r.id))
+      return {
+        ...r,
+        sections: ce?.sections || null,
+        skip_reason: ce?.skip_reason || '',
+      }
+    })
+    return sortRunChildren(rows)
+  }, [children, childStatus, childrenEvidence])
+
+  useEffect(() => {
+    if (!selectedStageId && dagRows.length) {
+      setSelectedStageId(String(dagRows[0].id || ''))
+    }
+  }, [dagRows, selectedStageId])
+
+  const displayEvidence = useMemo(() => {
+    // When viewing a parent run, prefer selected child's evidence if embedded;
+    // otherwise show parent/self evidence.
+    if (selectedStageId && children.length) {
+      const child = children.find((c) => String(c.id) === String(selectedStageId))
+      const childEv = evidenceFromJob(child)
+      if (childEv) return childEv
+    }
+    return evidence
+  }, [selectedStageId, children, evidence])
+
+  const flags = sectionFlags(displayEvidence)
 
   return (
     <div className="opa-stack opa-review-job">
@@ -344,22 +399,129 @@ export default function OPAReviewJob() {
       </div>
 
       {isRunCentric && dagRows.length > 0 ? (
-        <Panel title="Run children" icon={<FiShield />} empty={false}>
-          <div className="opa-review-run-dag">
-            {dagRows.map((c) => (
-              <div key={c.id} className="opa-review-run-node">
-                <Badge>{agentKindLabel(c.kind)}</Badge>
-                <StatusPill tone={statusTone(c.status)}>{c.status || '—'}</StatusPill>
-                {c.id && c.id !== c.kind ? (
-                  <Link to={scmJobHref(c.id)} className="opa-mono" style={{ fontSize: 11 }}>
-                    {String(c.id).slice(0, 16)}
-                  </Link>
-                ) : null}
-                {c.attempt ? <span className="opa-muted" style={{ fontSize: 11 }}>attempt {c.attempt}</span> : null}
-              </div>
-            ))}
+        <Panel title="Stage timeline" icon={<FiShield />} empty={false}>
+          <div className="opa-review-run-dag opa-review-stage-timeline">
+            {dagRows.map((c) => {
+              const active = String(c.id) === String(selectedStageId)
+              const sec = c.sections || {}
+              return (
+                <button
+                  type="button"
+                  key={c.id}
+                  className={`opa-review-run-node opa-review-stage-node${active ? ' active' : ''}`}
+                  onClick={() => setSelectedStageId(String(c.id))}
+                >
+                  <Badge>{agentKindLabel(c.kind)}</Badge>
+                  <StatusPill tone={statusTone(c.status)}>{c.status || '—'}</StatusPill>
+                  {c.id && c.id !== c.kind ? (
+                    <Link
+                      to={scmJobHref(c.id)}
+                      className="opa-mono"
+                      style={{ fontSize: 11 }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {String(c.id).slice(0, 16)}
+                    </Link>
+                  ) : null}
+                  {c.attempt ? <span className="opa-muted" style={{ fontSize: 11 }}>attempt {c.attempt}</span> : null}
+                  <span className="opa-review-section-badges">
+                    {['has_context', 'has_chat', 'has_results', 'has_posts'].map((k) => (
+                      <span key={k} className={`opa-review-sec${sec[k] ? ' on' : ''}`}>
+                        {k.replace('has_', '')}
+                      </span>
+                    ))}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </Panel>
+      ) : null}
+
+      {displayEvidence ? (
+        <div className="opa-review-evidence-grid">
+          <Panel title="Context" icon={<FiShield />} empty={!flags.context} emptyText="No context captured">
+            {displayEvidence.context?.brief_preview ? (
+              <pre className="opa-review-evidence-pre">{displayEvidence.context.brief_preview}</pre>
+            ) : null}
+            {displayEvidence.context?.review_contexts ? (
+              <p className="opa-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+                Review contexts applied
+              </p>
+            ) : null}
+            {displayEvidence.context?.checkout_path ? (
+              <div className="opa-mono" style={{ fontSize: 11 }}>{displayEvidence.context.checkout_path}</div>
+            ) : null}
+            {displayEvidence.context?.prefs ? (
+              <ul className="opa-review-prefs-list">
+                {Object.keys(displayEvidence.context.prefs).slice(0, 12).map((field) => (
+                  <li key={field}>
+                    <span className="opa-mono">{field}</span>
+                    <span>{String(displayEvidence.context.prefs[field] ?? '—')}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </Panel>
+          <Panel title="Chat" icon={<FiShield />} empty={!flags.chat} emptyText="No agent chat on this stage">
+            {displayEvidence.chat?.model ? (
+              <div style={{ marginBottom: 8 }}>
+                Model <span className="opa-mono cell-strong">{displayEvidence.chat.model}</span>
+              </div>
+            ) : null}
+            {displayEvidence.chat?.prompt_preview ? (
+              <details className="opa-review-evidence-details">
+                <summary>Brief / prompt</summary>
+                <pre className="opa-review-evidence-pre">{displayEvidence.chat.prompt_preview}</pre>
+              </details>
+            ) : null}
+            {displayEvidence.chat?.transcript ? (
+              <details className="opa-review-evidence-details" open>
+                <summary>Transcript</summary>
+                <pre className="opa-review-evidence-pre">{displayEvidence.chat.transcript}</pre>
+              </details>
+            ) : null}
+            {Array.isArray(displayEvidence.chat?.parts) && displayEvidence.chat.parts.length ? (
+              <ul className="opa-review-prefs-list">
+                {displayEvidence.chat.parts.map((p, i) => (
+                  <li key={p.unit_id || i}>
+                    <span className="opa-mono">{p.unit_id || p.kind || 'part'}</span>
+                    <span>{p.error || p.summary || '—'}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </Panel>
+          <Panel title="Results" icon={<FiShield />} empty={!flags.results} emptyText="No structured results">
+            <pre className="opa-review-evidence-pre">
+              {JSON.stringify(displayEvidence.results || {}, null, 2)}
+            </pre>
+          </Panel>
+          <Panel
+            title="Posted messages"
+            icon={<FiShield />}
+            empty={!flags.posts}
+            emptyText="No GitHub posts recorded"
+          >
+            <ul className="opa-review-posts">
+              {(displayEvidence.posts || []).map((p, i) => (
+                <li key={`${p.type}-${p.github_id || i}`}>
+                  <div className="opa-review-post-head">
+                    <Badge>{p.type || 'post'}</Badge>
+                    <StatusPill tone="neutral">{p.status || '—'}</StatusPill>
+                    {p.url ? (
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="opa-mono" style={{ fontSize: 11 }}>
+                        view
+                      </a>
+                    ) : null}
+                    {p.github_id ? <span className="opa-muted opa-mono" style={{ fontSize: 11 }}>#{p.github_id}</span> : null}
+                  </div>
+                  <pre className="opa-review-evidence-pre">{p.body_preview || p.body || '—'}</pre>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        </div>
       ) : null}
 
       {degraded.length > 0 ? (

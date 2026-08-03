@@ -36,6 +36,14 @@ function findingsFromJob(job) {
   return []
 }
 
+function evidenceFromJob(job) {
+  if (!job) return null
+  if (job.evidence && typeof job.evidence === 'object') return job.evidence
+  const summary = job.summary && typeof job.summary === 'object' ? job.summary : {}
+  if (summary.evidence && typeof summary.evidence === 'object') return summary.evidence
+  return null
+}
+
 function frozenPrefs(job) {
   const summary = job?.summary && typeof job.summary === 'object' ? job.summary : {}
   return summary.prefs && typeof summary.prefs === 'object' ? summary.prefs : null
@@ -191,12 +199,30 @@ export default function JobEvidencePanel({
           <p className="opa-muted" style={{ margin: 0, fontSize: 12 }}>No child stages on this row.</p>
         ) : (
           <ul className="opa-jobs-evidence-children">
-            {kids.map((c) => (
-              <li key={c.id || c.kind}>
-                <span className="opa-mono">{agentKindLabel(c.kind) || c.kind}</span>
-                <StatusPill tone={toneForStatus(c.status)}>{c.status || '—'}</StatusPill>
-              </li>
-            ))}
+            {kids.map((c) => {
+              const id = c.id
+              const sec = c.sections || evidenceFromJob(c)?.sections || {}
+              const row = (
+                <>
+                  <span className="opa-mono">{agentKindLabel(c.kind) || c.kind}</span>
+                  <StatusPill tone={toneForStatus(c.status)}>{c.status || '—'}</StatusPill>
+                  <span className="opa-jobs-sec-badges">
+                    {['has_context', 'has_chat', 'has_results', 'has_posts'].map((k) => (
+                      <span key={k} className={sec[k] ? 'on' : ''}>{k.replace('has_', '')[0]}</span>
+                    ))}
+                  </span>
+                </>
+              )
+              return (
+                <li key={c.id || c.kind}>
+                  {id && id !== c.kind ? (
+                    <Link to={scmJobHref(id)} className="opa-jobs-evidence-child-link">
+                      {row}
+                    </Link>
+                  ) : row}
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>
