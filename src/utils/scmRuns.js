@@ -7,6 +7,14 @@ export const AGENT_KIND_LABELS = {
   approval: 'Approval',
   cloud: 'Cloud',
   checkup: 'Checkup',
+  issue_run: 'Issue Run',
+  issue_prepare: 'Issue Prepare',
+  issue_investigate: 'Issue Investigate',
+  issue_publish: 'Issue Publish',
+  issue_implement: 'Issue Implement',
+  roadmap_run: 'Roadmap Run',
+  roadmap_generate: 'Roadmap Generate',
+  roadmap_publish: 'Roadmap Publish',
 }
 
 export function agentKindLabel(kind) {

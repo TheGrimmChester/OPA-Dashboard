@@ -222,6 +222,25 @@ export default function OPAReviewJob() {
     }
   }
 
+  const approveCoding = async () => {
+    if (!jobId || busy) return
+    setBusy(true)
+    try {
+      const { data } = await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(jobId)}/approve-coding`))
+      toast.push(data?.implement_job_id
+        ? `Implement queued: ${data.implement_job_id}`
+        : (data?.honesty || 'Approve for coding queued'), { tone: 'neutral' })
+      await load()
+    } catch (e) {
+      const detail = typeof e.response?.data === 'string'
+        ? e.response.data
+        : (e.response?.data?.error || e.message || 'request failed')
+      toast.push(`Approve coding failed: ${detail}`, { tone: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const repo = job?.repo_full_name || (loading ? '…' : '—')
   const prNum = job?.pr_number
   const rHref = repoHref(job, connectors)
@@ -440,6 +459,17 @@ export default function OPAReviewJob() {
       ) : null}
 
       <div className="opa-review-job-actions">
+        {runKind === 'issue_run' ? (
+          <button
+            type="button"
+            className="opa-btn primary"
+            disabled={busy}
+            title="POST /api/scm/jobs/…/approve-coding — enqueue implement (no auto-merge)"
+            onClick={approveCoding}
+          >
+            Approve for coding
+          </button>
+        ) : null}
         <button
           type="button"
           className="opa-btn ghost"
