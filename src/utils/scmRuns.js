@@ -23,6 +23,28 @@ export function agentKindLabel(kind) {
   return AGENT_KIND_LABELS[k] || k
 }
 
+/**
+ * Whether Approve for coding should be enabled on an issue_run job.
+ * Eligible when kind is issue_run, not cancelled/failed, and there is no
+ * in-flight or successful issue_implement child.
+ */
+export function canApproveCoding(job) {
+  if (!job) return false
+  const kind = String(job.kind || job?.summary?.kind || '').toLowerCase()
+  if (kind !== 'issue_run') return false
+  const st = String(job.status || '').toLowerCase()
+  if (st === 'cancelled' || st === 'failed' || st === 'error') return false
+  const children = Array.isArray(job.children) ? job.children : []
+  for (const c of children) {
+    if (String(c?.kind || '').toLowerCase() !== 'issue_implement') continue
+    const cs = String(c.status || '').toLowerCase()
+    if (cs === 'queued' || cs === 'waiting' || cs === 'running' || cs === 'completed') {
+      return false
+    }
+  }
+  return true
+}
+
 /** Build TriState Inherit option text from effective prefs + provenance sources. */
 export function inheritOptionLabel(field, effective = {}, sources = {}) {
   const src = String(sources[field] || 'builtin').toLowerCase()
