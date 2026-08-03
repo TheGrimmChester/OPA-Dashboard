@@ -261,6 +261,54 @@
   margin-bottom: var(--sp-3);
 }
 
+.opa-review-activity-panel {
+  grid-column: 1 / -1;
+}
+
+.opa-review-activity-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.opa-review-activity-log {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle, #eee);
+  border-radius: 6px;
+}
+
+.opa-review-activity-stub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  opacity: 0.72;
+}
+
+.opa-review-activity-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  resize: vertical;
+  font: inherit;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #ccc);
+  background: var(--surface-1, #fff);
+  color: inherit;
+}
+
 .opa-review-evidence-pre {
   margin: 0;
   padding: 8px 10px;

@@ -105,11 +105,19 @@ export default function JobEvidencePanel({
   const ai = summary.ai && typeof summary.ai === 'object' ? summary.ai : {}
   const gate = summary.gate && typeof summary.gate === 'object' ? summary.gate : {}
   const findings = findingsFromJob(job)
-  const kids = Array.isArray(job._runChildren) && job._runChildren.length
+  const kidsRaw = Array.isArray(job._runChildren) && job._runChildren.length
     ? job._runChildren
     : Array.isArray(job.children) && job.children.length
       ? job.children
       : Object.entries(job._childStatus || job.child_status || summary.child_status || {}).map(([kind, status]) => ({ kind, status }))
+  const ceById = new Map(
+    (Array.isArray(job.children_evidence) ? job.children_evidence : []).map((e) => [String(e.id), e]),
+  )
+  const kids = kidsRaw.map((c) => {
+    const ce = ceById.get(String(c.id))
+    if (!ce) return c
+    return { ...c, sections: c.sections || ce.sections, status: c.status || ce.status }
+  })
   const prefs = frozenPrefs(job)
   const sha = summary.analyzed_sha || job.analyzed_sha || job.commit_sha || summary.worktree?.resolved_sha || ''
   const degraded = summary.degraded
@@ -119,6 +127,11 @@ export default function JobEvidencePanel({
   const cloud = cloudAutofixReady(prefs)
   const canAgent = !!job.pr_number && !active
   const busy = !!actionBusy
+  const live = summary.live && typeof summary.live === 'object' ? summary.live : null
+  const kidsLive = kids.some((c) => {
+    const s = c.summary && typeof c.summary === 'object' ? c.summary : {}
+    return !!(s.live && typeof s.live === 'object')
+  })
 
   return (
     <div className="opa-jobs-evidence">
@@ -127,6 +140,7 @@ export default function JobEvidencePanel({
           <span className="cell-strong">{job.repo_full_name || '—'}</span>
           {job.pr_number ? <Badge>#{job.pr_number}</Badge> : null}
           <StatusPill tone={toneForStatus(job.status)}>{job.status || '—'}</StatusPill>
+          {(live || kidsLive) && active ? <StatusPill tone="warn">Agent live…</StatusPill> : null}
           {detailLoading ? <span className="opa-muted" style={{ fontSize: 11 }}>Loading detail…</span> : null}
         </div>
         <div className="opa-jobs-evidence-meta opa-muted">
@@ -134,6 +148,7 @@ export default function JobEvidencePanel({
           {sha ? <span className="opa-mono">SHA {String(sha).slice(0, 10)}</span> : null}
           {gate.status ? <span>gate {gate.status}</span> : null}
           {ai.status ? <span>ai {ai.status}</span> : null}
+          {live?.phase ? <span>Agent live… {live.phase}{live.unit ? ` · ${live.unit}` : ''}</span> : null}
         </div>
         <div className="opa-jobs-evidence-actions">
           {active && onCancel ? (
