@@ -48,6 +48,28 @@ export function sortRunChildren(children = []) {
   return list
 }
 
+/**
+ * Whether Approve for coding should be enabled on an issue_run job.
+ * Eligible when kind is issue_run, not cancelled/failed, and there is no
+ * in-flight or successful issue_implement child.
+ */
+export function canApproveCoding(job) {
+  if (!job) return false
+  const kind = String(job.kind || job?.summary?.kind || '').toLowerCase()
+  if (kind !== 'issue_run') return false
+  const st = String(job.status || '').toLowerCase()
+  if (st === 'cancelled' || st === 'failed' || st === 'error') return false
+  const children = Array.isArray(job.children) ? job.children : []
+  for (const c of children) {
+    if (String(c?.kind || '').toLowerCase() !== 'issue_implement') continue
+    const cs = String(c.status || '').toLowerCase()
+    if (cs === 'queued' || cs === 'waiting' || cs === 'running' || cs === 'completed') {
+      return false
+    }
+  }
+  return true
+}
+
 /** Build TriState Inherit option text from effective prefs + provenance sources. */
 export function inheritOptionLabel(field, effective = {}, sources = {}) {
   const src = String(sources[field] || 'builtin').toLowerCase()
@@ -66,9 +88,17 @@ export function inheritOptionLabel(field, effective = {}, sources = {}) {
   return `Use ${srcLabel} Default (${shown})`
 }
 
+/** Parent run kinds that nest children and must not hide themselves when run_id === id. */
+export const SCM_PARENT_KINDS = new Set(['run', 'issue_run', 'roadmap_run'])
+
+export function isScmParentKind(kind) {
+  return SCM_PARENT_KINDS.has(String(kind || '').toLowerCase())
+}
+
 /**
  * Run-centric PR Jobs view: keep legacy rows (no kind/run_id) unchanged;
- * show kind=run parents with children attached; hide children when parent is present.
+ * show parent kinds (run / issue_run / roadmap_run) with children attached;
+ * hide children when parent is present.
  */
 export function groupScmJobsForDisplay(jobs = []) {
   const list = Array.isArray(jobs) ? jobs : []
@@ -80,7 +110,7 @@ export function groupScmJobsForDisplay(jobs = []) {
   const childrenByRun = new Map()
   for (const j of list) {
     const kind = String(j?.kind || '').toLowerCase()
-    if (!kind || kind === 'run') continue
+    if (!kind || isScmParentKind(kind)) continue
     const runId = String(j.run_id || j.parent_id || '').trim()
     if (!runId) continue
     if (!childrenByRun.has(runId)) childrenByRun.set(runId, [])
@@ -90,7 +120,7 @@ export function groupScmJobsForDisplay(jobs = []) {
   const hidden = new Set()
   for (const j of list) {
     const kind = String(j?.kind || '').toLowerCase()
-    if (!kind || kind === 'run') continue
+    if (!kind || isScmParentKind(kind)) continue
     const parentId = String(j.parent_id || j.run_id || '').trim()
     if (parentId && byId.has(parentId)) hidden.add(String(j.id))
   }
@@ -100,7 +130,7 @@ export function groupScmJobsForDisplay(jobs = []) {
     if (hidden.has(String(j.id))) continue
     const kind = String(j?.kind || '').toLowerCase()
     const runId = String(j?.run_id || '').trim()
-    if (kind === 'run' || (kind && runId)) {
+    if (isScmParentKind(kind) || (kind && runId)) {
       const kids = childrenByRun.get(String(j.id)) || childrenByRun.get(runId) || []
       const childStatus = {}
       for (const c of kids) {
