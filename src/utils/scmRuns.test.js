@@ -42,6 +42,27 @@ describe('scmRuns', () => {
     expect(rows.find((r) => r.id === 'orphan-sec')).toBeTruthy()
   })
 
+  it('nests issue_run and roadmap_run parents without hiding them', () => {
+    const issueParent = { id: 'issue-1', kind: 'issue_run', run_id: 'issue-1', status: 'queued' }
+    const issueChild = {
+      id: 'issue-1-prep', kind: 'issue_prepare', run_id: 'issue-1', parent_id: 'issue-1', status: 'running',
+    }
+    const roadmapParent = { id: 'rm-1', kind: 'roadmap_run', run_id: 'rm-1', status: 'queued' }
+    const roadmapChild = {
+      id: 'rm-1-gen', kind: 'roadmap_generate', run_id: 'rm-1', parent_id: 'rm-1', status: 'completed',
+    }
+    const rows = groupScmJobsForDisplay([issueParent, issueChild, roadmapParent, roadmapChild])
+    expect(rows.find((r) => r.id === 'issue-1-prep')).toBeUndefined()
+    expect(rows.find((r) => r.id === 'rm-1-gen')).toBeUndefined()
+    const issue = rows.find((r) => r.id === 'issue-1')
+    expect(issue).toBeTruthy()
+    expect(issue.status).toBe('running')
+    expect(issue._runChildren.map((c) => c.kind)).toEqual(['issue_prepare'])
+    const roadmap = rows.find((r) => r.id === 'rm-1')
+    expect(roadmap).toBeTruthy()
+    expect(roadmap._runChildren.map((c) => c.kind)).toEqual(['roadmap_generate'])
+  })
+
   it('folds child statuses', () => {
     expect(foldRunStatus([{ status: 'completed' }, { status: 'failed' }], 'queued')).toBe('completed_with_errors')
     expect(foldRunStatus([], 'queued')).toBe('queued')
@@ -55,6 +76,7 @@ describe('scmRuns', () => {
   it('gates Approve for coding on issue_run + implement state', () => {
     expect(canApproveCoding({ kind: 'run' })).toBe(false)
     expect(canApproveCoding({ kind: 'issue_run', status: 'completed' })).toBe(true)
+    expect(canApproveCoding({ kind: 'ISSUE_RUN', status: 'completed' })).toBe(true)
     expect(canApproveCoding({ kind: 'issue_run', status: 'failed' })).toBe(false)
     expect(canApproveCoding({
       kind: 'issue_run',
