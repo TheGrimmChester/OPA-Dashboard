@@ -3,8 +3,8 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   FiActivity, FiServer, FiCpu, FiAlertCircle, FiDatabase, FiGlobe, FiShare2,
   FiMonitor, FiTrendingUp, FiRadio, FiHardDrive, FiUsers, FiUser, FiKey, FiTarget,
-  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiShield, FiBookOpen,
-  FiChevronsLeft, FiChevronsRight, FiTerminal, FiGitBranch, FiMap,
+  FiBell, FiZap, FiColumns, FiFileText, FiBarChart2, FiLayout, FiCloud, FiBookOpen,
+  FiChevronsLeft, FiChevronsRight, FiTerminal,
 } from 'react-icons/fi'
 import { useI18n } from '../../contexts/I18nContext'
 
@@ -29,7 +29,6 @@ export const NAV_GROUPS = [
       { to: '/slos', labelKey: 'nav.slos', icon: FiTarget },
       { to: '/anomalies', labelKey: 'nav.anomalies', icon: FiZap },
       { to: '/synthetics', labelKey: 'nav.synthetics', icon: FiRadio },
-      { to: '/security', labelKey: 'nav.security', icon: FiShield },
       { to: '/diagnostics', labelKey: 'nav.diagnostics', icon: FiActivity },
     ],
   },
@@ -42,7 +41,6 @@ export const NAV_GROUPS = [
       { to: '/network', labelKey: 'nav.network', icon: FiGlobe },
       { to: '/rum', labelKey: 'nav.rum', icon: FiMonitor },
       { to: '/performance', labelKey: 'nav.performance', icon: FiTrendingUp },
-      { to: '/perf-lab', labelKey: 'nav.perfLab', icon: FiZap },
       { to: '/compare', labelKey: 'nav.compare', icon: FiColumns },
     ],
   },
@@ -71,10 +69,7 @@ export const NAV_GROUPS = [
       { to: '/users', labelKey: 'nav.users', icon: FiUsers, adminOnly: true },
       { to: '/settings/account', labelKey: 'nav.account', icon: FiUser },
       { to: '/api-keys', labelKey: 'nav.apiKeys', icon: FiKey, adminOnly: true },
-      { to: '/settings/ai', labelKey: 'nav.aiSettings', icon: FiCpu, adminOnly: true },
-      { to: '/settings/connectors', labelKey: 'nav.connectors', icon: FiGitBranch },
       { to: '/automation', labelKey: 'nav.automation', icon: FiCpu },
-      { to: '/roadmap', labelKey: 'nav.roadmap', icon: FiMap },
       { to: '/federation', labelKey: 'nav.federation', icon: FiGlobe, adminOnly: true },
     ],
   },
