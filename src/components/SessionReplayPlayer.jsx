@@ -6,7 +6,7 @@ import { Badge, StatusPill } from '../components/ui'
 import { fmtAgo } from '../theme/format'
 
 /**
- * Wave 28 — SessionReplayPlayer
+ * Experience replay — SessionReplayPlayer
  * Renders a masked DOM event log (MutationObserver / click / input / nav / longtask / resource), NOT rrweb pixels.
  */
 const MARKER_TONE = {

@@ -3,22 +3,22 @@
 ## [Unreleased]
 
 ### Added
-- Wave 27 Diagnostics page + i18n scaffold (en/fr) with locale switcher (`/diagnostics`).
-- Wave 26 Collaborate page: notebooks, status pages, comments, executive reports (`/collaborate`).
-- Wave 25 Federation page: region peers, residency policy, cross-border transfers (`/federation`).
-- Wave 24 Network page: flows, DNS/TLS health, agentless discovery, host profiles (`/network`).
-- Wave 23 Cloud page: resources, cost, tag violations, scrapes, cloud integrations (`/cloud`).
-- Wave 22 Automation page: ConfigBundle plan/apply/import, promote, revisions (`/automation`).
-- Wave 21 Catalog page: entities, scorecards, teams, account groups (`/catalog`).
-- Wave 20 synthetics depth UI: check types, step waterfall, cert days, private location field, trace links.
-- Wave 19 Security pillar: CVE reachability rankings and IAST sink detections (`/security`).
-- Wave 18 Serverless pillar: cold-start rate, billed duration, memory utilization (`/serverless`).
-- Wave 17 Databases pillar: instance health, DB-side statements with app fingerprint drill-through, unused indexes.
-- Wave 16 community files and System/platform docs links.
-- Wave 15 PlatformOps `/system` page.
-- Wave 14 dashboards builder and exploration UX.
+- Feature: Diagnostics page + i18n scaffold (en/fr) with locale switcher (`/diagnostics`).
+- Feature: Collaborate page — notebooks, status pages, comments, executive reports (`/collaborate`).
+- Feature: Federation page — region peers, residency policy, cross-border transfers (`/federation`).
+- Feature: Network page — flows, DNS/TLS health, agentless discovery, host profiles (`/network`).
+- Feature: Cloud page — resources, cost, tag violations, scrapes, cloud integrations (`/cloud`).
+- Feature: Automation page — ConfigBundle plan/apply/import, promote, revisions (`/automation`).
+- Feature: Catalog page — entities, scorecards, teams, account groups (`/catalog`).
+- Feature: Synthetics depth UI — check types, step waterfall, cert days, private location field, trace links.
+- Feature: Security pillar — CVE reachability rankings and IAST sink detections (`/security`).
+- Feature: Serverless pillar — cold-start rate, billed duration, memory utilization (`/serverless`).
+- Feature: Databases pillar — instance health, DB-side statements with app fingerprint drill-through, unused indexes.
+- Feature: community files and System/platform docs links.
+- Feature: PlatformOps `/system` page.
+- Feature: Dashboards builder and exploration UX.
 
 ## [0.15.0] — 2026-07-30
 
 ### Added
-- Dashboards, facets, brush-zoom, entity search (Wave 14) and platform ops (Wave 15).
+- Dashboards, facets, brush-zoom, entity search (Dashboards) and platform ops (PlatformOps).

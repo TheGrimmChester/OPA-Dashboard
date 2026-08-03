@@ -25,7 +25,7 @@ const EMPTY_BUNDLE = `{
   }
 }`
 
-/** Wave 22: Platform automation — mgmt API, plan/apply, export/import. */
+/** Platform automation — mgmt API, plan/apply, export/import. */
 export default function Automation() {
   const [tab, setTab] = useState('plan')
   const [bundleText, setBundleText] = useState(EMPTY_BUNDLE)

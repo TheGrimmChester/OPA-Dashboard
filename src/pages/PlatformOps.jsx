@@ -4,7 +4,7 @@ import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, EmptyState } from '../components/ui'
 import { fmtNum } from '../theme/format'
 
-/** Wave 15: platform topology, version, audit trail. */
+/** HA / scale / PlatformOps: platform topology, version, audit trail. */
 export default function PlatformOps() {
   const version = useApi('/api/version', {}, { noRange: true })
   const topology = useApi('/api/topology', {}, { noRange: true })
@@ -28,7 +28,7 @@ export default function PlatformOps() {
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">System</h1>
-          <div className="opa-page-sub">Platform topology · version · audit (Wave 15)</div>
+          <div className="opa-page-sub">Platform topology · version · audit</div>
         </div>
         <StatusPill tone={t.drain ? 'warn' : 'ok'}>{t.mode || '…'}{t.drain ? ' · draining' : ''}</StatusPill>
       </div>

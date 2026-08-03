@@ -29,7 +29,7 @@ function Tabs({ tabs = [], value, onChange, t }) {
   )
 }
 
-/** Wave 27: Deep diagnostics. */
+/** Deep diagnostics. */
 export default function Diagnostics() {
   const { t } = useI18n()
   const [tab, setTab] = useState('commits')

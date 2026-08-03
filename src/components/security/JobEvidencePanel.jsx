@@ -36,6 +36,14 @@ function findingsFromJob(job) {
   return []
 }
 
+function evidenceFromJob(job) {
+  if (!job) return null
+  if (job.evidence && typeof job.evidence === 'object') return job.evidence
+  const summary = job.summary && typeof job.summary === 'object' ? job.summary : {}
+  if (summary.evidence && typeof summary.evidence === 'object') return summary.evidence
+  return null
+}
+
 function frozenPrefs(job) {
   const summary = job?.summary && typeof job.summary === 'object' ? job.summary : {}
   return summary.prefs && typeof summary.prefs === 'object' ? summary.prefs : null
@@ -97,11 +105,19 @@ export default function JobEvidencePanel({
   const ai = summary.ai && typeof summary.ai === 'object' ? summary.ai : {}
   const gate = summary.gate && typeof summary.gate === 'object' ? summary.gate : {}
   const findings = findingsFromJob(job)
-  const kids = Array.isArray(job._runChildren) && job._runChildren.length
+  const kidsRaw = Array.isArray(job._runChildren) && job._runChildren.length
     ? job._runChildren
     : Array.isArray(job.children) && job.children.length
       ? job.children
       : Object.entries(job._childStatus || job.child_status || summary.child_status || {}).map(([kind, status]) => ({ kind, status }))
+  const ceById = new Map(
+    (Array.isArray(job.children_evidence) ? job.children_evidence : []).map((e) => [String(e.id), e]),
+  )
+  const kids = kidsRaw.map((c) => {
+    const ce = ceById.get(String(c.id))
+    if (!ce) return c
+    return { ...c, sections: c.sections || ce.sections, status: c.status || ce.status }
+  })
   const prefs = frozenPrefs(job)
   const sha = summary.analyzed_sha || job.analyzed_sha || job.commit_sha || summary.worktree?.resolved_sha || ''
   const degraded = summary.degraded
@@ -111,6 +127,11 @@ export default function JobEvidencePanel({
   const cloud = cloudAutofixReady(prefs)
   const canAgent = !!job.pr_number && !active
   const busy = !!actionBusy
+  const live = summary.live && typeof summary.live === 'object' ? summary.live : null
+  const kidsLive = kids.some((c) => {
+    const s = c.summary && typeof c.summary === 'object' ? c.summary : {}
+    return !!(s.live && typeof s.live === 'object')
+  })
 
   return (
     <div className="opa-jobs-evidence">
@@ -119,6 +140,7 @@ export default function JobEvidencePanel({
           <span className="cell-strong">{job.repo_full_name || '—'}</span>
           {job.pr_number ? <Badge>#{job.pr_number}</Badge> : null}
           <StatusPill tone={toneForStatus(job.status)}>{job.status || '—'}</StatusPill>
+          {(live || kidsLive) && active ? <StatusPill tone="warn">Agent live…</StatusPill> : null}
           {detailLoading ? <span className="opa-muted" style={{ fontSize: 11 }}>Loading detail…</span> : null}
         </div>
         <div className="opa-jobs-evidence-meta opa-muted">
@@ -126,6 +148,7 @@ export default function JobEvidencePanel({
           {sha ? <span className="opa-mono">SHA {String(sha).slice(0, 10)}</span> : null}
           {gate.status ? <span>gate {gate.status}</span> : null}
           {ai.status ? <span>ai {ai.status}</span> : null}
+          {live?.phase ? <span>Agent live… {live.phase}{live.unit ? ` · ${live.unit}` : ''}</span> : null}
         </div>
         <div className="opa-jobs-evidence-actions">
           {active && onCancel ? (
@@ -191,12 +214,30 @@ export default function JobEvidencePanel({
           <p className="opa-muted" style={{ margin: 0, fontSize: 12 }}>No child stages on this row.</p>
         ) : (
           <ul className="opa-jobs-evidence-children">
-            {kids.map((c) => (
-              <li key={c.id || c.kind}>
-                <span className="opa-mono">{agentKindLabel(c.kind) || c.kind}</span>
-                <StatusPill tone={toneForStatus(c.status)}>{c.status || '—'}</StatusPill>
-              </li>
-            ))}
+            {kids.map((c) => {
+              const id = c.id
+              const sec = c.sections || evidenceFromJob(c)?.sections || {}
+              const row = (
+                <>
+                  <span className="opa-mono">{agentKindLabel(c.kind) || c.kind}</span>
+                  <StatusPill tone={toneForStatus(c.status)}>{c.status || '—'}</StatusPill>
+                  <span className="opa-jobs-sec-badges">
+                    {['has_context', 'has_chat', 'has_results', 'has_posts'].map((k) => (
+                      <span key={k} className={sec[k] ? 'on' : ''}>{k.replace('has_', '')[0]}</span>
+                    ))}
+                  </span>
+                </>
+              )
+              return (
+                <li key={c.id || c.kind}>
+                  {id && id !== c.kind ? (
+                    <Link to={scmJobHref(id)} className="opa-jobs-evidence-child-link">
+                      {row}
+                    </Link>
+                  ) : row}
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>

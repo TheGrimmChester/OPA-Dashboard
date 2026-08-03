@@ -227,7 +227,7 @@ function App() {
               path="/perf-lab"
               element={<PerfLab />}
             />
-            {/* App-level HTTP bandwidth stays on Performance; Wave 24 network obs is /network. */}
+            {/* App-level HTTP bandwidth stays on Performance; Network observability is /network. */}
             <Route
               path="/network"
               element={<Network />}
