@@ -6,7 +6,7 @@ import { apiUrl } from '../utils/apiBase'
 import { Panel, EntityHeader, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { scmJobHref } from '../utils/entityLinks'
-import { agentKindLabel } from '../utils/scmRuns'
+import { agentKindLabel, canApproveCoding } from '../utils/scmRuns'
 import './OPAReviewJob.css'
 
 const SEV_RANK = { blocker: 5, critical: 4, high: 3, medium: 2, low: 1, info: 0 }
@@ -463,7 +463,7 @@ export default function OPAReviewJob() {
           <button
             type="button"
             className="opa-btn primary"
-            disabled={busy}
+            disabled={busy || !canApproveCoding(job)}
             title="POST /api/scm/jobs/…/approve-coding — enqueue implement (no auto-merge)"
             onClick={approveCoding}
           >

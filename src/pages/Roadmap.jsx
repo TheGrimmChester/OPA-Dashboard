@@ -5,20 +5,23 @@ import { FiMap, FiPlay, FiUpload, FiRefreshCw } from 'react-icons/fi'
 import { Panel, StatusPill } from '../components/ui'
 import { apiUrl } from '../utils/apiBase'
 import { useApi } from '../hooks/useApi'
+import { buildRoadmapGenerateBody, mapWatchedRepoNames } from '../utils/roadmapHelpers'
 
-const CONTEXT_OPTS = [
+export const CONTEXT_OPTS = [
   { id: 'discovery', label: 'Feature planning (discovery)' },
   { id: 'competitor', label: 'Competitor analysis' },
   { id: 'audience', label: 'Audience targeting' },
   { id: 'features', label: 'Roadmap features / phases' },
 ]
 
+const TERMINAL = new Set(['completed', 'failed', 'error', 'cancelled', 'completed_with_errors', 'skipped'])
+
 /** Dashboard → Roadmap generator (OPA AI Orchestrator). */
 export default function Roadmap() {
   const connectors = useApi('/api/connectors', {}, { noRange: true })
-  const watched = useApi('/api/scm/settings', {}, { noRange: true })
   const [connectorId, setConnectorId] = useState('')
   const [repo, setRepo] = useState('')
+  const [repoOptions, setRepoOptions] = useState([])
   const [contexts, setContexts] = useState(['discovery', 'features'])
   const [competitors, setCompetitors] = useState('')
   const [audience, setAudience] = useState('')
@@ -28,6 +31,7 @@ export default function Roadmap() {
   const [runDetail, setRunDetail] = useState(null)
   const [permHealth, setPermHealth] = useState(null)
   const [prefs, setPrefs] = useState(null)
+  const [prefsLoaded, setPrefsLoaded] = useState(false)
   const [prefsBusy, setPrefsBusy] = useState(false)
 
   const connectorList = useMemo(() => {
@@ -35,23 +39,31 @@ export default function Roadmap() {
     return Array.isArray(raw) ? raw : []
   }, [connectors.data])
 
-  const repoOptions = useMemo(() => {
-    const watches = watched.data?.watched || watched.data?.repos || []
-    if (Array.isArray(watches) && watches.length) {
-      return watches.map((w) => w.repo_full_name || w.repo || w).filter(Boolean)
-    }
-    return []
-  }, [watched.data])
-
   useEffect(() => {
     if (!connectorId && connectorList.length) {
       setConnectorId(connectorList[0].id || '')
     }
   }, [connectorList, connectorId])
 
+  const loadWatched = useCallback(async (cid) => {
+    if (!cid) {
+      setRepoOptions([])
+      return
+    }
+    try {
+      const { data } = await axios.get(apiUrl(`/api/connectors/${encodeURIComponent(cid)}/watched`))
+      const names = mapWatchedRepoNames(data)
+      setRepoOptions(names)
+      setRepo((prev) => (prev && names.includes(prev) ? prev : (names[0] || '')))
+    } catch (e) {
+      setRepoOptions([])
+      setErr(typeof e.response?.data === 'string' ? e.response.data : (e.message || 'Failed to load watched repos'))
+    }
+  }, [])
+
   useEffect(() => {
-    if (!repo && repoOptions.length) setRepo(repoOptions[0])
-  }, [repoOptions, repo])
+    loadWatched(connectorId)
+  }, [connectorId, loadWatched])
 
   const loadPerms = useCallback(async (id) => {
     if (!id) {
@@ -71,19 +83,32 @@ export default function Roadmap() {
   }, [connectorId, loadPerms])
 
   const loadPrefs = useCallback(async () => {
+    if (!repo) {
+      setPrefs(null)
+      setPrefsLoaded(false)
+      return
+    }
+    setPrefsBusy(true)
+    setPrefsLoaded(false)
     try {
       const { data } = await axios.get(apiUrl('/api/agents/prefs'), {
         params: { level: 'repo', repo, connector_id: connectorId, scope_key: repo },
       })
       setPrefs(data)
-    } catch {
+      setPrefsLoaded(true)
+      setErr(null)
+    } catch (e) {
       setPrefs(null)
+      setPrefsLoaded(false)
+      setErr(typeof e.response?.data === 'string' ? e.response.data : (e.message || 'Failed to load agent prefs'))
+    } finally {
+      setPrefsBusy(false)
     }
   }, [repo, connectorId])
 
   useEffect(() => {
-    if (repo) loadPrefs()
-  }, [repo, loadPrefs])
+    loadPrefs()
+  }, [loadPrefs])
 
   const toggleContext = (id) => {
     setContexts((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -98,33 +123,33 @@ export default function Roadmap() {
   useEffect(() => {
     if (!runId) return undefined
     let active = true
+    let timer = null
     const tick = async () => {
+      if (!active) return
       try {
         const data = await pollRun(runId)
         const st = data?.run?.status
-        if (active && st && !['completed', 'failed', 'error', 'cancelled', 'completed_with_errors', 'skipped'].includes(st)) {
-          setTimeout(tick, 2000)
+        if (active && st && !TERMINAL.has(st)) {
+          timer = setTimeout(tick, 2000)
         }
       } catch {
-        /* ignore poll errors */
+        if (active) timer = setTimeout(tick, 2000)
       }
     }
     tick()
-    return () => { active = false }
+    return () => {
+      active = false
+      if (timer) clearTimeout(timer)
+    }
   }, [runId, pollRun])
 
   const generate = async (publishAfter) => {
     setBusy(true)
     setErr(null)
     try {
-      const body = {
-        repo_full_name: repo,
-        connector_id: connectorId || undefined,
-        contexts,
-        competitors: competitors.split(/[\n,]/).map((s) => s.trim()).filter(Boolean),
-        audience_notes: audience,
-        publish: !!publishAfter,
-      }
+      const body = buildRoadmapGenerateBody({
+        repo, connectorId, contexts, competitorsText: competitors, audience, publish: publishAfter,
+      })
       const { data } = await axios.post(apiUrl('/api/scm/roadmap/generate'), body)
       setRunId(data.job_id)
       await pollRun(data.job_id)
@@ -160,9 +185,11 @@ export default function Roadmap() {
   }
 
   const saveIssuePrefs = async (patch) => {
+    if (!prefsLoaded || !prefs) return
     setPrefsBusy(true)
     setErr(null)
     try {
+      // Orchestrator PUT merges keys onto the stored blob; still only send the toggled keys.
       await axios.put(apiUrl('/api/agents/prefs'), {
         level: 'repo',
         scope_key: repo,
@@ -179,6 +206,7 @@ export default function Roadmap() {
   }
 
   const effective = prefs?.effective || {}
+  const prefsReady = prefsLoaded && !!prefs
   const roadmap = runDetail?.artifacts?.['roadmap.json'] || runDetail?.run?.summary?.roadmap
   const discovery = runDetail?.artifacts?.['roadmap_discovery.json'] || runDetail?.run?.summary?.discovery
   const competitor = runDetail?.artifacts?.['competitor_analysis.json'] || runDetail?.run?.summary?.competitor_analysis
@@ -233,18 +261,24 @@ export default function Roadmap() {
 
       <Panel title="Repo & contexts" icon={<FiPlay />}>
         <div className="opa-stack" style={{ gap: 12 }}>
-          <label className="opa-field">
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
             <span>Connector</span>
-            <select value={connectorId} onChange={(e) => setConnectorId(e.target.value)}>
+            <select className="opa-select" value={connectorId} onChange={(e) => setConnectorId(e.target.value)}>
               <option value="">—</option>
               {connectorList.map((c) => (
                 <option key={c.id} value={c.id}>{c.account_login || c.id} ({c.kind})</option>
               ))}
             </select>
           </label>
-          <label className="opa-field">
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
             <span>Watched repo</span>
-            <input list="roadmap-repos" value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="owner/repo" />
+            <input
+              className="opa-input"
+              list="roadmap-repos"
+              value={repo}
+              onChange={(e) => setRepo(e.target.value)}
+              placeholder="owner/repo"
+            />
             <datalist id="roadmap-repos">
               {repoOptions.map((r) => <option key={r} value={r} />)}
             </datalist>
@@ -257,13 +291,13 @@ export default function Roadmap() {
               </label>
             ))}
           </div>
-          <label className="opa-field">
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
             <span>Competitors (comma or newline)</span>
-            <textarea rows={2} value={competitors} onChange={(e) => setCompetitors(e.target.value)} placeholder="Aperant, Cursor Bugbot" />
+            <textarea className="opa-input" rows={2} value={competitors} onChange={(e) => setCompetitors(e.target.value)} placeholder="Aperant, Cursor Bugbot" />
           </label>
-          <label className="opa-field">
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
             <span>Audience notes</span>
-            <textarea rows={2} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Solo founders shipping products…" />
+            <textarea className="opa-input" rows={2} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Solo founders shipping products…" />
           </label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="opa-btn" disabled={busy || !repo} onClick={() => generate(false)}>
@@ -281,7 +315,10 @@ export default function Roadmap() {
 
       <Panel title="AI Issues prefs (this repo)">
         {!repo && <div className="opa-muted">Pick a repo to edit prefs.</div>}
-        {repo && (
+        {repo && !prefsReady && (
+          <div className="opa-muted">{prefsBusy ? 'Loading prefs…' : 'Prefs unavailable — toggles disabled until load succeeds.'}</div>
+        )}
+        {repo && prefsReady && (
           <div className="opa-stack" style={{ gap: 8, fontSize: 13 }}>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input

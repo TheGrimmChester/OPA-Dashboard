@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentKindLabel,
+  canApproveCoding,
   foldRunStatus,
   groupScmJobsForDisplay,
   inheritOptionLabel,
@@ -49,5 +50,21 @@ describe('scmRuns', () => {
   it('detects run meta', () => {
     expect(jobHasRunMeta({ kind: 'run' })).toBe(true)
     expect(jobHasRunMeta({ event: 'pull_request' })).toBe(false)
+  })
+
+  it('gates Approve for coding on issue_run + implement state', () => {
+    expect(canApproveCoding({ kind: 'run' })).toBe(false)
+    expect(canApproveCoding({ kind: 'issue_run', status: 'completed' })).toBe(true)
+    expect(canApproveCoding({ kind: 'issue_run', status: 'failed' })).toBe(false)
+    expect(canApproveCoding({
+      kind: 'issue_run',
+      status: 'completed',
+      children: [{ kind: 'issue_implement', status: 'running' }],
+    })).toBe(false)
+    expect(canApproveCoding({
+      kind: 'issue_run',
+      status: 'completed',
+      children: [{ kind: 'issue_implement', status: 'failed' }],
+    })).toBe(true)
   })
 })
