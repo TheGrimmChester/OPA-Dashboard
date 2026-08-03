@@ -128,30 +128,49 @@ export default function OPAReviewJob() {
   const [busy, setBusy] = useState(false)
   const [findingSev, setFindingSev] = useState('')
   const [findingQ, setFindingQ] = useState('')
+  const [liveLog, setLiveLog] = useState('')
+  const [agentMsg, setAgentMsg] = useState('')
+  const liveLogRef = React.useRef(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ soft = false } = {}) => {
     if (!jobId) return
-    setLoading(true)
-    setError('')
+    if (!soft) {
+      setLoading(true)
+      setError('')
+    }
     try {
       const [{ data }, connRes] = await Promise.all([
         axios.get(apiUrl(`/api/scm/jobs/${encodeURIComponent(jobId)}`)),
-        axios.get(apiUrl('/api/connectors')).catch(() => ({ data: null })),
+        soft
+          ? Promise.resolve({ data: null })
+          : axios.get(apiUrl('/api/connectors')).catch(() => ({ data: null })),
       ])
       setJob(data)
-      const list = connRes?.data?.connectors || connRes?.data || []
-      setConnectors(Array.isArray(list) ? list : [])
+      if (!soft) {
+        const list = connRes?.data?.connectors || connRes?.data || []
+        setConnectors(Array.isArray(list) ? list : [])
+      }
     } catch (e) {
-      setError(typeof e.response?.data === 'string'
-        ? e.response.data
-        : (e.response?.data?.error || e.message || 'failed to load job'))
-      setJob(null)
+      if (!soft) {
+        setError(typeof e.response?.data === 'string'
+          ? e.response.data
+          : (e.response?.data?.error || e.message || 'failed to load job'))
+        setJob(null)
+      }
     } finally {
-      setLoading(false)
+      if (!soft) setLoading(false)
     }
   }, [jobId])
 
   useEffect(() => { load() }, [load])
+
+  const jobActive = ['queued', 'waiting', 'running'].includes(String(job?.status || '').toLowerCase())
+
+  useEffect(() => {
+    if (!jobId || !jobActive) return undefined
+    const t = setInterval(() => { load({ soft: true }) }, 2000)
+    return () => clearInterval(t)
+  }, [jobId, jobActive, load])
 
   const findings = useMemo(() => {
     if (!job) return []
@@ -263,6 +282,13 @@ export default function OPAReviewJob() {
   const degraded = Array.isArray(job?.summary?.degraded) ? job.summary.degraded : []
   const evidence = useMemo(() => evidenceFromJob(job), [job])
   const [selectedStageId, setSelectedStageId] = useState('')
+  const [stagePinned, setStagePinned] = useState(false)
+
+  useEffect(() => {
+    setSelectedStageId('')
+    setStagePinned(false)
+    setLiveLog('')
+  }, [jobId])
 
   const dagRows = useMemo(() => {
     let rows = []
@@ -297,10 +323,18 @@ export default function OPAReviewJob() {
   }, [children, childStatus, childrenEvidence])
 
   useEffect(() => {
-    if (!selectedStageId && dagRows.length) {
+    if (!dagRows.length) return
+    const running = dagRows.find((r) => String(r.status || '').toLowerCase() === 'running')
+    // Follow the running stage unless the operator pinned another stage.
+    if (running && !stagePinned) {
+      const id = String(running.id || '')
+      if (id && id !== selectedStageId) setSelectedStageId(id)
+      return
+    }
+    if (!selectedStageId) {
       setSelectedStageId(String(dagRows[0].id || ''))
     }
-  }, [dagRows, selectedStageId])
+  }, [dagRows, selectedStageId, stagePinned])
 
   const displayEvidence = useMemo(() => {
     // When viewing a parent run, prefer selected child's evidence if embedded;
@@ -314,6 +348,65 @@ export default function OPAReviewJob() {
   }, [selectedStageId, children, evidence])
 
   const flags = sectionFlags(displayEvidence)
+
+  const liveTarget = useMemo(() => {
+    if (selectedStageId && children.length) {
+      const child = children.find((c) => String(c.id) === String(selectedStageId))
+      if (child) return child
+    }
+    return job
+  }, [selectedStageId, children, job])
+
+  const liveMeta = useMemo(() => {
+    const sum = liveTarget?.summary && typeof liveTarget.summary === 'object' ? liveTarget.summary : {}
+    return sum.live && typeof sum.live === 'object' ? sum.live : null
+  }, [liveTarget])
+
+  const liveTargetActive = ['queued', 'waiting', 'running'].includes(
+    String(liveTarget?.status || '').toLowerCase(),
+  )
+  const liveArtifactJobId = String(liveTarget?.id || jobId || '')
+
+  useEffect(() => {
+    if (!liveArtifactJobId) return undefined
+    setLiveLog('')
+    let cancelled = false
+    const pull = async () => {
+      if (!liveMeta?.artifact && !liveTargetActive) {
+        // Fall back to summary tail only when terminal and no artifact yet.
+        if (liveMeta?.tail) setLiveLog(String(liveMeta.tail))
+        return
+      }
+      try {
+        const name = liveMeta?.artifact || 'live.log'
+        const { data } = await axios.get(
+          apiUrl(`/api/scm/jobs/${encodeURIComponent(liveArtifactJobId)}/artifacts/${encodeURIComponent(name)}`),
+          { responseType: 'text', transformResponse: [(d) => d] },
+        )
+        if (!cancelled && typeof data === 'string') setLiveLog(data)
+      } catch {
+        if (!cancelled && liveMeta?.tail) setLiveLog(String(liveMeta.tail))
+      }
+    }
+    pull()
+    if (!liveTargetActive) return () => { cancelled = true }
+    const t = setInterval(pull, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [liveArtifactJobId, liveTargetActive, liveMeta?.artifact, liveMeta?.tail, liveMeta?.updated_at])
+
+  useEffect(() => {
+    const el = liveLogRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [liveLog])
+
+  const activityKind = agentKindLabel(
+    liveTarget?.kind || liveTarget?.summary?.kind || runKind || 'job',
+  )
+  const showActivity = !!(liveLog || liveMeta || liveTargetActive)
 
   return (
     <div className="opa-stack opa-review-job">
@@ -409,7 +502,10 @@ export default function OPAReviewJob() {
                   type="button"
                   key={c.id}
                   className={`opa-review-run-node opa-review-stage-node${active ? ' active' : ''}`}
-                  onClick={() => setSelectedStageId(String(c.id))}
+                  onClick={() => {
+                    setStagePinned(true)
+                    setSelectedStageId(String(c.id))
+                  }}
                 >
                   <Badge>{agentKindLabel(c.kind)}</Badge>
                   <StatusPill tone={statusTone(c.status)}>{c.status || '—'}</StatusPill>
@@ -438,21 +534,58 @@ export default function OPAReviewJob() {
         </Panel>
       ) : null}
 
-      {displayEvidence ? (
+      {displayEvidence || showActivity ? (
         <div className="opa-review-evidence-grid">
+          {showActivity ? (
+            <Panel
+              className="opa-review-activity-panel"
+              title="Agent activity"
+              icon={<FiShield />}
+              empty={!liveLog && !liveMeta}
+              emptyText={liveTargetActive ? 'Waiting for agent output…' : 'No live log for this stage'}
+            >
+              <div className="opa-review-activity-status">
+                <span className="cell-strong">{activityKind}</span>
+                {liveMeta?.phase ? <Badge>{liveMeta.phase}</Badge> : null}
+                {liveMeta?.unit ? <span className="opa-mono" style={{ fontSize: 11 }}>{liveMeta.unit}</span> : null}
+                {liveTargetActive ? <StatusPill tone="warn">live</StatusPill> : null}
+                {liveMeta?.updated_at ? (
+                  <span className="opa-muted" style={{ fontSize: 11 }}>
+                    {String(liveMeta.updated_at).replace('T', ' ').slice(0, 19)} UTC
+                  </span>
+                ) : null}
+              </div>
+              <pre ref={liveLogRef} className="opa-review-activity-log">
+                {liveLog || liveMeta?.tail || (liveTargetActive ? '…' : '')}
+              </pre>
+              <div className="opa-review-activity-stub" title="Coming soon — live watch only">
+                <textarea
+                  className="opa-review-activity-input"
+                  rows={2}
+                  disabled
+                  placeholder="Message agent… (coming soon)"
+                  value={agentMsg}
+                  onChange={(e) => setAgentMsg(e.target.value)}
+                />
+                <button type="button" className="opa-btn ghost" disabled title="Coming soon — live watch only">
+                  Send to agent
+                </button>
+              </div>
+            </Panel>
+          ) : null}
           <Panel title="Context" icon={<FiShield />} empty={!flags.context} emptyText="No context captured">
-            {displayEvidence.context?.brief_preview ? (
+            {displayEvidence?.context?.brief_preview ? (
               <pre className="opa-review-evidence-pre">{displayEvidence.context.brief_preview}</pre>
             ) : null}
-            {displayEvidence.context?.review_contexts ? (
+            {displayEvidence?.context?.review_contexts ? (
               <p className="opa-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
                 Review contexts applied
               </p>
             ) : null}
-            {displayEvidence.context?.checkout_path ? (
+            {displayEvidence?.context?.checkout_path ? (
               <div className="opa-mono" style={{ fontSize: 11 }}>{displayEvidence.context.checkout_path}</div>
             ) : null}
-            {displayEvidence.context?.prefs ? (
+            {displayEvidence?.context?.prefs ? (
               <ul className="opa-review-prefs-list">
                 {Object.keys(displayEvidence.context.prefs).slice(0, 12).map((field) => (
                   <li key={field}>
@@ -464,24 +597,24 @@ export default function OPAReviewJob() {
             ) : null}
           </Panel>
           <Panel title="Chat" icon={<FiShield />} empty={!flags.chat} emptyText="No agent chat on this stage">
-            {displayEvidence.chat?.model ? (
+            {displayEvidence?.chat?.model ? (
               <div style={{ marginBottom: 8 }}>
                 Model <span className="opa-mono cell-strong">{displayEvidence.chat.model}</span>
               </div>
             ) : null}
-            {displayEvidence.chat?.prompt_preview ? (
+            {displayEvidence?.chat?.prompt_preview ? (
               <details className="opa-review-evidence-details">
                 <summary>Brief / prompt</summary>
                 <pre className="opa-review-evidence-pre">{displayEvidence.chat.prompt_preview}</pre>
               </details>
             ) : null}
-            {displayEvidence.chat?.transcript ? (
+            {displayEvidence?.chat?.transcript ? (
               <details className="opa-review-evidence-details" open>
                 <summary>Transcript</summary>
                 <pre className="opa-review-evidence-pre">{displayEvidence.chat.transcript}</pre>
               </details>
             ) : null}
-            {Array.isArray(displayEvidence.chat?.parts) && displayEvidence.chat.parts.length ? (
+            {Array.isArray(displayEvidence?.chat?.parts) && displayEvidence.chat.parts.length ? (
               <ul className="opa-review-prefs-list">
                 {displayEvidence.chat.parts.map((p, i) => (
                   <li key={p.unit_id || i}>
@@ -494,7 +627,7 @@ export default function OPAReviewJob() {
           </Panel>
           <Panel title="Results" icon={<FiShield />} empty={!flags.results} emptyText="No structured results">
             <pre className="opa-review-evidence-pre">
-              {JSON.stringify(displayEvidence.results || {}, null, 2)}
+              {JSON.stringify(displayEvidence?.results || {}, null, 2)}
             </pre>
           </Panel>
           <Panel
@@ -504,7 +637,7 @@ export default function OPAReviewJob() {
             emptyText="No GitHub posts recorded"
           >
             <ul className="opa-review-posts">
-              {(displayEvidence.posts || []).map((p, i) => (
+              {(displayEvidence?.posts || []).map((p, i) => (
                 <li key={`${p.type}-${p.github_id || i}`}>
                   <div className="opa-review-post-head">
                     <Badge>{p.type || 'post'}</Badge>

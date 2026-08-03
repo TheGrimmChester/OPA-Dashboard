@@ -603,6 +603,38 @@
   font-size: 12px;
 }
 
+.opa-jobs-evidence-child-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.opa-jobs-evidence-child-link:hover {
+  color: var(--accent);
+}
+
+.opa-jobs-sec-badges {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.opa-jobs-sec-badges span {
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  opacity: 0.45;
+}
+
+.opa-jobs-sec-badges span.on {
+  opacity: 1;
+  color: var(--ok, #3fb950);
+}
+
 .opa-jobs-evidence-children li:last-child,
 .opa-jobs-evidence-findings li:last-child {
   border-bottom: none;
