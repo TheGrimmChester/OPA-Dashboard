@@ -6,7 +6,7 @@ import { apiUrl } from '../utils/apiBase'
 import { Panel, EntityHeader, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { scmJobHref } from '../utils/entityLinks'
-import { agentKindLabel, sortRunChildren } from '../utils/scmRuns'
+import { agentKindLabel, canApproveCoding, sortRunChildren } from '../utils/scmRuns'
 import './OPAReviewJob.css'
 
 const SEV_RANK = { blocker: 5, critical: 4, high: 3, medium: 2, low: 1, info: 0 }
@@ -289,7 +289,7 @@ export default function OPAReviewJob() {
   }, [job])
   const childStatus = job?.child_status || job?.summary?.child_status || {}
   const childrenEvidence = Array.isArray(job?.children_evidence) ? job.children_evidence : []
-  const runKind = String(job?.kind || job?.summary?.kind || '')
+  const runKind = String(job?.kind || job?.summary?.kind || '').toLowerCase()
   const isRunCentric = !!(runKind || children.length || job?.run_id)
   const frozenPrefs = job?.summary?.prefs || null
   const prefsSources = job?.summary?.prefs_sources || {}
@@ -758,7 +758,7 @@ export default function OPAReviewJob() {
           <button
             type="button"
             className="opa-btn primary"
-            disabled={busy}
+            disabled={busy || !canApproveCoding(job)}
             title="POST /api/scm/jobs/…/approve-coding — enqueue implement (no auto-merge)"
             onClick={approveCoding}
           >
