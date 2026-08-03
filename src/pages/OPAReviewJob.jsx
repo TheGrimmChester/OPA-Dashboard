@@ -6,7 +6,7 @@ import { apiUrl } from '../utils/apiBase'
 import { Panel, EntityHeader, StatusPill, Badge } from '../components/ui'
 import { useToast } from '../components/ui/Toast'
 import { scmJobHref } from '../utils/entityLinks'
-import { agentKindLabel } from '../utils/scmRuns'
+import { agentKindLabel, canApproveCoding } from '../utils/scmRuns'
 import './OPAReviewJob.css'
 
 const SEV_RANK = { blocker: 5, critical: 4, high: 3, medium: 2, low: 1, info: 0 }
@@ -222,6 +222,25 @@ export default function OPAReviewJob() {
     }
   }
 
+  const approveCoding = async () => {
+    if (!jobId || busy) return
+    setBusy(true)
+    try {
+      const { data } = await axios.post(apiUrl(`/api/scm/jobs/${encodeURIComponent(jobId)}/approve-coding`))
+      toast.push(data?.implement_job_id
+        ? `Implement queued: ${data.implement_job_id}`
+        : (data?.honesty || 'Approve for coding queued'), { tone: 'neutral' })
+      await load()
+    } catch (e) {
+      const detail = typeof e.response?.data === 'string'
+        ? e.response.data
+        : (e.response?.data?.error || e.message || 'request failed')
+      toast.push(`Approve coding failed: ${detail}`, { tone: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const repo = job?.repo_full_name || (loading ? '…' : '—')
   const prNum = job?.pr_number
   const rHref = repoHref(job, connectors)
@@ -232,7 +251,7 @@ export default function OPAReviewJob() {
     return Array.isArray(list) ? list : []
   }, [job])
   const childStatus = job?.child_status || job?.summary?.child_status || {}
-  const runKind = String(job?.kind || job?.summary?.kind || '')
+  const runKind = String(job?.kind || job?.summary?.kind || '').toLowerCase()
   const isRunCentric = !!(runKind || children.length || job?.run_id)
   const frozenPrefs = job?.summary?.prefs || null
   const prefsSources = job?.summary?.prefs_sources || {}
@@ -440,6 +459,17 @@ export default function OPAReviewJob() {
       ) : null}
 
       <div className="opa-review-job-actions">
+        {runKind === 'issue_run' ? (
+          <button
+            type="button"
+            className="opa-btn primary"
+            disabled={busy || !canApproveCoding(job)}
+            title="POST /api/scm/jobs/…/approve-coding — enqueue implement (no auto-merge)"
+            onClick={approveCoding}
+          >
+            Approve for coding
+          </button>
+        ) : null}
         <button
           type="button"
           className="opa-btn ghost"
