@@ -47,7 +47,7 @@ const histTone = (s) => {
   const t = String(s || '').toLowerCase()
   if (t.includes('fail') || t.includes('error')) return 'error'
   if (t.includes('fire') || t.includes('trigger') || t.includes('breach') || t.includes('checking')) return 'warn'
-  if (t.includes('ok') || t.includes('success') || t.includes('sent') || t.includes('pass') || t.includes('resolved')) return 'ok'
+  if (t.includes('ok') || t.includes('success') || t.includes('sent') || t.includes('pass') || t.includes('resolved') || t.includes('logged')) return 'ok'
   return 'neutral'
 }
 
@@ -69,11 +69,12 @@ export default function Alerts() {
 
   const [selectedId, setSelectedId] = useState(null)
   const [testingId, setTestingId] = useState(null)
+  const [historyNonce, setHistoryNonce] = useState(0)
 
   const selectedAlert = alerts.find((a) => a.id === selectedId) || null
   const historyQ = useApi(
     selectedId ? `/api/alerts/${encodeURIComponent(selectedId)}/history` : null,
-    {},
+    { _n: historyNonce },
     { noRange: true, skip: !selectedId },
   )
   const history = historyQ.data?.history || []
@@ -168,6 +169,8 @@ export default function Alerts() {
     setSelectedId(row.id) // surface this rule's history so the check is visible
     try {
       await axios.post(`${API}/api/alerts/${encodeURIComponent(row.id)}`)
+      // Hub waits briefly for edge delivery; bump nonce so history re-fetches.
+      setHistoryNonce((n) => n + 1)
     } catch (err) {
       window.alert(`Test failed: ${err.response?.data?.error || err.response?.data || err.message}`)
     } finally {
