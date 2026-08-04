@@ -25,8 +25,8 @@ export default function Commands() {
       header: 'Command',
       mono: true,
       render: (r) => (
-        <div className="opa-row" style={{ gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-          <span className="cell-strong opa-mono">{r.name || '—'}</span>
+        <div className="oui-row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <span className="cell-strong oui-mono">{r.name || '—'}</span>
           {(r.sample_ratio ?? 1) < 0.999 && (
             <StatusPill tone="warn">
               {fmtPct((r.sample_ratio || 0) * 100)} kept · {fmtNum(r.suppressed || 0)} suppressed
@@ -36,7 +36,7 @@ export default function Commands() {
       ),
       sortValue: (r) => r.name || '',
     },
-    { key: 'service', header: 'Service', render: (r) => <span className="opa-mono">{r.service}</span> },
+    { key: 'service', header: 'Service', render: (r) => <span className="oui-mono">{r.service}</span> },
     {
       key: 'requests',
       header: 'Requests',
@@ -65,7 +65,7 @@ export default function Commands() {
       header: 'Errors',
       num: true,
       render: (r) => (
-        <span style={{ color: r.error_rate > 5 ? 'var(--error)' : undefined }}>
+        <span style={{ color: r.error_rate > 5 ? 'var(--critical-text)' : undefined }}>
           {fmtPct(r.error_rate || 0)}
         </span>
       ),
@@ -73,7 +73,7 @@ export default function Commands() {
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Commands</h1>
@@ -93,7 +93,7 @@ export default function Commands() {
           status={totalSuppressed > 0 ? 'warn' : 'neutral'}
           footer={
             totalSuppressed > 0
-              ? <span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>detail dropped, count kept via sample_weight</span>
+              ? <span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>detail dropped, count kept via sample_weight</span>
               : null
           }
         />

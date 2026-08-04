@@ -8,14 +8,14 @@
 // can render CSS variables directly (SVG, DOM) must use these strings.
 
 export const TYPE_VARS = {
-  function: 'var(--color-primary-blue)',
-  sql: 'var(--color-primary-purple)',
-  http: 'var(--color-primary-orange)',
-  redis: 'var(--color-primary-red)',
-  cache: 'var(--color-primary-green)',
+  function: 'var(--chart-1)',
+  sql: 'var(--accent)',
+  http: 'var(--serious-text)',
+  redis: 'var(--critical-text)',
+  cache: 'var(--good-text)',
 }
 
-export const NEUTRAL_VAR = 'var(--bg-tertiary)'
+export const NEUTRAL_VAR = 'var(--surface-2)'
 
 export const TYPE_LABELS = {
   function: 'Function',

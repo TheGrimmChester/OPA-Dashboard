@@ -81,11 +81,11 @@ export default function FacetSidebar({
 
   return (
     <div style={{ minWidth: 200, maxWidth: 260 }} data-testid="facet-sidebar">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }} className="opa-muted">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }} className="oui-text-muted">
         <FiFilter size={12} /> Facets
       </div>
       {loadError ? (
-        <div className="opa-muted" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="oui-text-muted" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
             <FiAlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>Facets temporarily unavailable. Try again.</span>
@@ -98,7 +98,7 @@ export default function FacetSidebar({
         <>
           {fields.map((field) => (
             <div key={field} style={{ marginBottom: 14 }}>
-              <div className="opa-mono" style={{ fontSize: 11, marginBottom: 6 }}>{field}</div>
+              <div className="oui-mono" style={{ fontSize: 11, marginBottom: 6 }}>{field}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {(facets[field] || []).slice(0, 12).map((row) => {
                   const val = row.value || row.Value || ''
@@ -129,7 +129,7 @@ export default function FacetSidebar({
             </div>
           ))}
           {(Object.keys(include).length > 0 || Object.keys(exclude).length > 0) && (
-            <div className="opa-muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>
+            <div className="oui-text-muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>
               {toFilterDSL()}
             </div>
           )}

@@ -195,8 +195,8 @@ describe('CallGraph renders the A/B diff state', () => {
     ]
     const markup = render(stack)
     expect(markup).toContain('opa-cg-diffmark')
-    expect(markup).toContain('fill:var(--error)')
-    expect(markup).toContain('fill:var(--neutral)')
+    expect(markup).toContain('fill:var(--critical-text)')
+    expect(markup).toContain('fill:var(--text-muted)')
     expect(markup).toContain('Degraded')
     expect(markup).toContain('Unchanged')
     // Nothing is new in this trace, so the legend must not claim it.

@@ -219,7 +219,7 @@ function MetricCatalogue({
       icon={<FiHash />}
       actions={(
         <div className="opa-mx-cat-actions">
-          <span className="opa-muted opa-tnum">{fmtNum(filtered.length)}/{fmtNum(metrics.length)}</span>
+          <span className="oui-text-muted oui-num">{fmtNum(filtered.length)}/{fmtNum(metrics.length)}</span>
           {groupNames.length > 1 && !searching && (
             <>
               <button
@@ -268,7 +268,7 @@ function MetricCatalogue({
       </div>
 
       {groupNames.length > 0 && (
-        <div className="opa-mx-group-count opa-muted">
+        <div className="opa-mx-group-count oui-text-muted">
           {fmtNum(groupNames.length)} group{groupNames.length === 1 ? '' : 's'}
           {searching ? ' · matching' : ''}
         </div>
@@ -392,7 +392,7 @@ function DimensionPanel({
       loading={loading}
       empty={!loading && labels.length === 0}
       emptyText="This metric has no label dimensions yet."
-      actions={<span className="opa-muted">filter · group</span>}
+      actions={<span className="oui-text-muted">filter · group</span>}
     >
       <div className="opa-mx-dims">
         {labels.map((l) => {
@@ -447,11 +447,11 @@ function DimensionPanel({
                     </div>
                   )}
                   {values.loading ? (
-                    <div className="opa-muted opa-mx-dim-hint">Loading values…</div>
+                    <div className="oui-text-muted opa-mx-dim-hint">Loading values…</div>
                   ) : values.error ? (
                     <div className="opa-mx-dim-warn">{String(values.error)}</div>
                   ) : filteredValues.length === 0 ? (
-                    <div className="opa-muted opa-mx-dim-hint">
+                    <div className="oui-text-muted opa-mx-dim-hint">
                       {valueList.length === 0 ? 'No values found.' : `Nothing matches “${valueQuery}”.`}
                     </div>
                   ) : (
@@ -473,7 +473,7 @@ function DimensionPanel({
                         )
                       })}
                       {filteredValues.length > 200 && (
-                        <div className="opa-muted opa-mx-dim-hint">
+                        <div className="oui-text-muted opa-mx-dim-hint">
                           Showing 200 of {fmtNum(filteredValues.length)} — refine the search.
                         </div>
                       )}
@@ -609,18 +609,18 @@ export default function MetricsExplorer() {
   const suggestions = allMetrics.slice(0, 6)
 
   return (
-    <div className="opa-stack opa-metrics-page">
+    <div className="oui-stack opa-metrics-page">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Metrics Explorer</h1>
           <div className="opa-page-sub">
             {metric
-              ? <>Charting <span className="opa-mono">{metric}</span>{matchers.length ? ` · ${matchers.length} filter${matchers.length === 1 ? '' : 's'}` : ''}{groupBy ? ` · grouped by ${groupBy}` : ''}</>
+              ? <>Charting <span className="oui-mono">{metric}</span>{matchers.length ? ` · ${matchers.length} filter${matchers.length === 1 ? '' : 's'}` : ''}{groupBy ? ` · grouped by ${groupBy}` : ''}</>
               : <>Browse any collector metric · filter by label · group by dimension{allMetrics.length ? ` · ${fmtNum(allMetrics.length)} available` : ''}</>}
           </div>
         </div>
         {hasQueryState && (
-          <div className="opa-row">
+          <div className="oui-row">
             <button type="button" className="opa-btn ghost" onClick={clearAll} title="Clear metric, filters, and grouping">
               <FiX size={13} /> Clear
             </button>
@@ -660,8 +660,8 @@ export default function MetricsExplorer() {
                         className="opa-mx-suggest-item"
                         onClick={() => selectMetric(m.name)}
                       >
-                        <span className="opa-mono">{m.name}</span>
-                        <span className="opa-muted">{m.type} · {m.series_count} series</span>
+                        <span className="oui-mono">{m.name}</span>
+                        <span className="oui-text-muted">{m.type} · {m.series_count} series</span>
                       </button>
                     ))}
                   </div>
@@ -695,7 +695,7 @@ export default function MetricsExplorer() {
                     label="Points"
                     icon={<FiHash size={12} />}
                     value={fmtNum(stats.points)}
-                    footer={stats.series > 1 ? <span className="opa-muted">{stats.series} series</span> : undefined}
+                    footer={stats.series > 1 ? <span className="oui-text-muted">{stats.series} series</span> : undefined}
                   />
                 </div>
               )}
@@ -721,7 +721,7 @@ export default function MetricsExplorer() {
                       <>
                         <Badge title="Metric type">{selected.type}</Badge>
                         {unit && <Badge title="Unit">{unit}</Badge>}
-                        <span className="opa-muted opa-tnum">{fmtNum(selected.series_count)} series in catalogue</span>
+                        <span className="oui-text-muted oui-num">{fmtNum(selected.series_count)} series in catalogue</span>
                       </>
                     )}
                   </div>
@@ -732,7 +732,7 @@ export default function MetricsExplorer() {
                     </label>
                     <select
                       id="opa-mx-groupby"
-                      className="opa-select opa-mono"
+                      className="opa-select oui-mono"
                       value={groupBy}
                       onChange={(e) => setGroupBy(e.target.value)}
                       disabled={!labelList.length}
@@ -752,7 +752,7 @@ export default function MetricsExplorer() {
                     <span className="opa-mx-filters-label"><FiFilter size={12} /> Filters</span>
                     <div className="opa-mx-chips">
                       {matchers.length === 0 && (
-                        <span className="opa-muted opa-mx-filters-hint">
+                        <span className="oui-text-muted opa-mx-filters-hint">
                           Expand a dimension below and click a value to filter
                         </span>
                       )}
@@ -779,7 +779,7 @@ export default function MetricsExplorer() {
 
                 {groupBy && labelList.find((l) => l.name === groupBy)?.value_count > HIGH_CARDINALITY && (
                   <div className="opa-mx-banner">
-                    Grouping by <span className="opa-mono">{groupBy}</span> has{' '}
+                    Grouping by <span className="oui-mono">{groupBy}</span> has{' '}
                     {fmtNum(labelList.find((l) => l.name === groupBy).value_count)} values.
                     Filter first if the chart gets noisy.
                   </div>

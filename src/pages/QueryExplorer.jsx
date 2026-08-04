@@ -52,7 +52,7 @@ export default function QueryExplorer() {
   const cols = (result.data?.columns || Object.keys(rows[0] || {})).map((c) => ({
     key: c,
     header: c,
-    render: (r) => <span className="opa-mono">{r[c] == null ? '—' : String(r[c])}</span>,
+    render: (r) => <span className="oui-mono">{r[c] == null ? '—' : String(r[c])}</span>,
   }))
   // Guard null/undefined: JSON.stringify(null) === "null" would fake an error state in Panel.
   const errText = result.error == null
@@ -62,7 +62,7 @@ export default function QueryExplorer() {
       : (result.error?.error || JSON.stringify(result.error))
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Query</h1>
@@ -102,7 +102,7 @@ export default function QueryExplorer() {
           empty={!result.loading && !result.data && !result.error}
           emptyText="Run a query to see rows">
           {result.data?.sql && (
-            <pre className="opa-mono opa-muted" style={{ fontSize: 11, whiteSpace: 'pre-wrap', marginBottom: 12 }}>
+            <pre className="oui-mono oui-text-muted" style={{ fontSize: 11, whiteSpace: 'pre-wrap', marginBottom: 12 }}>
               {result.data.sql}
               {result.data.elapsed_ms != null ? `\n/* ${result.data.elapsed_ms} ms · ${result.data.row_count || 0} rows · ${result.data.signal} */` : ''}
             </pre>
@@ -120,7 +120,7 @@ export default function QueryExplorer() {
           <div style={{ marginBottom: 12 }}>
             {['spans', 'metrics', 'logs', 'rum'].map((sig) => (
               <div key={sig} style={{ marginBottom: 8 }}>
-                <div className="opa-muted" style={{ fontSize: 11, marginBottom: 4 }}>{sig}</div>
+                <div className="oui-text-muted" style={{ fontSize: 11, marginBottom: 4 }}>{sig}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {(attrs.data?.[sig] || []).map((a) => (
                     <Badge key={a}>{a}</Badge>
@@ -129,9 +129,9 @@ export default function QueryExplorer() {
               </div>
             ))}
           </div>
-          <div className="opa-muted" style={{ fontSize: 12, marginBottom: 6 }}>Saved queries</div>
+          <div className="oui-text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Saved queries</div>
           {(saved.data?.queries || []).length === 0 ? (
-            <span className="opa-muted">None yet</span>
+            <span className="oui-text-muted">None yet</span>
           ) : (
             <ul style={{ margin: 0, paddingLeft: 16 }}>
               {(saved.data.queries || []).map((s, i) => (

@@ -1,153 +1,153 @@
 .LogCorrelation {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
+  background: var(--canvas);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: var(--spacing-md);
-  margin-top: var(--spacing-lg);
+  padding: var(--space-4);
+  margin-top: var(--space-6);
 }
 
 .logs-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-md);
-  padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid var(--border-light);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .header-title {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--space-2);
 }
 
 .header-icon {
-  font-size: var(--font-size-lg);
-  color: var(--color-primary);
+  font-size: var(--text-lg);
+  color: var(--accent);
 }
 
 .log-filter {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-light);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  background: var(--bg-primary);
+  background: var(--surface-1);
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--text-base);
 }
 
 .logs-empty {
   text-align: center;
-  padding: var(--spacing-xl);
+  padding: var(--space-8);
   color: var(--text-secondary);
 }
 
 .logs-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--space-2);
   max-height: 600px;
   overflow-y: auto;
 }
 
 .log-entry {
-  background: var(--bg-primary);
+  background: var(--surface-1);
   border-left: 4px solid;
   border-radius: var(--radius-sm);
-  padding: var(--spacing-sm);
+  padding: var(--space-2);
 }
 
 .log-entry.log-critical {
-  border-left-color: var(--color-error, #c62828);
+  border-left-color: var(--critical-text, #c62828);
   background: rgba(198, 40, 40, 0.1);
 }
 
 .log-entry.log-error {
-  border-left-color: var(--color-error);
-  background: var(--color-error-bg);
+  border-left-color: var(--critical-text);
+  background: var(--critical-bg);
 }
 
 .log-entry.log-warn {
-  border-left-color: var(--color-warning);
-  background: var(--color-warning-bg);
+  border-left-color: var(--warn-text);
+  background: var(--warn-bg);
 }
 
 .log-entry.log-info {
-  border-left-color: var(--color-info);
-  background: var(--color-info-bg);
+  border-left-color: var(--accent);
+  background: var(--accent-wash);
 }
 
 .log-entry.log-debug {
-  border-left-color: var(--text-tertiary);
+  border-left-color: var(--text-muted);
 }
 
 .log-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: var(--space-1);
 }
 
 .log-level {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--space-1);
 }
 
 .log-icon {
-  font-size: var(--font-size-base);
+  font-size: var(--text-md);
 }
 
 .log-icon.critical {
-  color: var(--color-error, #c62828);
+  color: var(--critical-text, #c62828);
 }
 
 .log-icon.error {
-  color: var(--color-error);
+  color: var(--critical-text);
 }
 
 .log-icon.warn {
-  color: var(--color-warning);
+  color: var(--warn-text);
 }
 
 .log-icon.info {
-  color: var(--color-info);
+  color: var(--accent);
 }
 
 .level-text {
-  font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-xs);
   text-transform: uppercase;
 }
 
 .log-timestamp {
-  font-size: var(--font-size-xs);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 .log-message {
   font-family: 'Courier New', monospace;
-  font-size: var(--font-size-sm);
+  font-size: var(--text-base);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .log-fields {
-  margin-top: var(--spacing-xs);
+  margin-top: var(--space-1);
 }
 
 .log-fields summary {
   cursor: pointer;
-  font-size: var(--font-size-xs);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
-  margin-top: var(--spacing-xs);
+  margin-top: var(--space-1);
 }
 
 .log-fields pre {
-  background: var(--bg-secondary);
-  padding: var(--spacing-xs);
+  background: var(--canvas);
+  padding: var(--space-1);
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
+  font-size: var(--text-xs);
   overflow-x: auto;
-  margin-top: var(--spacing-xs);
+  margin-top: var(--space-1);
 }
 

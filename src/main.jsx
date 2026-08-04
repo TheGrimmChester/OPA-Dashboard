@@ -3,20 +3,18 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import axios from 'axios'
 import App from './App'
-import './index.css'
-import './theme/tokens.css'
-import './theme/ui.css'
-import './theme/light.css'
 
-// Apply the persisted theme before first paint. Dark is the default (no
-// attribute); only 'light' sets data-theme. Doing this synchronously here
-// avoids a light/dark flash on load.
-const savedTheme = localStorage.getItem('opa_theme')
-if (savedTheme === 'light') {
-  document.documentElement.setAttribute('data-theme', 'light')
-} else {
-  document.documentElement.removeAttribute('data-theme')
-}
+// The family design system first, then this product's own layer. Order matters:
+// anything in product.css is an override of a kit rule, so it has to come after.
+import '@open-family/ui/styles.css'
+import './product.css'
+
+import { applyProduct, initTheme } from '@open-family/ui'
+
+// Stamp product and theme on <html> before React renders, so the first paint is
+// already correct instead of flashing the wrong accent or theme.
+applyProduct('opa')
+initTheme('opa_theme')
 
 // Attach bearer + identity to API requests (same-origin and known local hub URLs).
 axios.interceptors.request.use((config) => {

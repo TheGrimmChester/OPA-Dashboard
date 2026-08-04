@@ -95,7 +95,7 @@ export default function ProfileSummary({ totals, metric = 'duration' }) {
                 {active && <span className="opa-prof-active">ranking</span>}
                 {!measured
                   ? <span className="opa-prof-dim">not recorded{active && t.structureMode ? ' · ranked by calls' : ''}</span>
-                  : tile.note && <span className="opa-muted">{tile.note}</span>}
+                  : tile.note && <span className="oui-text-muted">{tile.note}</span>}
                 {tile.id === 'calls' && t.truncated && (
                   <span className="opa-prof-warn">capped · {fmtNum(t.scanned)} scanned</span>
                 )}

@@ -8,7 +8,7 @@ import { useApi } from '../hooks/useApi'
 import {
   Panel, KpiTile, DataTable, StatusPill, HealthDot, TimeSeriesChart, Badge,
 } from '../components/ui'
-import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus } from '../theme/format'
+import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus, statusColor } from '../theme/format'
 import { tracesHref, traceHref } from '../utils/entityLinks'
 import './Synthetics.css'
 
@@ -20,7 +20,7 @@ const EMPTY_FORM = {
   check_type: 'http', steps: '', location_id: '', body: '', cert_lead_days: '',
 }
 
-const uptimeColor = (v) => (v == null ? 'var(--neutral)' : v < 99 ? 'var(--error)' : v < 99.9 ? 'var(--warn)' : 'var(--ok)')
+const uptimeColor = (v) => (v == null ? 'var(--text-muted)' : v < 99 ? 'var(--critical-text)' : v < 99.9 ? 'var(--warn-text)' : 'var(--good-text)')
 
 function checkTone(c) {
   if (c.last_ok == null) return { tone: 'neutral', label: 'awaiting' }
@@ -152,7 +152,7 @@ export default function Synthetics() {
       render: (r) => (
         <div className="syn-name">
           <span className="cell-strong">{r.name || '—'}</span>
-          <span className="opa-mono opa-muted syn-url">
+          <span className="oui-mono oui-text-muted syn-url">
             <Badge>{r.check_type || 'http'}</Badge>{' '}
             {r.method && r.check_type !== 'tls' && r.check_type !== 'domain' ? `${r.method} ` : ''}{r.url}
           </span>
@@ -162,42 +162,42 @@ export default function Synthetics() {
     },
     {
       key: 'location_id', header: 'Location', width: 110,
-      render: (r) => <span className="opa-muted">{r.location_id || 'agent'}</span>,
+      render: (r) => <span className="oui-text-muted">{r.location_id || 'agent'}</span>,
     },
     {
       key: 'interval_seconds', header: 'Every', num: true, width: 90,
-      render: (r) => <span className="opa-muted">{fmtNum(r.interval_seconds)}s</span>,
+      render: (r) => <span className="oui-text-muted">{fmtNum(r.interval_seconds)}s</span>,
       sortValue: (r) => Number(r.interval_seconds),
     },
     {
       key: 'uptime_24h', header: 'Uptime 24h', num: true, width: 120,
       render: (r) => (r.uptime_24h == null
-        ? <span className="opa-muted">—</span>
+        ? <span className="oui-text-muted">—</span>
         : <span style={{ color: uptimeColor(Number(r.uptime_24h)) }}>{fmtPct(Number(r.uptime_24h), 1)}</span>),
       sortValue: (r) => (r.uptime_24h == null ? -1 : Number(r.uptime_24h)),
     },
     {
       key: 'avg_latency_ms_24h', header: 'Avg latency', num: true, width: 120,
       render: (r) => (r.avg_latency_ms_24h == null
-        ? <span className="opa-muted">—</span>
-        : <span style={{ color: `var(--${latencyStatus(Number(r.avg_latency_ms_24h))})` }}>{fmtMs(Number(r.avg_latency_ms_24h))}</span>),
+        ? <span className="oui-text-muted">—</span>
+        : <span style={{ color: statusColor(latencyStatus(Number(r.avg_latency_ms_24h))) }}>{fmtMs(Number(r.avg_latency_ms_24h))}</span>),
       sortValue: (r) => Number(r.avg_latency_ms_24h || 0),
     },
     {
       key: 'last_error', header: 'Last error',
       render: (r) => (r.last_error
         ? <span className="syn-err" title={r.last_error}>{r.last_error}</span>
-        : <span className="opa-muted">—</span>),
+        : <span className="oui-text-muted">—</span>),
     },
     {
       key: 'last_run', header: 'Last run', num: true, width: 110,
-      render: (r) => <span className="opa-muted">{r.last_run ? fmtAgo(r.last_run) : 'never'}</span>,
+      render: (r) => <span className="oui-text-muted">{r.last_run ? fmtAgo(r.last_run) : 'never'}</span>,
       sortValue: (r) => Date.parse(r.last_run) || 0,
     },
     {
       key: 'actions', header: '', width: 76, align: 'center',
       render: (r) => (
-        <div className="opa-row" style={{ gap: 4, justifyContent: 'center' }}>
+        <div className="oui-row" style={{ gap: 4, justifyContent: 'center' }}>
           <button className="opa-btn ghost" title="Edit"
             onClick={(e) => { e.stopPropagation(); edit(r) }}><FiEdit2 size={12} /></button>
           <button className="opa-btn ghost" title="Delete"
@@ -211,7 +211,7 @@ export default function Synthetics() {
   const needsCert = form.check_type === 'tls' || form.check_type === 'domain'
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Synthetic monitoring</h1>
@@ -236,7 +236,7 @@ export default function Synthetics() {
         title="Checks" icon={<FiRadio />} flush
         loading={checksQ.loading} error={checksQ.error}
       >
-        <div style={{ padding: 'var(--sp-3) var(--sp-3) 0' }}>
+        <div style={{ padding: 'var(--space-3) var(--space-3) 0' }}>
           <form className="opa-inline-form syn-form-wrap" onSubmit={submit}>
             <select className="opa-select" value={form.check_type} onChange={set('check_type')} title="Check type" style={{ flex: '0 0 140px' }}>
               <option value="http">HTTP</option>
@@ -335,14 +335,14 @@ function CheckDetail({ check, onClose }) {
   const domSnap = artefacts?.dom || artefacts?.dom_snapshot || ''
 
   const failCols = [
-    { key: 'ts', header: 'When', width: 130, render: (r) => <span className="opa-muted">{fmtAgo(r.ts)}</span>, sortValue: (r) => Date.parse(r.ts) || 0 },
+    { key: 'ts', header: 'When', width: 130, render: (r) => <span className="oui-text-muted">{fmtAgo(r.ts)}</span>, sortValue: (r) => Date.parse(r.ts) || 0 },
     { key: 'status_code', header: 'Status', width: 80, align: 'center', render: (r) => <StatusPill tone={r.status_code >= 200 && r.status_code < 400 ? 'warn' : 'error'}>{r.status_code || '—'}</StatusPill> },
     { key: 'latency_ms', header: 'Latency', num: true, width: 100, render: (r) => fmtMs(Number(r.latency_ms)) },
     {
       key: 'trace_id', header: 'Trace', width: 120,
       render: (r) => (r.trace_id
-        ? <Link className="opa-mono" to={traceHref(r.trace_id)}>{String(r.trace_id).slice(0, 12)}…</Link>
-        : <span className="opa-muted">—</span>),
+        ? <Link className="oui-mono" to={traceHref(r.trace_id)}>{String(r.trace_id).slice(0, 12)}…</Link>
+        : <span className="oui-text-muted">—</span>),
     },
     { key: 'cert_days_left', header: 'Days left', width: 90, num: true, render: (r) => (r.cert_days_left ? fmtNum(r.cert_days_left) : '—') },
     { key: 'error', header: 'Error', render: (r) => <span className="syn-err" title={r.error}>{r.error || '—'}</span> },
@@ -366,7 +366,7 @@ function CheckDetail({ check, onClose }) {
         empty={!q.loading && series.length === 0}
         emptyText="No probe results yet"
         actions={(
-          <div className="opa-row" style={{ gap: 8 }}>
+          <div className="oui-row" style={{ gap: 8 }}>
             {check.id && (
               <Link className="opa-btn ghost" to={tracesHref({ check_id: check.id })}>
                 Correlated traces
@@ -377,11 +377,11 @@ function CheckDetail({ check, onClose }) {
         )}
       >
         {latest?.trace_id && (
-          <div style={{ padding: '0 var(--sp-3) var(--sp-2)' }}>
+          <div style={{ padding: '0 var(--space-3) var(--space-2)' }}>
             Latest trace:{' '}
-            <Link className="opa-mono" to={traceHref(latest.trace_id)}>{latest.trace_id}</Link>
+            <Link className="oui-mono" to={traceHref(latest.trace_id)}>{latest.trace_id}</Link>
             {latest.cert_days_left != null && Number(latest.cert_days_left) !== 0 && (
-              <span className="opa-muted"> · cert/domain days left: {latest.cert_days_left}</span>
+              <span className="oui-text-muted"> · cert/domain days left: {latest.cert_days_left}</span>
             )}
           </div>
         )}
@@ -390,7 +390,7 @@ function CheckDetail({ check, onClose }) {
           valueFmt={fmtMs} yFmt={fmtMs}
           series={[
             { key: 'latency', name: 'Latency', color: 'var(--accent)', type: 'line' },
-            { key: 'failure', name: 'Failure', color: 'var(--error)', type: 'bar' },
+            { key: 'failure', name: 'Failure', color: 'var(--critical-text)', type: 'bar' },
           ]}
         />
       </Panel>
@@ -408,12 +408,12 @@ function CheckDetail({ check, onClose }) {
               <img
                 alt="Synthetic failure screenshot"
                 src={screenshotB64.startsWith('data:') ? screenshotB64 : `data:image/png;base64,${screenshotB64}`}
-                style={{ maxWidth: '100%', maxHeight: 360, border: '1px solid var(--border)' }}
+                style={{ maxWidth: '100%', maxHeight: 360, border: '1px solid var(--border-default)' }}
               />
             </div>
           )}
           {domSnap && (
-            <pre className="opa-mono" style={{ fontSize: 11, maxHeight: 200, overflow: 'auto', padding: 12, margin: 0 }}>
+            <pre className="oui-mono" style={{ fontSize: 11, maxHeight: 200, overflow: 'auto', padding: 12, margin: 0 }}>
               {String(domSnap).slice(0, 4000)}
             </pre>
           )}

@@ -41,7 +41,7 @@ export default function ProfileToolbar({
   const metricLabel = METRIC_LABELS[metric] || METRIC_LABELS.duration
 
   return (
-    <div className="opa-row opa-prof-toolbar">
+    <div className="oui-row opa-prof-toolbar">
       <label className="opa-prof-field">
         Metric
         <select
@@ -83,7 +83,7 @@ export default function ProfileToolbar({
 
       {/* Compact for density; the exact counts live in the tooltip. */}
       <div
-        className="opa-prof-sum opa-muted opa-tnum"
+        className="opa-prof-sum oui-text-muted oui-num"
         title={`${t.calls} calls / ${t.symbols} functions / max depth ${t.maxDepth}`}
       >
         {fmtNum(t.calls)} calls / {fmtNum(t.symbols)} functions / depth {t.maxDepth}

@@ -139,15 +139,15 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
   const legendTypes = timeline.data?.marker_types || Object.keys(byType)
 
   return (
-    <div className="replay-player" style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+    <div className="replay-player" style={{ padding: '12px 16px', borderTop: '1px solid var(--border-default)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-        <strong className="opa-mono">SessionReplayPlayer</strong>
+        <strong className="oui-mono">SessionReplayPlayer</strong>
         <Badge>{events.length} events</Badge>
         <Badge>{chunkCount} chunks</Badge>
         {masked && (
           <StatusPill tone="warn"><FiEyeOff size={10} /> privacy: masked DOM event log</StatusPill>
         )}
-        <span className="opa-muted" style={{ fontSize: 11 }}>
+        <span className="oui-text-muted" style={{ fontSize: 11 }}>
           {timeline.data?.honesty || 'masked DOM event log — not rrweb'}
         </span>
       </div>
@@ -167,17 +167,17 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
                 title={`${byType[t]} ${t} markers`}
               >
                 <StatusPill tone={MARKER_TONE[t] || 'neutral'}>{t}</StatusPill>
-                <span className="opa-mono" style={{ marginLeft: 4 }}>{byType[t]}</span>
+                <span className="oui-mono" style={{ marginLeft: 4 }}>{byType[t]}</span>
               </button>
             ) : null
           ))}
         </div>
       )}
 
-      {timeline.loading && <div className="opa-muted">Loading replay timeline…</div>}
-      {timeline.error && <div style={{ color: 'var(--error)' }}>{String(timeline.error)}</div>}
+      {timeline.loading && <div className="oui-text-muted">Loading replay timeline…</div>}
+      {timeline.error && <div style={{ color: 'var(--critical-text)' }}>{String(timeline.error)}</div>}
       {!timeline.loading && events.length === 0 && (
-        <div className="opa-muted">No replay chunks for this session. Enable <code>data-replay=&quot;true&quot;</code> on opa-rum-js.</div>
+        <div className="oui-text-muted">No replay chunks for this session. Enable <code>data-replay=&quot;true&quot;</code> on opa-rum-js.</div>
       )}
 
       {filtered.length > 0 && (
@@ -195,15 +195,15 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
               style={{ flex: 1 }}
               aria-label="Replay scrubber"
             />
-            <span className="opa-mono opa-muted" style={{ fontSize: 11, minWidth: 72 }}>
+            <span className="oui-mono oui-text-muted" style={{ fontSize: 11, minWidth: 72 }}>
               +{scrubMs}ms / {span}ms
             </span>
           </div>
 
           <div className="opa-grid cols-2" style={{ gap: 12 }}>
             <div>
-              <div className="opa-muted" style={{ fontSize: 11, marginBottom: 4 }}>Current event</div>
-              <pre className="opa-mono" style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto' }}>
+              <div className="oui-text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Current event</div>
+              <pre className="oui-mono" style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto' }}>
                 {JSON.stringify(current, null, 2)}
               </pre>
               {nearestAjax?.trace_id && (
@@ -218,8 +218,8 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
               )}
             </div>
             <div>
-              <div className="opa-muted" style={{ fontSize: 11, marginBottom: 4 }}>Text reconstruction (masked)</div>
-              <pre className="opa-mono" style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto', background: 'var(--surface-2)', padding: 8 }}>
+              <div className="oui-text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Text reconstruction (masked)</div>
+              <pre className="oui-mono" style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto', background: 'var(--surface-2)', padding: 8 }}>
                 {reconstruction || '—'}
               </pre>
             </div>
@@ -237,14 +237,14 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
                   display: 'flex', gap: 8, padding: '2px 0', cursor: 'pointer',
                   background: i === idx ? 'var(--surface-2)' : undefined, fontSize: 11,
                 }}
-                className="opa-mono"
+                className="oui-mono"
               >
-                <span className="opa-muted" style={{ width: 64 }}>+{(e.t || 0) - t0}ms</span>
+                <span className="oui-text-muted" style={{ width: 64 }}>+{(e.t || 0) - t0}ms</span>
                 <StatusPill tone={MARKER_TONE[e.type] || 'neutral'}>{e.type}</StatusPill>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {markerLabel(e)}
                 </span>
-                <span className="opa-muted">{e.t ? fmtAgo(new Date(e.t).toISOString()) : ''}</span>
+                <span className="oui-text-muted">{e.t ? fmtAgo(new Date(e.t).toISOString()) : ''}</span>
               </div>
             ))}
           </div>

@@ -75,12 +75,12 @@ function CatalogLive() {
       key: 'name', header: 'Entity',
       render: (r) => (
         <div>
-          <div className="opa-row" style={{ gap: 6 }}>
+          <div className="oui-row" style={{ gap: 6 }}>
             <HealthDot tone={r.health && Number(r.health.error_rate_pct) >= 5 ? 'error' : r.health ? 'ok' : 'neutral'} />
-            <span className="cell-strong opa-mono">{r.display_name || r.name}</span>
+            <span className="cell-strong oui-mono">{r.display_name || r.name}</span>
             <Badge>{r.kind}</Badge>
           </div>
-          {r.ownership?.owner && <div className="opa-muted" style={{ fontSize: 11 }}>owner: {r.ownership.owner}</div>}
+          {r.ownership?.owner && <div className="oui-text-muted" style={{ fontSize: 11 }}>owner: {r.ownership.owner}</div>}
         </div>
       ),
       sortValue: (r) => r.name,
@@ -90,10 +90,10 @@ function CatalogLive() {
       const tone = t === 'critical' ? 'error' : t === 'high' ? 'warn' : 'neutral'
       return <StatusPill tone={tone}>{t}</StatusPill>
     } },
-    { key: 'lifecycle', header: 'Lifecycle', width: 100, render: (r) => <span className="opa-muted">{r.lifecycle || '—'}</span> },
+    { key: 'lifecycle', header: 'Lifecycle', width: 100, render: (r) => <span className="oui-text-muted">{r.lifecycle || '—'}</span> },
     {
       key: 'health', header: 'Error % 1h', num: true, width: 110,
-      render: (r) => (r.health ? fmtPct(Number(r.health.error_rate_pct || 0)) : <span className="opa-muted">—</span>),
+      render: (r) => (r.health ? fmtPct(Number(r.health.error_rate_pct || 0)) : <span className="oui-text-muted">—</span>),
       sortValue: (r) => Number(r.health?.error_rate_pct || -1),
     },
     {
@@ -105,12 +105,12 @@ function CatalogLive() {
       key: 'runbook', header: 'Runbook', width: 90,
       render: (r) => (r.runbook_url
         ? <a href={r.runbook_url} target="_blank" rel="noreferrer">link</a>
-        : <span className="opa-muted">—</span>),
+        : <span className="oui-text-muted">—</span>),
     },
   ]
 
   const scoreCols = [
-    { key: 'name', header: 'Service', render: (r) => <span className="opa-mono cell-strong">{r.name}</span> },
+    { key: 'name', header: 'Service', render: (r) => <span className="oui-mono cell-strong">{r.name}</span> },
     {
       key: 'score_pct', header: 'Score', num: true, width: 100,
       render: (r) => {
@@ -122,10 +122,10 @@ function CatalogLive() {
     {
       key: 'checks', header: 'Checks',
       render: (r) => (
-        <div className="opa-row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="oui-row" style={{ gap: 6, flexWrap: 'wrap' }}>
           {(r.checks || []).map((c) => (
-            <span key={c.id} title={c.detail} className="opa-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-              {c.pass ? <FiCheck size={11} color="var(--ok)" /> : <FiX size={11} color="var(--error)" />}
+            <span key={c.id} title={c.detail} className="oui-text-muted" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              {c.pass ? <FiCheck size={11} color="var(--good-text)" /> : <FiX size={11} color="var(--critical-text)" />}
               {c.label}
             </span>
           ))}
@@ -136,19 +136,19 @@ function CatalogLive() {
 
   const teamCols = [
     { key: 'name', header: 'Team', render: (r) => <span className="cell-strong">{r.name}</span> },
-    { key: 'email', header: 'Email', render: (r) => <span className="opa-mono">{r.email || '—'}</span> },
+    { key: 'email', header: 'Email', render: (r) => <span className="oui-mono">{r.email || '—'}</span> },
     { key: 'slack_channel', header: 'Slack', render: (r) => r.slack_channel || '—' },
     { key: 'pagerduty_service', header: 'PagerDuty', render: (r) => r.pagerduty_service || '—' },
   ]
 
   const groupCols = [
     { key: 'name', header: 'Group', render: (r) => <span className="cell-strong">{r.name}</span> },
-    { key: 'parent_id', header: 'Parent', render: (r) => <span className="opa-mono opa-muted">{r.parent_id || '—'}</span> },
+    { key: 'parent_id', header: 'Parent', render: (r) => <span className="oui-mono oui-text-muted">{r.parent_id || '—'}</span> },
     { key: 'entity_count', header: 'Entities', num: true, render: (r) => fmtNum(r.entity_count || 0) },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Service catalog</h1>
@@ -158,7 +158,7 @@ function CatalogLive() {
           <FiRefreshCw size={13} /> {busy ? 'Discovering…' : 'Discover from telemetry'}
         </button>
       </div>
-      {msg && <div className="opa-muted" style={{ fontSize: 12 }}>{String(msg)}</div>}
+      {msg && <div className="oui-text-muted" style={{ fontSize: 12 }}>{String(msg)}</div>}
 
       <div className="opa-grid cols-4">
         <KpiTile label="Entities" icon={<FiBookOpen size={12} />} value={fmtNum(kpis.total)} status="neutral" />
@@ -226,8 +226,8 @@ function CatalogLive() {
           loading={detail.loading} error={detail.error}
           actions={<button className="opa-btn ghost" onClick={() => setSelected(null)}>Close</button>}
         >
-          <div className="opa-stack" style={{ padding: 'var(--sp-3)' }}>
-            <div className="opa-muted">
+          <div className="oui-stack" style={{ padding: 'var(--space-3)' }}>
+            <div className="oui-text-muted">
               {detail.data.kind} · {detail.data.tier} · {detail.data.lifecycle} · updated {fmtAgo(detail.data.updated_at)}
               {detail.data.kind === 'service' && (
                 <> · <Link to={`/services/${encodeURIComponent(detail.data.name)}`}>service overview</Link></>
@@ -236,7 +236,7 @@ function CatalogLive() {
             {detail.data.scorecard && (
               <div>
                 <strong>Scorecard {fmtPct(Number(detail.data.scorecard.score_pct || 0), 0)}</strong>
-                <div className="opa-row" style={{ gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+                <div className="oui-row" style={{ gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
                   {(detail.data.scorecard.checks || []).map((c) => (
                     <StatusPill key={c.id} tone={c.pass ? 'ok' : 'error'}>{c.label}</StatusPill>
                   ))}
@@ -244,7 +244,7 @@ function CatalogLive() {
               </div>
             )}
             {detail.data.ownership && (
-              <div className="opa-muted" style={{ fontSize: 13 }}>
+              <div className="oui-text-muted" style={{ fontSize: 13 }}>
                 Owner: {detail.data.ownership.owner || '—'} · Team: {detail.data.ownership.team_id || '—'} ·
                 On-call: {detail.data.ownership.oncall_schedule || '—'}
               </div>
@@ -254,7 +254,7 @@ function CatalogLive() {
                 <strong>Relationships</strong>
                 <ul style={{ margin: '6px 0', paddingLeft: 18 }}>
                   {detail.data.relationships.map((rel) => (
-                    <li key={rel.id} className="opa-mono" style={{ fontSize: 12 }}>
+                    <li key={rel.id} className="oui-mono" style={{ fontSize: 12 }}>
                       {rel.rel_type}: {rel.from_id === selected ? '→' : '←'} {rel.from_id === selected ? rel.to_id : rel.from_id}
                     </li>
                   ))}

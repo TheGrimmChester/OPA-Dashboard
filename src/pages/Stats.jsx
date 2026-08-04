@@ -26,50 +26,50 @@ export default function Stats() {
   // Health chip: derive a tone from the /api/health payload.
   const rawStatus = health.data?.status ?? health.data?.health ?? (health.data ? 'healthy' : null)
   const healthColor = statusColor(rawStatus)
-  const healthTone = healthColor === 'var(--ok)' ? 'ok'
-    : healthColor === 'var(--warn)' ? 'warn'
-      : healthColor === 'var(--error)' ? 'error' : 'neutral'
+  const healthTone = healthColor === 'var(--good-text)' ? 'ok'
+    : healthColor === 'var(--warn-text)' ? 'warn'
+      : healthColor === 'var(--critical-text)' ? 'error' : 'neutral'
   const healthLabel = health.loading ? 'checking…'
     : health.error ? 'unreachable'
       : (rawStatus ? String(rawStatus) : 'unknown')
 
   const tableColumns = [
     { key: 'name', header: 'Table', render: (r) => (
-      <div className="opa-row">
-        <FiDatabase size={13} style={{ color: 'var(--tier-db)' }} />
-        <span className="opa-mono">{r.name}</span>
+      <div className="oui-row">
+        <FiDatabase size={13} style={{ color: 'var(--chart-2)' }} />
+        <span className="oui-mono">{r.name}</span>
       </div>
     ), sortValue: (r) => r.name },
     { key: 'rows', header: 'Rows', num: true, render: (r) => fmtNum(r.rows) },
     { key: 'size_bytes', header: 'Size', num: true, sortValue: (r) => r.size_bytes || 0, render: (r) => (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <InlineBar value={r.size_bytes || 0} max={maxSize} label={r.size_readable || fmtBytes(r.size_bytes)} color="var(--tier-db)" width={120} />
+        <InlineBar value={r.size_bytes || 0} max={maxSize} label={r.size_readable || fmtBytes(r.size_bytes)} color="var(--chart-2)" width={120} />
       </div>
     ) },
   ]
 
   const svcColumns = [
     { key: 'service', header: 'Service', render: (r) => (
-      <div className="opa-row">
+      <div className="oui-row">
         <HealthDot tone={errorRateStatus(r.error_rate)} title={`${fmtPct(r.error_rate)} errors`} />
-        <span className="cell-strong opa-mono">{r.service}</span>
+        <span className="cell-strong oui-mono">{r.service}</span>
       </div>
     ), sortValue: (r) => r.service },
     { key: 'traces', header: 'Traces', num: true, render: (r) => fmtNum(r.traces) },
     { key: 'spans', header: 'Spans', num: true, render: (r) => fmtNum(r.spans) },
     { key: 'error_rate', header: 'Error %', num: true, render: (r) => (
-      <span style={{ color: `var(--${errorRateStatus(r.error_rate)})` }}>{fmtPct(r.error_rate)}</span>
+      <span style={{ color: statusColor(errorRateStatus(r.error_rate)) }}>{fmtPct(r.error_rate)}</span>
     ) },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Statistics</h1>
           <div className="opa-page-sub">Agent, database, and trace health</div>
         </div>
-        <div className="opa-row">
+        <div className="oui-row">
           <StatusPill tone={healthTone}>
             <HealthDot tone={healthTone} pulse={healthTone === 'ok'} />
             <span style={{ marginLeft: 6 }}>API {healthLabel}</span>
@@ -122,9 +122,9 @@ export default function Stats() {
         loading={stats.loading && !stats.data} error={stats.error}
         empty={!stats.loading && tables.length === 0}
         actions={(
-          <span className="opa-row opa-muted" style={{ fontSize: 'var(--fs-12)' }}>
+          <span className="oui-row oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>
             <FiHardDrive size={13} />
-            <span>Total <span className="opa-mono" style={{ color: 'var(--text-primary)' }}>{db.total_size_readable || '0 B'}</span></span>
+            <span>Total <span className="oui-mono" style={{ color: 'var(--text-primary)' }}>{db.total_size_readable || '0 B'}</span></span>
           </span>
         )}>
         <DataTable

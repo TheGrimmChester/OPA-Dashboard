@@ -1,21 +1,21 @@
 .ExportButton {
   display: flex;
-  gap: var(--spacing-xs);
+  gap: var(--space-1);
   align-items: center;
 }
 
 .format-select {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-light);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  background: var(--bg-primary);
+  font-size: var(--text-base);
+  background: var(--surface-1);
   color: var(--text-primary);
 }
 
 .export-btn {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--space-1);
 }
 

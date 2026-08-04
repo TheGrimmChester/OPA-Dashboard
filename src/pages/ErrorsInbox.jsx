@@ -73,10 +73,10 @@ export default function ErrorsInbox() {
       header: 'Error',
       sortValue: (r) => r?.error_message || '',
       render: (r) => (
-        <div className="opa-row" style={{ minWidth: 0, gap: 8 }}>
+        <div className="oui-row" style={{ minWidth: 0, gap: 8 }}>
           <Badge title={r?.error_type}>{r?.error_type || 'Error'}</Badge>
           <span
-            className="cell-strong opa-mono"
+            className="cell-strong oui-mono"
             title={r?.error_message}
             style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
           >
@@ -90,11 +90,11 @@ export default function ErrorsInbox() {
       header: 'Service',
       sortValue: (r) => r?.service || '',
       render: (r) => (r?.service
-        ? <button type="button" className="opa-btn ghost opa-mono" style={{ padding: '0 4px' }}
+        ? <button type="button" className="opa-btn ghost oui-mono" style={{ padding: '0 4px' }}
             onClick={(e) => { e.stopPropagation(); navigate(`/services/${encodeURIComponent(r.service)}`) }}>
             {r.service}
           </button>
-        : <span className="opa-mono opa-muted">—</span>),
+        : <span className="oui-mono oui-text-muted">—</span>),
     },
     {
       key: 'count',
@@ -103,7 +103,7 @@ export default function ErrorsInbox() {
       sortValue: (r) => r?.count || 0,
       render: (r) => (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <InlineBar value={r?.count || 0} max={maxCount} label={fmtNum(r?.count || 0)} color="var(--error)" width={100} />
+          <InlineBar value={r?.count || 0} max={maxCount} label={fmtNum(r?.count || 0)} color="var(--critical-text)" width={100} />
         </div>
       ),
     },
@@ -112,14 +112,14 @@ export default function ErrorsInbox() {
       header: 'First seen',
       num: true,
       sortValue: (r) => parseTs(r?.first_seen) || 0,
-      render: (r) => <span className="opa-muted opa-tnum">{ago(r?.first_seen)}</span>,
+      render: (r) => <span className="oui-text-muted oui-num">{ago(r?.first_seen)}</span>,
     },
     {
       key: 'last_seen',
       header: 'Last seen',
       num: true,
       sortValue: (r) => parseTs(r?.last_seen) || 0,
-      render: (r) => <span className="opa-tnum">{ago(r?.last_seen)}</span>,
+      render: (r) => <span className="oui-num">{ago(r?.last_seen)}</span>,
     },
     {
       key: 'status',
@@ -134,9 +134,9 @@ export default function ErrorsInbox() {
       render: (r) => {
         const gid = r?.group_id ?? r?.error_id
         const busy = busyId === gid
-        const btnStyle = { padding: '2px 8px', fontSize: 'var(--fs-11)' }
+        const btnStyle = { padding: '2px 8px', fontSize: 'var(--text-2xs)' }
         return (
-          <div className="opa-row" style={{ gap: 6, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
+          <div className="oui-row" style={{ gap: 6, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
             {r?.status !== 'resolved' && (
               <button className="opa-btn ghost" style={btnStyle} disabled={busy} title="Mark resolved"
                 onClick={(e) => changeStatus(gid, 'resolved', e)}><FiCheck size={12} /> Resolve</button>
@@ -156,7 +156,7 @@ export default function ErrorsInbox() {
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Errors</h1>
@@ -164,10 +164,10 @@ export default function ErrorsInbox() {
             {totalGroups} error group{totalGroups === 1 ? '' : 's'} across {affectedServices} service{affectedServices === 1 ? '' : 's'}
           </div>
         </div>
-        <div className="opa-row" style={{ gap: 'var(--sp-3)' }}>
+        <div className="oui-row" style={{ gap: 'var(--space-3)' }}>
           <SegmentedControl options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} />
-          <label className="opa-row" style={{ gap: 6, fontSize: 'var(--fs-12)' }}>
-            <FiFilter size={12} className="opa-muted" />
+          <label className="oui-row" style={{ gap: 6, fontSize: 'var(--text-xs)' }}>
+            <FiFilter size={12} className="oui-text-muted" />
             <select
               className="opa-select"
               value={service}
@@ -197,8 +197,8 @@ export default function ErrorsInbox() {
         empty={!q.loading && rows.length === 0}
         emptyText="No errors in this range"
         actions={mutErr
-          ? <span style={{ color: 'var(--error)', fontSize: 'var(--fs-12)' }}>{String(mutErr)}</span>
-          : <span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>click a row to analyze</span>}
+          ? <span style={{ color: 'var(--critical-text)', fontSize: 'var(--text-xs)' }}>{String(mutErr)}</span>
+          : <span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>click a row to analyze</span>}
       >
         <DataTable
           columns={columns}

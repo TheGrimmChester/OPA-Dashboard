@@ -19,7 +19,7 @@ export default function EntityChip({
   if (!to) {
     return (
       <span
-        className={`opa-entity-chip is-plain ${mono ? 'opa-mono' : ''} ${className}`.trim()}
+        className={`opa-entity-chip is-plain ${mono ? 'oui-mono' : ''} ${className}`.trim()}
         title={title}
       >
         {label || '—'}
@@ -30,7 +30,7 @@ export default function EntityChip({
     <span className={`opa-entity-chip-wrap ${className}`.trim()}>
       <Link
         to={to}
-        className={`opa-entity-chip ${mono ? 'opa-mono' : ''}`}
+        className={`opa-entity-chip ${mono ? 'oui-mono' : ''}`}
         title={title}
         onClick={onClick}
       >

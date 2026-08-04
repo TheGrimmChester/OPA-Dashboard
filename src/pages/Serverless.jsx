@@ -17,7 +17,7 @@ export default function Serverless() {
   const rows = inv.data?.invocations || []
 
   const coldCols = [
-    { key: 'function_name', header: 'Function', render: (r) => <span className="opa-mono cell-strong">{r.function_name}</span> },
+    { key: 'function_name', header: 'Function', render: (r) => <span className="oui-mono cell-strong">{r.function_name}</span> },
     { key: 'invocations', header: 'Invocations', num: true, render: (r) => fmtNum(r.invocations) },
     { key: 'cold_starts', header: 'Cold', num: true, render: (r) => fmtNum(r.cold_starts) },
     { key: 'cold_start_rate_pct', header: 'Cold %', num: true, render: (r) => {
@@ -29,7 +29,7 @@ export default function Serverless() {
   ]
 
   const costCols = [
-    { key: 'function_name', header: 'Function', render: (r) => <span className="opa-mono">{r.function_name}</span> },
+    { key: 'function_name', header: 'Function', render: (r) => <span className="oui-mono">{r.function_name}</span> },
     { key: 'configured_mb', header: 'Configured MB', num: true, render: (r) => fmtNum(r.configured_mb) },
     { key: 'used_mb', header: 'Used MB', num: true, render: (r) => fmtNum(r.used_mb) },
     { key: 'memory_util_pct', header: 'Util %', num: true, render: (r) => {
@@ -42,17 +42,17 @@ export default function Serverless() {
   ]
 
   const invCols = [
-    { key: 'function_name', header: 'Function', render: (r) => <span className="opa-mono">{r.function_name}</span> },
+    { key: 'function_name', header: 'Function', render: (r) => <span className="oui-mono">{r.function_name}</span> },
     { key: 'trigger', header: 'Trigger', render: (r) => <Badge>{r.trigger || '—'}</Badge> },
-    { key: 'cold_start', header: 'Cold', render: (r) => (Number(r.cold_start) ? <StatusPill tone="warn">cold</StatusPill> : <span className="opa-muted">warm</span>) },
+    { key: 'cold_start', header: 'Cold', render: (r) => (Number(r.cold_start) ? <StatusPill tone="warn">cold</StatusPill> : <span className="oui-text-muted">warm</span>) },
     { key: 'duration_ms', header: 'Duration', num: true, render: (r) => fmtMs(r.duration_ms) },
-    { key: 'init_duration_ms', header: 'Init', num: true, render: (r) => (Number(r.cold_start) ? fmtMs(r.init_duration_ms) : <span className="opa-muted">—</span>) },
+    { key: 'init_duration_ms', header: 'Init', num: true, render: (r) => (Number(r.cold_start) ? fmtMs(r.init_duration_ms) : <span className="oui-text-muted">—</span>) },
     { key: 'memory_mb', header: 'Mem', num: true, render: (r) => fmtNum(r.memory_mb) },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
+    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.scraped_at)}</span> },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Serverless</h1>
@@ -63,10 +63,10 @@ export default function Serverless() {
       <div className="opa-grid cols-4">
         <KpiTile label="Invocations" icon={<FiCloud size={12} />} value={fmtNum(s.invocations || 0)} status="neutral" />
         <KpiTile label="Cold starts" icon={<FiThermometer size={12} />} value={fmtNum(s.cold_starts || 0)} status={Number(s.cold_start_rate_pct) >= 10 ? 'warn' : 'neutral'}
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>{fmtPct(s.cold_start_rate_pct || 0)} rate</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>{fmtPct(s.cold_start_rate_pct || 0)} rate</span>} />
         <KpiTile label="Avg init" icon={<FiZap size={12} />} value={fmtMs(s.avg_init_ms || 0)} status="neutral" />
         <KpiTile label="Avg billed" icon={<FiDollarSign size={12} />} value={fmtMs(s.avg_billed_ms || 0)} status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>obs {fmtMs(s.avg_duration_ms || 0)}</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>obs {fmtMs(s.avg_duration_ms || 0)}</span>} />
       </div>
 
       <div className="opa-grid cols-2">

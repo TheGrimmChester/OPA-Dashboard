@@ -140,7 +140,7 @@ export default function ApiKeys() {
   ], [])
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">API Keys &amp; Access</h1>

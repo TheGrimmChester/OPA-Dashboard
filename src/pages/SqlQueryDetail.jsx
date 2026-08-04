@@ -7,7 +7,7 @@ import { useApi } from '../hooks/useApi'
 import {
   Panel, KpiTile, TimeSeriesChart, EntityHeader, EmptyState, DataTable,
 } from '../components/ui'
-import { fmtMs, fmtNum, fmtAgo, latencyStatus } from '../theme/format'
+import { fmtMs, fmtNum, fmtAgo, latencyStatus, statusColor } from '../theme/format'
 import './SqlQueryDetail.css'
 
 export default function SqlQueryDetail() {
@@ -35,11 +35,11 @@ export default function SqlQueryDetail() {
     { key: 'service', header: 'Service', render: (r) => r.service || '—', sortValue: (r) => r.service },
     {
       key: 'duration_ms', header: 'Duration', num: true,
-      render: (r) => <span style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span>,
+      render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span>,
     },
     {
       key: 'created_at', header: 'When', num: true,
-      render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span>,
+      render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span>,
       sortValue: (r) => Date.parse(r.created_at) || 0,
     },
   ]
@@ -54,7 +54,7 @@ export default function SqlQueryDetail() {
   const hasTrends = trends.length > 0
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <EntityHeader
         title={fingerprint || '—'}
         mono
@@ -104,8 +104,8 @@ export default function SqlQueryDetail() {
             data={trends}
             xKey="time"
             series={[
-              { key: 'avg_duration', name: 'Avg', color: 'var(--p50)', type: 'line' },
-              { key: 'p95_duration', name: 'p95', color: 'var(--p95)', type: 'line' },
+              { key: 'avg_duration', name: 'Avg', color: 'var(--chart-1)', type: 'line' },
+              { key: 'p95_duration', name: 'p95', color: 'var(--chart-2)', type: 'line' },
             ]}
             valueFmt={fmtMs}
             yFmt={fmtMs}

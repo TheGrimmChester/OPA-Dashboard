@@ -113,7 +113,7 @@ function NeighbourList({ title, icon, dir, entries, graph, ranked, mk, structure
   return (
     <div className="opa-prof-col">
       <div className="opa-prof-col-head">
-        {icon}{title}<span className="opa-muted opa-tnum">{fmtNum(deg)}</span>
+        {icon}{title}<span className="oui-text-muted oui-num">{fmtNum(deg)}</span>
       </div>
       {entries.length === 0 ? (
         <div className="opa-prof-nempty">
@@ -182,7 +182,7 @@ function SymbolDetail({ graph, ranked, mk, structureMode, shareBase, sym, onSele
             </span>
             {graph.symKey[sym]}
           </div>
-          <div className="opa-prof-detail-src opa-mono" title={node && fileName(node) ? fileName(node) : undefined}>
+          <div className="opa-prof-detail-src oui-mono" title={node && fileName(node) ? fileName(node) : undefined}>
             {/* function_type is often absent; "Unknown function" is noise, so the
                 kind only appears when the collector actually reported it. */}
             {[

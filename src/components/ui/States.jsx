@@ -2,7 +2,7 @@ import React from 'react'
 import { FiInbox, FiAlertCircle } from 'react-icons/fi'
 
 export function EmptyState({ icon, title = 'Nothing here yet', hint }) {
-  return <div className="opa-empty">{icon || <FiInbox />}<div style={{ color: 'var(--text-secondary)' }}>{title}</div>{hint && <div style={{ fontSize: 'var(--fs-12)' }}>{hint}</div>}</div>
+  return <div className="opa-empty">{icon || <FiInbox />}<div style={{ color: 'var(--text-secondary)' }}>{title}</div>{hint && <div style={{ fontSize: 'var(--text-xs)' }}>{hint}</div>}</div>
 }
 
 export function ErrorState({ message = 'Something went wrong' }) {

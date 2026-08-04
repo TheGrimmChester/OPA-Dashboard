@@ -28,7 +28,7 @@ export default function Infrastructure() {
       <Panel
         title="Hosts"
         actions={
-          <span className="opa-muted">
+          <span className="oui-text-muted">
             {reporting} reporting{silent.length > 0 ? ` · ${silent.length} silent` : ''}
           </span>
         }

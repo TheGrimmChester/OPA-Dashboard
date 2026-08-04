@@ -4,10 +4,10 @@ import DeltaIndicator from './DeltaIndicator'
 
 // Golden-signal tile: big tabular value + micro-label, optional inline sparkline,
 // delta-vs-previous, and a status accent bar. `status` in ok|warn|error|neutral.
-const STATUS_COLOR = { ok: 'var(--ok)', warn: 'var(--warn)', error: 'var(--error)', neutral: 'var(--neutral)' }
+const STATUS_COLOR = { ok: 'var(--good-text)', warn: 'var(--warn-text)', error: 'var(--critical-text)', neutral: 'var(--text-muted)' }
 
 export default function KpiTile({ label, value, unit, icon, spark, sparkColor, status = 'neutral', current, previous, invert = false, footer }) {
-  const color = STATUS_COLOR[status] || 'var(--neutral)'
+  const color = STATUS_COLOR[status] || 'var(--text-muted)'
   return (
     <div className="opa-kpi">
       <div className="opa-kpi-accent" style={{ background: color }} />

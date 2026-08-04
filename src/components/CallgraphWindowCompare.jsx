@@ -79,7 +79,7 @@ function CallgraphWindowCompareLive({ service, transaction }) {
       render: (r) => (
         <div>
           <div className="cell-strong">{r.class ? `${r.class}::${r.function}` : r.function}</div>
-          <div className="opa-muted cg-diff-meta">{r.call_site || r.path_hash}</div>
+          <div className="oui-text-muted cg-diff-meta">{r.call_site || r.path_hash}</div>
         </div>
       ),
     },
@@ -91,7 +91,7 @@ function CallgraphWindowCompareLive({ service, transaction }) {
       render: (r) => {
         const d = r.delta?.self_ms ?? 0
         return (
-          <span className={`opa-mono ${d > 0 ? 'cg-diff-worse' : d < 0 ? 'cg-diff-better' : ''}`}>
+          <span className={`oui-mono ${d > 0 ? 'cg-diff-worse' : d < 0 ? 'cg-diff-better' : ''}`}>
             {d > 0 ? '+' : ''}{fmtMs(d)}
           </span>
         )
@@ -104,7 +104,7 @@ function CallgraphWindowCompareLive({ service, transaction }) {
       sortable: true,
       render: (r) => {
         const d = r.delta?.samples ?? 0
-        return <span className="opa-mono">{d > 0 ? '+' : ''}{fmtNum(d)}</span>
+        return <span className="oui-mono">{d > 0 ? '+' : ''}{fmtNum(d)}</span>
       },
     },
     {
@@ -136,11 +136,11 @@ function CallgraphWindowCompareLive({ service, transaction }) {
   return (
     <div className="cg-diff">
       <Panel title="Call-graph windows" icon={<FiGitBranch />} actions={
-        <span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>
+        <span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>
           baseline {windows.fromA?.slice(0, 19)} → {windows.toA?.slice(0, 19)} · candidate {windows.fromB?.slice(0, 19)} → {windows.toB?.slice(0, 19)}
         </span>
       }>
-        <div className="opa-row" style={{ gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+        <div className="oui-row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <input className="opa-input" placeholder="service" value={svc} onChange={(e) => setSvc(e.target.value)} style={{ minWidth: 160 }} />
           <input className="opa-input" placeholder="transaction (span name)" value={txn} onChange={(e) => setTxn(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
         </div>

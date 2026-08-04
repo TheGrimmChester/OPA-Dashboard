@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FiActivity, FiAlertOctagon, FiAlertTriangle, FiZap, FiInfo, FiFilter } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, HealthDot, Badge, DeltaIndicator, SegmentedControl } from '../components/ui'
-import { fmtMs, fmtNum, fmtPct, fmtAgo } from '../theme/format'
+import { fmtMs, fmtNum, fmtPct, fmtAgo, statusColor } from '../theme/format'
 
 // API timestamps arrive as "2026-07-25 08:10:29.000" — normalize so Date.parse is reliable.
 const parseTs = (ts) => {
@@ -74,16 +74,16 @@ export default function Anomalies() {
       header: 'Detected',
       num: true,
       sortValue: (r) => parseTs(r?.detected_at) || 0,
-      render: (r) => <span className="opa-muted opa-tnum">{fmtAgo(parseTs(r?.detected_at))}</span>,
+      render: (r) => <span className="oui-text-muted oui-num">{fmtAgo(parseTs(r?.detected_at))}</span>,
     },
     {
       key: 'service',
       header: 'Service',
       sortValue: (r) => r?.service || '',
       render: (r) => (
-        <div className="opa-row" style={{ gap: 8 }}>
+        <div className="oui-row" style={{ gap: 8 }}>
           <HealthDot tone={severityTone(r?.severity)} title={`${r?.severity || 'unknown'} severity`} />
-          <span className="cell-strong opa-mono">{r?.service || '—'}</span>
+          <span className="cell-strong oui-mono">{r?.service || '—'}</span>
         </div>
       ),
     },
@@ -92,9 +92,9 @@ export default function Anomalies() {
       header: 'Anomaly',
       sortValue: (r) => r?.metric || '',
       render: (r) => (
-        <div className="opa-row" style={{ gap: 8, minWidth: 0 }}>
+        <div className="oui-row" style={{ gap: 8, minWidth: 0 }}>
           {r?.type && <Badge title={r.type}>{r.type}</Badge>}
-          <span className="opa-muted opa-mono">{METRIC_LABEL[r?.metric] || r?.metric || '—'}</span>
+          <span className="oui-text-muted oui-mono">{METRIC_LABEL[r?.metric] || r?.metric || '—'}</span>
         </div>
       ),
     },
@@ -110,9 +110,9 @@ export default function Anomalies() {
       num: true,
       sortValue: (r) => (r?.value != null && r?.expected ? Math.abs((r.value - r.expected) / Math.abs(r.expected)) : 0),
       render: (r) => (
-        <div className="opa-row" style={{ justifyContent: 'flex-end', gap: 8 }}>
-          <span className="opa-mono cell-strong">{fmtMetric(r?.metric, r?.value)}</span>
-          <span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>vs {fmtMetric(r?.metric, r?.expected)}</span>
+        <div className="oui-row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+          <span className="oui-mono cell-strong">{fmtMetric(r?.metric, r?.value)}</span>
+          <span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>vs {fmtMetric(r?.metric, r?.expected)}</span>
           <DeltaIndicator current={r?.value} previous={r?.expected} invert={metricInvert(r?.metric)} />
         </div>
       ),
@@ -124,9 +124,9 @@ export default function Anomalies() {
       sortValue: (r) => (r?.score == null || isNaN(r?.score) ? -Infinity : Math.abs(r.score)),
       render: (r) => {
         const s = r?.score
-        if (s == null || isNaN(s)) return <span className="opa-muted">—</span>
+        if (s == null || isNaN(s)) return <span className="oui-text-muted">—</span>
         return (
-          <span className="opa-mono opa-tnum" style={{ color: `var(--${severityTone(r?.severity)})` }} title={`${s.toFixed(2)} standard deviations from baseline`}>
+          <span className="oui-mono oui-num" style={{ color: statusColor(severityTone(r?.severity)) }} title={`${s.toFixed(2)} standard deviations from baseline`}>
             {s >= 0 ? '▲' : '▼'} {Math.abs(s).toFixed(1)}σ
           </span>
         )
@@ -135,7 +135,7 @@ export default function Anomalies() {
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Anomalies</h1>
@@ -143,9 +143,9 @@ export default function Anomalies() {
             {rows.length} anomal{rows.length === 1 ? 'y' : 'ies'} across {services.length} service{services.length === 1 ? '' : 's'}
           </div>
         </div>
-        <div className="opa-row" style={{ gap: 12 }}>
-          <label className="opa-row" style={{ gap: 6, fontSize: 'var(--fs-12)' }}>
-            <FiFilter size={12} className="opa-muted" />
+        <div className="oui-row" style={{ gap: 12 }}>
+          <label className="oui-row" style={{ gap: 6, fontSize: 'var(--text-xs)' }}>
+            <FiFilter size={12} className="oui-text-muted" />
             <select className="opa-select" value={service} onChange={(e) => setService(e.target.value)} aria-label="Service filter">
               <option value="all">All services</option>
               {services.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -175,7 +175,7 @@ export default function Anomalies() {
         error={q.error}
         empty={!q.loading && rows.length === 0}
         emptyText="No anomalies detected in this window — the scheduler scans every 5 min"
-        actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>z-score = deviation from baseline</span>}
+        actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>z-score = deviation from baseline</span>}
       >
         <DataTable
           columns={columns}

@@ -211,8 +211,8 @@ const OVERVIEW_METRICS = [
 const CHANGE_STATUS = { improvement: 'ok', degradation: 'error', 'no-change': 'neutral' }
 
 // Same A/B vocabulary as the Compare page's trace selectors.
-const A_TITLE = <>Trace A <span className="opa-muted">· Baseline</span></>
-const B_TITLE = <>Trace B <span className="opa-muted">· New</span></>
+const A_TITLE = <>Trace A <span className="oui-text-muted">· Baseline</span></>
+const B_TITLE = <>Trace B <span className="oui-text-muted">· New</span></>
 
 const AB_COLUMNS = [
   { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="cell-strong">{r.label}</span> },
@@ -227,7 +227,7 @@ const AB_COLUMNS = [
 
 // Two panels: 2-up when comparing side by side, stacked full-width in diff mode.
 function AbSplit({ stacked, children }) {
-  return <div className={stacked ? 'opa-stack' : 'opa-grid cols-2'}>{children}</div>
+  return <div className={stacked ? 'oui-stack' : 'opa-grid cols-2'}>{children}</div>
 }
 
 function dumpTotal(items) {
@@ -259,13 +259,13 @@ function DumpList({ items }) {
           <div className="opa-cmp-dump-head">
             <span className="cell-strong">{item.span || 'unnamed span'}</span>
             <Badge title={`Span ${item.spanId || 'unknown'}`}>{shortId(item.spanId)}</Badge>
-            <span className="opa-muted opa-cmp-dump-count">{fmtNum(item.dumps.length)} dumps</span>
+            <span className="oui-text-muted opa-cmp-dump-count">{fmtNum(item.dumps.length)} dumps</span>
           </div>
           {item.dumps.map((dump, dumpIdx) => (
             <div key={dumpIdx} className="opa-cmp-dump">
               <div className="opa-cmp-dump-meta">
-                <span className="opa-mono">{dump.file || 'unknown'}</span>
-                <span className="opa-muted">line {dump.line ?? '?'}</span>
+                <span className="oui-mono">{dump.file || 'unknown'}</span>
+                <span className="oui-text-muted">line {dump.line ?? '?'}</span>
               </div>
               <div className="opa-cmp-dump-body">
                 <JsonTreeViewer data={parseDump(dump.data)} />
@@ -470,8 +470,8 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
   ]
 
   return (
-    <div className="opa-stack">
-      <div className="opa-row opa-cmp-bar">
+    <div className="oui-stack">
+      <div className="oui-row opa-cmp-bar">
         <FiSliders aria-hidden="true" />
         <label htmlFor={`${uid}-threshold`} className="opa-cmp-bar-label">Diff threshold</label>
         <input
@@ -485,8 +485,8 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
           className="opa-cmp-slider"
           aria-describedby={`${uid}-hint`}
         />
-        <span className="opa-mono opa-tnum opa-cmp-slider-val">{fmtPct(threshold, 0)}</span>
-        <span id={`${uid}-hint`} className="opa-muted opa-cmp-bar-hint">
+        <span className="oui-mono oui-num opa-cmp-slider-val">{fmtPct(threshold, 0)}</span>
+        <span id={`${uid}-hint`} className="oui-text-muted opa-cmp-bar-hint">
           Minimum per-function change before the diff call graph colours a node
         </span>
       </div>
@@ -496,8 +496,8 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
       </div>
 
       {currentTab === 'overview' && (
-        <div className="opa-stack">
-          <div className="opa-row opa-cmp-verdict">
+        <div className="oui-stack">
+          <div className="oui-row opa-cmp-verdict">
             <StatusPill tone={verdict.tone}>{verdict.label}</StatusPill>
             <span>{verdict.text}</span>
           </div>
@@ -543,7 +543,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
             title={B_TITLE}
             icon={<FiActivity />}
             flush
-            actions={<span className="opa-muted opa-cmp-meta">{fmtNum(callStack2.length)} calls</span>}
+            actions={<span className="oui-text-muted opa-cmp-meta">{fmtNum(callStack2.length)} calls</span>}
             empty={callStack2.length === 0}
             emptyText="No call stack recorded"
           >
@@ -568,7 +568,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
               title={B_TITLE}
               icon={<FiLayers />}
               flush
-              actions={<span className="opa-muted opa-cmp-meta">{fmtNum(callStack2.length)} calls</span>}
+              actions={<span className="oui-text-muted opa-cmp-meta">{fmtNum(callStack2.length)} calls</span>}
               empty={callStack2.length === 0}
               emptyText="No call stack recorded"
             >
@@ -595,11 +595,11 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
               icon={<FiGitBranch />}
               flush
               actions={
-                <div className="opa-row opa-cmp-legend">
+                <div className="oui-row opa-cmp-legend">
                   <span><HealthDot tone="ok" /> Improved</span>
                   <span><HealthDot tone="error" /> Degraded</span>
                   <span><HealthDot tone="neutral" /> Unchanged</span>
-                  <span className="opa-muted">≥ {fmtPct(threshold, 0)}</span>
+                  <span className="oui-text-muted">≥ {fmtPct(threshold, 0)}</span>
                 </div>
               }
               empty={diffCallStack.length === 0}
@@ -668,7 +668,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
             title={A_TITLE}
             icon={<FiCode />}
             flush
-            actions={<span className="opa-muted opa-cmp-meta">{fmtNum(dumpTotal(dumps1))} dumps</span>}
+            actions={<span className="oui-text-muted opa-cmp-meta">{fmtNum(dumpTotal(dumps1))} dumps</span>}
             empty={dumps1.length === 0}
             emptyText="No dumps recorded"
           >
@@ -678,7 +678,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
             title={B_TITLE}
             icon={<FiCode />}
             flush
-            actions={<span className="opa-muted opa-cmp-meta">{fmtNum(dumpTotal(dumps2))} dumps</span>}
+            actions={<span className="oui-text-muted opa-cmp-meta">{fmtNum(dumpTotal(dumps2))} dumps</span>}
             empty={dumps2.length === 0}
             emptyText="No dumps recorded"
           >

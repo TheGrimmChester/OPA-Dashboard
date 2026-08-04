@@ -88,7 +88,7 @@ function tintOf(hue) {
 // Merged runs are deliberately hue-less: they are an aggregate, not an operation.
 // Unclassified frames use --surface-3 rather than opTypes' NEUTRAL_VAR, which is
 // tuned for swatches and is indistinguishable from the sunken plot area here.
-const OP_HUES = ['var(--border-strong)', 'var(--neutral)', ...TYPE_ORDER.map(typeFill)]
+const OP_HUES = ['var(--border-strong)', 'var(--text-muted)', ...TYPE_ORDER.map(typeFill)]
 const PAINT = OP_HUES.map((hue, k) => Object.freeze({
   fill: k === 0 ? 'var(--surface-3)' : tintOf(hue),
   stroke: hue,
@@ -677,7 +677,7 @@ function TipRow({ k, v }) {
   return (
     <div className="fg-tip-row">
       <span className="fg-tip-k">{k}</span>
-      <span className="fg-tip-v opa-mono opa-tnum">{v}</span>
+      <span className="fg-tip-v oui-mono oui-num">{v}</span>
     </div>
   )
 }
@@ -1114,7 +1114,7 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
               {typeLabel(TYPE_ORDER[op])}
             </span>
           ))}
-          <span className="opa-muted opa-tnum fg-count">
+          <span className="oui-text-muted oui-num fg-count">
             {fmtNum(layout.drawn)} frames · {layout.rowCount}
             {deeper ? ` of ${fmtNum(tree.maxDepth + 1)}` : ''} levels
           </span>
@@ -1208,7 +1208,7 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
               <span className="opa-prof-type fg-tip-type" style={{ color: OP_HUES[tipOp + 2] }}>
                 {typeLabel(TYPE_ORDER[tipOp])}
               </span>
-              <span className="opa-mono">{middleEllipsis(tipHead, 40)}</span>
+              <span className="oui-mono">{middleEllipsis(tipHead, 40)}</span>
             </div>
           )}
           {tipRows.map(([k, v]) => <TipRow key={k} k={k} v={v} />)}

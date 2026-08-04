@@ -1,29 +1,29 @@
 .copy-to-clipboard {
   background: transparent;
-  border: 1px solid var(--border-light);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-default);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: var(--font-size-sm);
-  transition: all var(--transition-base);
+  font-size: var(--text-base);
+  transition: all var(--dur-base) var(--ease);
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--space-1);
   color: var(--text-primary);
 }
 
 .copy-to-clipboard:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--border-medium);
+  background-color: var(--surface-3);
+  border-color: var(--border-strong);
 }
 
 .copy-to-clipboard.copied {
-  background-color: var(--color-success-bg);
-  border-color: var(--color-success);
-  color: var(--color-success);
+  background-color: var(--good-bg);
+  border-color: var(--good-text);
+  color: var(--good-text);
 }
 
 .copy-to-clipboard span {
-  margin-left: var(--spacing-xs);
+  margin-left: var(--space-1);
 }
 

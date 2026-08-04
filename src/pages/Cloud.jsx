@@ -80,26 +80,26 @@ function CloudLive() {
   const resCols = [
     { key: 'provider', header: 'Provider', render: (r) => <Badge>{r.provider || '—'}</Badge> },
     { key: 'kind', header: 'Kind', render: (r) => <Badge>{r.kind || '—'}</Badge> },
-    { key: 'name', header: 'Name', render: (r) => <span className="opa-mono cell-strong">{r.name}</span> },
+    { key: 'name', header: 'Name', render: (r) => <span className="oui-mono cell-strong">{r.name}</span> },
     { key: 'region', header: 'Region', render: (r) => r.region || '—' },
     { key: 'arn', header: 'ARN / ID', render: (r) => (
-      <span className="opa-mono opa-muted" title={r.arn} style={{ display: 'block', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.arn || '—'}</span>
+      <span className="oui-mono oui-text-muted" title={r.arn} style={{ display: 'block', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.arn || '—'}</span>
     ) },
-    { key: 'scraped_at', header: 'Seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
+    { key: 'scraped_at', header: 'Seen', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.scraped_at)}</span> },
   ]
 
   const costCols = [
-    { key: 'service', header: 'Service', render: (r) => <span className="opa-mono">{r.service}</span> },
+    { key: 'service', header: 'Service', render: (r) => <span className="oui-mono">{r.service}</span> },
     { key: 'amount', header: 'Amount', num: true, render: (r) => `${fmtNum(r.amount)} ${r.currency || 'USD'}` },
   ]
 
   const tagCostCols = [
-    { key: 'tag_key', header: 'Tag', render: (r) => <span className="opa-mono">{r.tag_key}={r.tag_value}</span> },
+    { key: 'tag_key', header: 'Tag', render: (r) => <span className="oui-mono">{r.tag_key}={r.tag_value}</span> },
     { key: 'amount', header: 'Amount', num: true, render: (r) => fmtNum(r.amount) },
   ]
 
   const utilCols = [
-    { key: 'service', header: 'Service', render: (r) => <span className="opa-mono">{r.service}</span> },
+    { key: 'service', header: 'Service', render: (r) => <span className="oui-mono">{r.service}</span> },
     { key: 'util_pct', header: 'Util %', num: true, render: (r) => {
       const v = Number(r.util_pct) || 0
       return <StatusPill tone={v < 20 ? 'warn' : 'ok'}>{v.toFixed(1)}%</StatusPill>
@@ -108,29 +108,29 @@ function CloudLive() {
   ]
 
   const violCols = [
-    { key: 'resource_name', header: 'Resource', render: (r) => <span className="opa-mono cell-strong">{r.resource_name}</span> },
+    { key: 'resource_name', header: 'Resource', render: (r) => <span className="oui-mono cell-strong">{r.resource_name}</span> },
     { key: 'kind', header: 'Kind', render: (r) => <Badge>{r.kind || '—'}</Badge> },
     { key: 'missing_tags', header: 'Missing', render: (r) => <StatusPill tone="error">{r.missing_tags || '—'}</StatusPill> },
-    { key: 'detected_at', header: 'Detected', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.detected_at)}</span> },
+    { key: 'detected_at', header: 'Detected', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.detected_at)}</span> },
   ]
 
   const scrapeCols = [
-    { key: 'provider_id', header: 'Provider', render: (r) => <span className="opa-mono">{r.provider_id}</span> },
+    { key: 'provider_id', header: 'Provider', render: (r) => <span className="oui-mono">{r.provider_id}</span> },
     { key: 'namespace', header: 'Namespace', render: (r) => r.namespace || '—' },
-    { key: 'metric_name', header: 'Metric', render: (r) => <span className="opa-mono">{r.metric_name}</span> },
+    { key: 'metric_name', header: 'Metric', render: (r) => <span className="oui-mono">{r.metric_name}</span> },
     { key: 'ok', header: 'OK', render: (r) => Number(r.ok) ? <StatusPill tone="ok">ok</StatusPill> : <StatusPill tone="error">fail</StatusPill> },
-    { key: 'error', header: 'Error', render: (r) => <span className="opa-muted">{r.error || '—'}</span> },
-    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
+    { key: 'error', header: 'Error', render: (r) => <span className="oui-text-muted">{r.error || '—'}</span> },
+    { key: 'scraped_at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.scraped_at)}</span> },
   ]
 
   const integCols = [
-    { key: 'id', header: 'ID', render: (r) => <span className="opa-mono">{r.id}</span> },
+    { key: 'id', header: 'ID', render: (r) => <span className="oui-mono">{r.id}</span> },
     { key: 'name', header: 'Name', render: (r) => r.name },
-    { key: 'description', header: 'Description', render: (r) => <span className="opa-muted">{r.description || '—'}</span> },
+    { key: 'description', header: 'Description', render: (r) => <span className="oui-text-muted">{r.description || '—'}</span> },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">{t('cloud.title')}</h1>
@@ -143,19 +143,19 @@ function CloudLive() {
 
       {msg && (
         <Panel title="Scrape">
-          <pre className="opa-mono" style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(msg, null, 2)}</pre>
+          <pre className="oui-mono" style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(msg, null, 2)}</pre>
         </Panel>
       )}
 
       <div className="opa-grid cols-4">
         <KpiTile label="Providers" icon={<FiCloud size={12} />} value={fmtNum(s.providers || 0)}
           status={s.configured ? 'ok' : 'warn'}
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>{s.configured ? 'configured' : 'not configured'}</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>{s.configured ? 'configured' : 'not configured'}</span>} />
         <KpiTile label={t('cloud.resources')} icon={<FiServer size={12} />} value={fmtNum(s.resources || 0)} status="neutral" />
         <KpiTile label={t('cloud.cost') + ' 30d'} icon={<FiDollarSign size={12} />} value={fmtNum(s.cost_30d || 0)} status="neutral" />
         <KpiTile label="Tag gaps" icon={<FiTag size={12} />} value={fmtNum(s.tag_violations_7d || 0)}
           status={Number(s.tag_violations_7d) > 0 ? 'warn' : 'ok'}
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>scrapes ok {fmtNum(s.scrapes_ok_24h || 0)} / fail {fmtNum(s.scrapes_fail_24h || 0)}</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>scrapes ok {fmtNum(s.scrapes_ok_24h || 0)} / fail {fmtNum(s.scrapes_fail_24h || 0)}</span>} />
       </div>
 
       <Tabs tabs={TABS} value={tab} onChange={setTab} t={t} />

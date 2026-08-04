@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { FiMaximize, FiMinimize } from 'react-icons/fi'
+import { Button } from '@open-family/ui'
 
 // Whole-page full screen, for putting a dashboard on a wall display or getting
 // the chrome out of the way while reading a dense page.
@@ -51,15 +52,13 @@ export default function FullscreenToggle() {
   if (!supported) return null
 
   return (
-    <button
-      type="button"
-      className="opa-btn ghost"
+    <Button
+      variant="ghost"
       onClick={toggle}
       title={active ? 'Exit full screen (Esc)' : 'Full screen'}
       aria-label={active ? 'Exit full screen' : 'Full screen'}
       aria-pressed={active}
-    >
-      {active ? <FiMinimize size={14} /> : <FiMaximize size={14} />}
-    </button>
+      icon={active ? <FiMinimize /> : <FiMaximize />}
+    />
   )
 }

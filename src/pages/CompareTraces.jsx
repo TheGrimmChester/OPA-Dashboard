@@ -28,16 +28,16 @@ function isError(trace) {
 
 // Metric rows for the side-by-side diff table. `invert` = more-is-worse.
 const METRIC_ROWS = [
-  { key: 'duration', label: 'Duration', fmt: fmtMs, invert: true, color: 'var(--tier-app)' },
-  { key: 'cpu', label: 'CPU time', fmt: fmtMs, invert: true, color: 'var(--tier-app)' },
+  { key: 'duration', label: 'Duration', fmt: fmtMs, invert: true, color: 'var(--chart-1)' },
+  { key: 'cpu', label: 'CPU time', fmt: fmtMs, invert: true, color: 'var(--chart-1)' },
   { key: 'memory', label: 'Memory', fmt: fmtBytes, invert: true },
   { key: 'spans', label: 'Spans', fmt: fmtNum, invert: false },
-  { key: 'sqlQueries', label: 'SQL queries', fmt: fmtNum, invert: true, color: 'var(--tier-db)' },
-  { key: 'httpRequests', label: 'HTTP requests', fmt: fmtNum, invert: true, color: 'var(--tier-http)' },
-  { key: 'redisOperations', label: 'Redis ops', fmt: fmtNum, invert: true, color: 'var(--tier-redis)' },
-  { key: 'cacheOperations', label: 'Cache ops', fmt: fmtNum, invert: true, color: 'var(--tier-cache)' },
-  { key: 'networkSent', label: 'Bytes sent', fmt: fmtBytes, invert: true, color: 'var(--tier-app)' },
-  { key: 'networkReceived', label: 'Bytes received', fmt: fmtBytes, invert: true, color: 'var(--tier-db)' },
+  { key: 'sqlQueries', label: 'SQL queries', fmt: fmtNum, invert: true, color: 'var(--chart-2)' },
+  { key: 'httpRequests', label: 'HTTP requests', fmt: fmtNum, invert: true, color: 'var(--chart-4)' },
+  { key: 'redisOperations', label: 'Redis ops', fmt: fmtNum, invert: true, color: 'var(--chart-3)' },
+  { key: 'cacheOperations', label: 'Cache ops', fmt: fmtNum, invert: true, color: 'var(--chart-5)' },
+  { key: 'networkSent', label: 'Bytes sent', fmt: fmtBytes, invert: true, color: 'var(--chart-1)' },
+  { key: 'networkReceived', label: 'Bytes received', fmt: fmtBytes, invert: true, color: 'var(--chart-2)' },
 ]
 
 export default function CompareTraces() {
@@ -158,10 +158,10 @@ export default function CompareTraces() {
   const diffColumns = [
     { key: 'label', header: 'Metric', render: (r) => <span className="cell-strong">{r.label}</span>, sortable: false },
     { key: 'a', header: 'Baseline (A)', num: true, sortable: false, render: (r) => (
-      <span className="opa-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m1?.[r.key] ?? 0)}</span>
+      <span className="oui-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m1?.[r.key] ?? 0)}</span>
     ) },
     { key: 'b', header: 'New (B)', num: true, sortable: false, render: (r) => (
-      <span className="opa-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m2?.[r.key] ?? 0)}</span>
+      <span className="oui-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m2?.[r.key] ?? 0)}</span>
     ) },
     { key: 'delta', header: 'Δ', num: true, sortable: false, render: (r) => (
       <DeltaIndicator current={m2?.[r.key] ?? 0} previous={m1?.[r.key] ?? 0} invert={r.invert} />
@@ -174,9 +174,9 @@ export default function CompareTraces() {
     <Panel
       title={label}
       icon={<FiShuffle />}
-      actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>GET /api/traces/{'{id}'}/full</span>}
+      actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>GET /api/traces/{'{id}'}/full</span>}
     >
-      <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+      <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
         <input
           id={id}
           type="text"
@@ -197,10 +197,10 @@ export default function CompareTraces() {
         </button>
       </div>
 
-      {error && <div style={{ marginTop: 'var(--sp-3)' }}><ErrorState message={error} /></div>}
+      {error && <div style={{ marginTop: 'var(--space-3)' }}><ErrorState message={error} /></div>}
 
       {trace && (
-        <div style={{ marginTop: 'var(--sp-3)' }}>
+        <div style={{ marginTop: 'var(--space-3)' }}>
           <EntityHeader
             title={value}
             subtitle={rootSpan(trace)?.service || 'unknown service'}
@@ -212,7 +212,7 @@ export default function CompareTraces() {
               </>
             }
             actions={
-              <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+              <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
                 <CopyToClipboard text={value} label="Copy ID" />
                 <Link to={`/traces/${value}`} className="opa-btn ghost">View trace</Link>
               </div>
@@ -224,7 +224,7 @@ export default function CompareTraces() {
   )
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Compare</h1>
@@ -236,7 +236,7 @@ export default function CompareTraces() {
                 : 'Side-by-side profile diff between two traces'}
           </div>
         </div>
-        <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+        <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
           <SegmentedControl
             options={[
               { value: 'trace', label: 'By trace' },
@@ -293,9 +293,9 @@ export default function CompareTraces() {
             hint="Load a baseline and a new trace above to see the diff."
           />
           {recentTraces.length > 0 && (
-            <div style={{ marginTop: 'var(--sp-4)' }}>
-              <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginBottom: 'var(--sp-2)' }}>Recent traces</div>
-              <div className="opa-row" style={{ flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+            <div style={{ marginTop: 'var(--space-4)' }}>
+              <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', marginBottom: 'var(--space-2)' }}>Recent traces</div>
+              <div className="oui-row" style={{ flexWrap: 'wrap', gap: 'var(--space-2)' }}>
                 {recentTraces.slice(0, 10).map((t, idx) => {
                   const traceId = t.trace_id || t.id
                   return (
@@ -313,8 +313,8 @@ export default function CompareTraces() {
                       }}
                     >
                       <FiClock size={11} />
-                      <span className="opa-mono">{String(traceId).substring(0, 16)}…</span>
-                      <span className="opa-muted">{fmtMs(t.duration_ms || 0)}</span>
+                      <span className="oui-mono">{String(traceId).substring(0, 16)}…</span>
+                      <span className="oui-text-muted">{fmtMs(t.duration_ms || 0)}</span>
                     </button>
                   )
                 })}

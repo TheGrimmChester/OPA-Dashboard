@@ -13,7 +13,7 @@
   border: 1px solid var(--border-subtle);
   background: var(--surface-2);
   color: var(--text-primary);
-  font-size: var(--fs-13);
+  font-size: var(--text-sm);
 }
 
 .users-input::placeholder { color: var(--text-muted); }
@@ -34,7 +34,7 @@
   background: var(--accent);
   color: #fff;
   cursor: pointer;
-  font-size: var(--fs-13);
+  font-size: var(--text-sm);
 }
 
 .users-btn:disabled { opacity: 0.55; cursor: default; }
@@ -45,13 +45,13 @@
   border: 1px solid var(--border-subtle);
   background: var(--surface-2);
   color: var(--text-primary);
-  font-size: var(--fs-12);
+  font-size: var(--text-xs);
 }
 
 .users-icon-btn {
   border: none;
   background: transparent;
-  color: var(--error);
+  color: var(--critical-text);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
@@ -59,4 +59,4 @@
   align-items: center;
 }
 
-.users-icon-btn:hover { background: color-mix(in srgb, var(--error) 14%, transparent); }
+.users-icon-btn:hover { background: color-mix(in srgb, var(--critical-text) 14%, transparent); }

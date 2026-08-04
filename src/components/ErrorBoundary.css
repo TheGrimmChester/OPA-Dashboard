@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: center;
   min-height: 400px;
-  padding: var(--spacing-xl);
+  padding: var(--space-8);
 }
 
 .error-boundary-content {
@@ -12,82 +12,82 @@
 }
 
 .error-boundary h2 {
-  color: var(--color-error);
-  margin-bottom: var(--spacing-md);
+  color: var(--critical-text);
+  margin-bottom: var(--space-4);
 }
 
 .error-boundary p {
   color: var(--text-secondary);
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: var(--space-6);
 }
 
 .error-details {
   text-align: left;
-  margin: var(--spacing-lg) 0;
-  padding: var(--spacing-md);
-  background-color: var(--bg-secondary);
+  margin: var(--space-6) 0;
+  padding: var(--space-4);
+  background-color: var(--canvas);
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-default);
 }
 
 .error-details summary {
   cursor: pointer;
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--spacing-sm);
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-2);
   color: var(--text-primary);
 }
 
 .error-details pre {
   white-space: pre-wrap;
   word-wrap: break-word;
-  font-size: var(--font-size-xs);
-  color: var(--color-error);
-  font-family: var(--font-family-mono);
-  background-color: var(--bg-primary);
-  padding: var(--spacing-sm);
+  font-size: var(--text-xs);
+  color: var(--critical-text);
+  font-family: var(--font-mono);
+  background-color: var(--surface-1);
+  padding: var(--space-2);
   border-radius: var(--radius-sm);
-  margin-top: var(--spacing-sm);
+  margin-top: var(--space-2);
 }
 
 .error-boundary-actions {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--space-2);
   justify-content: center;
 }
 
 .error-boundary-actions button,
 .button-link {
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: var(--space-2) var(--space-6);
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: var(--font-size-sm);
+  font-size: var(--text-base);
   text-decoration: none;
   display: inline-block;
-  transition: all var(--transition-base);
-  font-weight: var(--font-weight-medium);
+  transition: all var(--dur-base) var(--ease);
+  font-weight: var(--weight-medium);
 }
 
 .error-boundary-actions button {
-  background-color: var(--color-primary-blue);
-  color: var(--text-inverse);
+  background-color: var(--chart-1);
+  color: var(--accent-contrast);
 }
 
 .error-boundary-actions button:hover {
-  background-color: var(--color-primary-blue);
+  background-color: var(--chart-1);
   opacity: 0.9;
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
 .button-link {
-  background-color: var(--bg-tertiary);
+  background-color: var(--surface-2);
   color: var(--text-primary);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-default);
 }
 
 .button-link:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--color-primary-blue);
+  background-color: var(--surface-3);
+  border-color: var(--chart-1);
 }
 

@@ -123,15 +123,15 @@ function AutomationLive() {
       return <StatusPill tone={tone}>{r.action}</StatusPill>
     } },
     { key: 'resource', header: 'Resource', width: 110, render: (r) => <Badge>{r.resource}</Badge> },
-    { key: 'id', header: 'ID', render: (r) => <span className="opa-mono">{r.id}</span> },
+    { key: 'id', header: 'ID', render: (r) => <span className="oui-mono">{r.id}</span> },
   ]
 
   const revCols = [
     { key: 'action', header: 'Action', width: 90, render: (r) => <Badge>{r.action}</Badge> },
     { key: 'applied', header: 'Applied', num: true, width: 90, render: (r) => fmtNum(r.applied) },
     { key: 'diff_count', header: 'Diffs', num: true, width: 80, render: (r) => fmtNum(r.diff_count) },
-    { key: 'checksum', header: 'Checksum', render: (r) => <span className="opa-mono opa-muted">{String(r.checksum || '').slice(0, 12)}</span> },
-    { key: 'created_at', header: 'When', num: true, width: 120, render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span> },
+    { key: 'checksum', header: 'Checksum', render: (r) => <span className="oui-mono oui-text-muted">{String(r.checksum || '').slice(0, 12)}</span> },
+    { key: 'created_at', header: 'When', num: true, width: 120, render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span> },
   ]
 
   const kpis = useMemo(() => ({
@@ -142,13 +142,13 @@ function AutomationLive() {
   }), [resources, revs, summary])
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Automation</h1>
           <div className="opa-page-sub">Management API · plan / apply · export / import / promote</div>
         </div>
-        <div className="opa-row" style={{ gap: 8 }}>
+        <div className="oui-row" style={{ gap: 8 }}>
           <button className="opa-btn ghost" disabled={busy} onClick={exportLive}>
             <FiDownload size={13} /> Export live
           </button>
@@ -181,7 +181,7 @@ function AutomationLive() {
               value={bundleText}
               onChange={(e) => setBundleText(e.target.value)}
             />
-            <div className="opa-row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <div className="oui-row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               <button className="opa-btn" disabled={busy} onClick={() => run('/api/mgmt/v1/plan')}>Plan</button>
               <button className="opa-btn primary" disabled={busy} onClick={() => run('/api/mgmt/v1/apply')}>Apply</button>
               <button className="opa-btn" disabled={busy} onClick={() => run('/api/mgmt/v1/import')}>Import</button>
@@ -217,7 +217,7 @@ function AutomationLive() {
               onChange={(e) => setPromote({ ...promote, target_organization_id: e.target.value })} />
             <input className="opa-input" placeholder="Target project" value={promote.target_project_id}
               onChange={(e) => setPromote({ ...promote, target_project_id: e.target.value })} />
-            <label className="opa-muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label className="oui-text-muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={!!promote.dry_run}
                 onChange={(e) => setPromote({ ...promote, dry_run: e.target.checked })} />
               Dry run
@@ -244,9 +244,9 @@ function AutomationLive() {
         <Panel title="Managed resources" icon={<FiCpu />} flush loading={index.loading}>
           <DataTable
             columns={[
-              { key: 'name', header: 'Resource', render: (r) => <span className="opa-mono cell-strong">{r.name}</span> },
+              { key: 'name', header: 'Resource', render: (r) => <span className="oui-mono cell-strong">{r.name}</span> },
               { key: 'description', header: 'Description' },
-              { key: 'table', header: 'Storage', render: (r) => <span className="opa-muted">{r.table}</span> },
+              { key: 'table', header: 'Storage', render: (r) => <span className="oui-text-muted">{r.table}</span> },
             ]}
             rows={resources}
             rowKey={(r) => r.name}
