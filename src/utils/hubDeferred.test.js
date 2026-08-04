@@ -3,7 +3,7 @@ import { HUB_DEFERRED_SURFACES, hubDeferredCopy, isHubDeferred } from './hubDefe
 
 describe('hubDeferred', () => {
   it('marks ownership.md scaffold surfaces as deferred', () => {
-    for (const id of ['network', 'cloud', 'catalog', 'automation', 'callgraphCompare', 'exploreFacets']) {
+    for (const id of ['network', 'cloud', 'catalog', 'automation', 'callgraphCompare']) {
       expect(isHubDeferred(id)).toBe(true)
       expect(HUB_DEFERRED_SURFACES[id].routes).toMatch(/\/api\//)
       const copy = hubDeferredCopy(id)
@@ -11,7 +11,7 @@ describe('hubDeferred', () => {
       expect(copy.hint).toMatch(/deferred/i)
       expect(copy.hint).toMatch(/do not add fake hub routes/i)
     }
-    expect(HUB_DEFERRED_SURFACES.exploreFacets.routes).toMatch(/explore\/facets/)
+    expect(isHubDeferred('exploreFacets')).toBe(false)
   })
 
   it('ignores unknown surfaces', () => {

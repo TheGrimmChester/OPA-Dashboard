@@ -1,19 +1,16 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
-import { FiClock, FiFilter } from 'react-icons/fi'
+import { FiAlertCircle, FiFilter } from 'react-icons/fi'
 import { Badge } from './index'
-import { EmptyState } from './States'
-import { hubDeferredCopy, isHubDeferred } from '../../utils/hubDeferred'
 
 const API = import.meta.env.VITE_API_URL || ''
-const DEFERRED_ID = 'exploreFacets'
 
 /**
  * Dashboards: faceted sidebar with include/exclude chips.
  * onChange({ include: {field:[values]}, exclude: {field:[values]} })
  *
- * When GET /api/explore/facets is deferred (hub+edge 404), show an intentional
- * empty state instead of blank field chips that look broken.
+ * Calls GET /api/explore/facets (hub-owned). On transient failure/404, shows a
+ * soft retry empty state — not ownership-deferred copy.
  */
 export default function FacetSidebar({
   signal = 'spans',
@@ -21,15 +18,15 @@ export default function FacetSidebar({
   value,
   onChange,
 }) {
-  const deferred = isHubDeferred(DEFERRED_ID)
-  const deferredCopy = deferred ? hubDeferredCopy(DEFERRED_ID) : null
   const [facets, setFacets] = useState({})
-  const [unavailable, setUnavailable] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const include = value?.include || {}
   const exclude = value?.exclude || {}
 
+  const fieldsKey = fields.join(',')
+
   useEffect(() => {
-    if (deferred) return undefined
     let alive = true
     ;(async () => {
       const next = {}
@@ -37,7 +34,9 @@ export default function FacetSidebar({
       let anyFail = false
       await Promise.all(fields.map(async (field) => {
         try {
-          const res = await axios.get(`${API}/api/explore/facets`, { params: { signal, field, hours: 24 } })
+          // Hub clamps hours to [1, 168]. Use the max window so chips align with
+          // Trace Explorer list rows that are not limited to the last day.
+          const res = await axios.get(`${API}/api/explore/facets`, { params: { signal, field, hours: 168 } })
           next[field] = res.data?.facets || []
           anyOk = true
         } catch {
@@ -47,11 +46,15 @@ export default function FacetSidebar({
       }))
       if (!alive) return
       setFacets(next)
-      // No fake chips: if every field failed (typical 404), show ownership empty state.
-      setUnavailable(anyFail && !anyOk)
+      setLoadError(anyFail && !anyOk)
     })()
     return () => { alive = false }
-  }, [deferred, signal, fields.join(',')])
+  }, [signal, fieldsKey, reloadKey])
+
+  const retry = useCallback(() => {
+    setLoadError(false)
+    setReloadKey((k) => k + 1)
+  }, [])
 
   const toggle = (field, val, mode) => {
     const bucket = mode === 'exclude' ? { ...exclude } : { ...include }
@@ -74,22 +77,21 @@ export default function FacetSidebar({
     return parts.join(' ')
   }
 
-  const showDeferred = deferred || unavailable
-  const emptyTitle = deferredCopy?.title || 'Not available on hub yet'
-  const emptyHint = deferredCopy?.hint
-    || 'Trace explore facets are deferred — no hub or edge backend for GET /api/explore/facets. Restore the ClickHouse facet query on hub before enabling chips.'
-
   return (
     <div style={{ minWidth: 200, maxWidth: 260 }} data-testid="facet-sidebar">
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }} className="opa-muted">
         <FiFilter size={12} /> Facets
       </div>
-      {showDeferred ? (
-        <EmptyState
-          icon={<FiClock />}
-          title={emptyTitle}
-          hint={emptyHint}
-        />
+      {loadError ? (
+        <div className="opa-muted" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <FiAlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>Facets temporarily unavailable. Try again.</span>
+          </div>
+          <button type="button" className="opa-btn ghost" style={{ fontSize: 12, alignSelf: 'flex-start' }} onClick={retry}>
+            Retry
+          </button>
+        </div>
       ) : (
         <>
           {fields.map((field) => (
