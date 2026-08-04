@@ -1,23 +1,31 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import FacetSidebar from './FacetSidebar'
 
+const get = vi.fn()
+
 vi.mock('axios', () => ({
   default: {
-    get: vi.fn(() => Promise.reject(new Error('should not fetch when deferred'))),
+    get: (...args) => get(...args),
   },
 }))
 
-describe('FacetSidebar deferred facets', () => {
-  it('shows hub ownership empty state instead of empty field chips', () => {
+describe('FacetSidebar', () => {
+  beforeEach(() => {
+    get.mockReset()
+  })
+
+  it('does not show ownership-deferred copy on the happy path shell', () => {
+    // SSR renders before useEffect fetch; should show field headers, not deferred messaging
     const html = renderToStaticMarkup(
-      <FacetSidebar value={{ include: {}, exclude: {} }} onChange={() => {}} />,
+      <FacetSidebar value={{ include: {}, exclude: {} }} onChange={() => {}} fields={['service', 'status']} />,
     )
-    expect(html).toContain('Not available on hub yet')
-    expect(html).toMatch(/explore\/facets|Trace explore facets/i)
-    // Field chip headers should not render while deferred
-    expect(html).not.toMatch(/opa-mono[^>]*>service</)
+    expect(html).not.toContain('Not available on hub yet')
+    expect(html).not.toMatch(/deferred/i)
+    expect(html).toContain('Facets')
+    expect(html).toContain('service')
+    expect(html).toContain('status')
   })
 })
