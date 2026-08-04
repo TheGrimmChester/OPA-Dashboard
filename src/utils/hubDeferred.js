@@ -25,6 +25,10 @@ export const HUB_DEFERRED_SURFACES = {
     title: 'Call-graph window compare',
     routes: 'GET /api/callgraph/compare',
   },
+  exploreFacets: {
+    title: 'Trace explore facets',
+    routes: 'GET /api/explore/facets',
+  },
 }
 
 export function isHubDeferred(id) {
