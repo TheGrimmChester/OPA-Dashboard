@@ -239,7 +239,7 @@ export default function TraceExplorer() {
         <FacetSidebar
           value={facets}
           onChange={(next) => { setFacets(next); setOffset(0) }}
-          fields={['service', 'environment', 'status', 'host']}
+          fields={['service', 'language', 'framework', 'status', 'db_system']}
         />
         <div className="opa-stack" style={{ flex: 1, minWidth: 0 }}>
           {/* Query bar — raw DSL filter. Facets AND into the same request. */}
