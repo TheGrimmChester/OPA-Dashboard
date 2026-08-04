@@ -165,7 +165,7 @@ export default function Collaborate() {
   const nbCols = [
     { key: 'title', header: 'Title', render: (r) => <span className="cell-strong">{r.title}</span> },
     { key: 'created_by', header: 'Author', render: (r) => r.created_by || '—' },
-    { key: 'updated_at', header: 'Updated', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.updated_at)}</span> },
+    { key: 'updated_at', header: 'Updated', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.updated_at)}</span> },
     { key: 'actions', header: '', render: (r) => (
       <span style={{ display: 'inline-flex', gap: 6 }}>
         <button className="opa-btn" disabled={busy} onClick={() => openNotebook(r.id)}>{t('collab.open')}</button>
@@ -177,36 +177,36 @@ export default function Collaborate() {
   const pageCols = [
     { key: 'title', header: 'Title', render: (r) => <span className="cell-strong">{r.title}</span> },
     { key: 'slug', header: 'Slug', render: (r) => (
-      <a className="opa-mono" href={`/status/${r.slug}`} target="_blank" rel="noreferrer">{r.slug}</a>
+      <a className="oui-mono" href={`/status/${r.slug}`} target="_blank" rel="noreferrer">{r.slug}</a>
     ) },
     { key: 'public', header: 'Public', render: (r) => (Number(r.public) ? <StatusPill tone="ok">yes</StatusPill> : <Badge>private</Badge>) },
   ]
 
   const cmtCols = [
     { key: 'anchor_type', header: 'Type', render: (r) => <Badge>{r.anchor_type}</Badge> },
-    { key: 'anchor_id', header: 'Anchor', render: (r) => <span className="opa-mono">{r.anchor_id}</span> },
+    { key: 'anchor_id', header: 'Anchor', render: (r) => <span className="oui-mono">{r.anchor_id}</span> },
     { key: 'body', header: 'Comment', render: (r) => r.body },
     { key: 'author', header: 'Author', render: (r) => r.author || '—' },
-    { key: 'created_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span> },
+    { key: 'created_at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span> },
   ]
 
   const rptCols = [
     { key: 'name', header: 'Name', render: (r) => <span className="cell-strong">{r.name}</span> },
     { key: 'cadence', header: 'Cadence', render: (r) => <Badge>{r.cadence}</Badge> },
     { key: 'enabled', header: 'On', render: (r) => (Number(r.enabled) ? <StatusPill tone="ok">yes</StatusPill> : <StatusPill tone="warn">no</StatusPill>) },
-    { key: 'last_run_at', header: 'Last run', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_run_at)}</span> },
+    { key: 'last_run_at', header: 'Last run', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_run_at)}</span> },
   ]
 
   const runCols = [
-    { key: 'report_id', header: 'Report', render: (r) => <span className="opa-mono">{r.report_id}</span> },
-    { key: 'summary_json', header: 'Summary', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.summary_json || '').slice(0, 80)}</span> },
-    { key: 'created_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span> },
+    { key: 'report_id', header: 'Report', render: (r) => <span className="oui-mono">{r.report_id}</span> },
+    { key: 'summary_json', header: 'Summary', render: (r) => <span className="oui-mono" style={{ fontSize: 11 }}>{String(r.summary_json || '').slice(0, 80)}</span> },
+    { key: 'created_at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span> },
   ]
 
   const cells = Array.isArray(viewer?.cells) ? viewer.cells : []
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">{t('collab.title')}</h1>
@@ -225,7 +225,7 @@ export default function Collaborate() {
 
       {msg && (
         <Panel title="Result">
-          <pre className="opa-mono" style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(msg, null, 2)}</pre>
+          <pre className="oui-mono" style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(msg, null, 2)}</pre>
         </Panel>
       )}
 
@@ -250,17 +250,17 @@ export default function Collaborate() {
                 <button className="opa-btn" onClick={() => { setViewer(null); setExecOut(null) }}>Close</button>
               </div>
               {cells.map((c, i) => (
-                <div key={i} style={{ marginBottom: 12, padding: 10, border: '1px solid var(--opa-border, #2a3348)', borderRadius: 6 }}>
+                <div key={i} style={{ marginBottom: 12, padding: 10, border: '1px solid var(--border-default, #2a3348)', borderRadius: 6 }}>
                   <Badge>{c.type || 'cell'}</Badge>
                   {c.type === 'tql' ? (
-                    <pre className="opa-mono" style={{ margin: '8px 0 0', fontSize: 12 }}>{c.query || c.q || ''}</pre>
+                    <pre className="oui-mono" style={{ margin: '8px 0 0', fontSize: 12 }}>{c.query || c.q || ''}</pre>
                   ) : (
                     <pre style={{ margin: '8px 0 0', fontSize: 12, whiteSpace: 'pre-wrap' }}>{c.body || JSON.stringify(c, null, 2)}</pre>
                   )}
                 </div>
               ))}
               {execOut && (
-                <pre className="opa-mono" style={{ marginTop: 12, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(execOut, null, 2)}</pre>
+                <pre className="oui-mono" style={{ marginTop: 12, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(execOut, null, 2)}</pre>
               )}
             </Panel>
           )}

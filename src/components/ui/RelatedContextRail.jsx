@@ -23,8 +23,8 @@ export default function RelatedContextRail({ query, title = 'Related' }) {
     <Panel title={title} icon={<FiLink />} style={{ marginTop: 0 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {items.map((r) => (
-          <Link key={`${r.kind}:${r.id}`} to={r.href} className="opa-mono" style={{ fontSize: 12, textDecoration: 'none' }}>
-            <span className="opa-muted">{r.kind}</span> · {r.label}
+          <Link key={`${r.kind}:${r.id}`} to={r.href} className="oui-mono" style={{ fontSize: 12, textDecoration: 'none' }}>
+            <span className="oui-text-muted">{r.kind}</span> · {r.label}
           </Link>
         ))}
       </div>

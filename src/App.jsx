@@ -1,40 +1,19 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import axios from 'axios'
-import {
-  FiHome, 
-  FiActivity, 
-  FiServer, 
-  FiTrendingUp, 
-  FiGlobe, 
-  FiDatabase, 
-  FiAlertCircle,
-  FiTarget,
-  FiRefreshCw,
-  FiMenu,
-  FiX,
-  FiChevronDown,
-  FiChevronRight,
-  FiTerminal,
-  FiFileText,
-  FiRadio,
-  FiBarChart2,
-  FiHardDrive,
-  FiCpu,
-  FiUsers,
-} from 'react-icons/fi'
+import { Spinner, productTitle, isNavItemActive } from '@open-family/ui'
 import ErrorBoundary from './components/ErrorBoundary'
 import { TenantProvider } from './contexts/TenantContext'
 import { TimeRangeProvider } from './contexts/TimeRangeContext'
-import { I18nProvider } from './contexts/I18nContext'
-import AppShell from './components/shell/AppShell'
-import './App.css'
+import { I18nProvider, useI18n } from './contexts/I18nContext'
+import Shell from './components/shell/Shell'
+import { navItems } from './nav'
 
 // Lazily loaded route/page components so their heavy dependencies
 // (vis-network, recharts, react-syntax-highlighter, sql-formatter) are
 // split into their own chunks instead of the main bundle.
 const CompareTraces = lazy(() => import('./pages/CompareTraces'))
-const Stats = lazy(() => import('./pages/Stats'))
+const Overview = lazy(() => import('./pages/Overview'))
 const Services = lazy(() => import('./pages/Services'))
 const ServiceDetail = lazy(() => import('./pages/ServiceDetail'))
 const TraceDetail = lazy(() => import('./pages/TraceDetail'))
@@ -116,10 +95,37 @@ function RequireAuth({ children }) {
   return children
 }
 
+/**
+ * Name the tab after the page, not the product.
+ *
+ * A browser tab is read left to right, and the title used to be set once in
+ * `index.html`, so every page claimed to be the landing page. This runs on each
+ * route change and resolves the label from the same IA the rail reads.
+ */
+function useDocumentTitle() {
+  const { pathname } = useLocation()
+  const { t } = useI18n()
+  useEffect(() => {
+    const match = navItems().find((item) => isNavItemActive(pathname, item))
+    document.title = productTitle({
+      productName: 'Open Profiling Agent',
+      page: match ? t(match.labelKey) : undefined,
+    })
+  }, [pathname, t])
+}
+
+function RoutedApp() {
+  useDocumentTitle()
+  return (
+    <Shell>
+      <Suspense fallback={<div className="route-loading" style={{ padding: 'var(--space-6)' }}><Spinner label="Loading page" /></div>}>
+        <AppRoutes />
+      </Suspense>
+    </Shell>
+  )
+}
+
 function App() {
-  // Stats polls on its own; this stays a constant until something in the shell
-  // needs to toggle it.
-  const autoRefresh = true
   const { pathname } = useLocation()
 
   // The login screen renders standalone — no nav/topbar shell around it. When
@@ -138,197 +144,88 @@ function App() {
   return (
     <ErrorBoundary>
       <RequireAuth>
-      <TenantProvider>
-        <TimeRangeProvider>
-        <I18nProvider>
-        <AppShell>
-          <Suspense fallback={<div className="route-loading" style={{ padding: 24, color: 'var(--text-muted)' }}>Loading…</div>}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/services" replace />} />
-            <Route path="/overview" element={<Navigate to="/services" replace />} />
-            <Route
-              path="/services"
-              element={<Services />}
-            />
-            <Route
-              path="/services/:serviceName"
-              element={<ServiceDetail />}
-            />
-            <Route
-              path="/key-transactions"
-              element={<KeyTransactions />}
-            />
-            <Route
-              path="/commands"
-              element={<Commands />}
-            />
-            <Route
-              path="/traces"
-              element={<TraceExplorer />}
-            />
-            <Route
-              path="/stats"
-              element={<Stats autoRefresh={autoRefresh} />}
-            />
-            <Route
-              path="/system"
-              element={<PlatformOps />}
-            />
-            <Route
-              path="/serverless"
-              element={<Serverless />}
-            />
-            <Route
-              path="/catalog"
-              element={<Catalog />}
-            />
-            <Route
-              path="/automation"
-              element={<Automation />}
-            />
-            <Route
-              path="/cloud"
-              element={<Cloud />}
-            />
-            <Route
-              path="/traces/:traceId"
-              element={<TraceDetail />}
-            />
-            {/* Legacy flame route folded into the Trace Detail waterfall. */}
-            <Route path="/traces/:traceId/flame" element={<Navigate to="/traces" replace />} />
-            <Route 
-              path="/compare" 
-              element={<CompareTraces />} 
-            />
-            <Route
-              path="/performance"
-              element={<PerformanceView />}
-            />
-            {/* App-level HTTP bandwidth stays on Performance; Network observability is /network. */}
-            <Route
-              path="/network"
-              element={<Network />}
-            />
-            <Route
-              path="/collaborate"
-              element={<Collaborate />}
-            />
-            <Route
-              path="/diagnostics"
-              element={<Diagnostics />}
-            />
-            <Route
-              path="/profiling"
-              element={<ProfilingView />}
-            />
-            <Route
-              path="/rum"
-              element={<BrowserRum />}
-            />
-            <Route
-              path="/users"
-              element={<Users />}
-            />
-            <Route
-              path="/api-keys"
-              element={<ApiKeys />}
-            />
-            <Route
-              path="/settings/account"
-              element={<Account />}
-            />
-            <Route
-              path="/account"
-              element={<Navigate to="/settings/account" replace />}
-            />
-            <Route
-              path="/service-map"
-              element={<ServiceMapView />}
-            />
-            <Route
-              path="/sql"
-              element={<Databases />}
-            />
-            <Route
-              path="/sql/:fingerprint"
-              element={<SqlQueryDetail />}
-            />
-            <Route
-              path="/http"
-              element={<ExternalHttp />}
-            />
-            <Route
-              path="/http/:endpoint"
-              element={<HttpEndpointDetail />}
-            />
-            <Route
-              path="/slos"
-              element={<Slos />}
-            />
-            <Route
-              path="/alerts"
-              element={<Alerts />}
-            />
-            <Route
-              path="/anomalies"
-              element={<Anomalies />}
-            />
-            <Route
-              path="/synthetics"
-              element={<Synthetics />}
-            />
-            <Route
-              path="/errors"
-              element={<ErrorsInbox />}
-            />
-            <Route
-              path="/errors/:errorId"
-              element={<ErrorDetail />}
-            />
-            <Route
-              path="/live"
-              element={<LiveHub />}
-            />
-            <Route
-              path="/logs"
-              element={<Logs />}
-            />
-            <Route
-              path="/metrics"
-              element={<MetricsExplorer />}
-            />
-            <Route
-              path="/query"
-              element={<QueryExplorer />}
-            />
-            <Route
-              path="/dashboards"
-              element={<Dashboards />}
-            />
-            <Route
-              path="/dashboards/:id"
-              element={<Dashboards />}
-            />
-            <Route
-              path="/infrastructure"
-              element={<Infrastructure />}
-            />
-            {/* Legacy live routes now consolidated into the Live hub. */}
-            <Route path="/live-dumps" element={<Navigate to="/live?tab=dumps" replace />} />
-            <Route path="/live-logs" element={<Navigate to="/live" replace />} />
-            <Route path="/live-http" element={<Navigate to="/live" replace />} />
-            <Route path="/live/service-map" element={<Navigate to="/live" replace />} />
-            <Route path="/live/sql" element={<Navigate to="/live" replace />} />
-            <Route path="/live/redis" element={<Navigate to="/live" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-          </Suspense>
-        </AppShell>
-        </I18nProvider>
-        </TimeRangeProvider>
-      </TenantProvider>
+        <TenantProvider>
+          <TimeRangeProvider>
+            <I18nProvider>
+              <RoutedApp />
+            </I18nProvider>
+          </TimeRangeProvider>
+        </TenantProvider>
       </RequireAuth>
     </ErrorBoundary>
+  )
+}
+
+/**
+ * Every route in the product.
+ *
+ * Routes renamed to agree with their nav label: `/sql` is `/databases` and
+ * `/infrastructure` is `/hosts`, because the rail already called them that.
+ *
+ * Deleted rather than re-pointed: the six legacy `/live-*` paths, the
+ * `/traces/:traceId/flame` route (the flame graph is a tab of the trace now),
+ * `/stats` (folded into Platform status as its Storage tab) and `/account`
+ * (a duplicate of `/settings/account`).
+ */
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/overview" replace />} />
+      <Route path="/overview" element={<Overview />} />
+
+      {/* Monitor */}
+      <Route path="/services" element={<Services />} />
+      <Route path="/services/:serviceName" element={<ServiceDetail />} />
+      <Route path="/catalog" element={<Catalog />} />
+      <Route path="/key-transactions" element={<KeyTransactions />} />
+      <Route path="/commands" element={<Commands />} />
+      <Route path="/traces" element={<TraceExplorer />} />
+      <Route path="/traces/:traceId" element={<TraceDetail />} />
+      <Route path="/profiling" element={<ProfilingView />} />
+      <Route path="/errors" element={<ErrorsInbox />} />
+      <Route path="/errors/:errorId" element={<ErrorDetail />} />
+      <Route path="/logs" element={<Logs />} />
+
+      {/* Reliability */}
+      <Route path="/alerts" element={<Alerts />} />
+      <Route path="/slos" element={<Slos />} />
+      <Route path="/anomalies" element={<Anomalies />} />
+      <Route path="/synthetics" element={<Synthetics />} />
+      <Route path="/diagnostics" element={<Diagnostics />} />
+
+      {/* Analyze */}
+      <Route path="/databases" element={<Databases />} />
+      <Route path="/databases/:fingerprint" element={<SqlQueryDetail />} />
+      <Route path="/http" element={<ExternalHttp />} />
+      <Route path="/http/:endpoint" element={<HttpEndpointDetail />} />
+      <Route path="/service-map" element={<ServiceMapView />} />
+      <Route path="/network" element={<Network />} />
+      <Route path="/rum" element={<BrowserRum />} />
+      <Route path="/performance" element={<PerformanceView />} />
+      <Route path="/compare" element={<CompareTraces />} />
+
+      {/* Infrastructure */}
+      <Route path="/hosts" element={<Infrastructure />} />
+      <Route path="/cloud" element={<Cloud />} />
+      <Route path="/serverless" element={<Serverless />} />
+      <Route path="/metrics" element={<MetricsExplorer />} />
+      <Route path="/query" element={<QueryExplorer />} />
+      <Route path="/dashboards" element={<Dashboards />} />
+      <Route path="/dashboards/:id" element={<Dashboards />} />
+
+      {/* Operate */}
+      <Route path="/live" element={<LiveHub />} />
+      <Route path="/collaborate" element={<Collaborate />} />
+      <Route path="/system" element={<PlatformOps />} />
+      <Route path="/automation" element={<Automation />} />
+
+      {/* Administration */}
+      <Route path="/users" element={<Users />} />
+      <Route path="/api-keys" element={<ApiKeys />} />
+      <Route path="/settings/account" element={<Account />} />
+
+      <Route path="*" element={<Navigate to="/overview" replace />} />
+    </Routes>
   )
 }
 

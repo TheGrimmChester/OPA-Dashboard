@@ -78,8 +78,8 @@ function NetworkLive() {
   }
 
   const flowCols = [
-    { key: 'src_service', header: 'Src', render: (r) => <span className="opa-mono cell-strong">{r.src_service || '—'}</span> },
-    { key: 'dst_service', header: 'Dst', render: (r) => <span className="opa-mono">{r.dst_service || '—'}</span> },
+    { key: 'src_service', header: 'Src', render: (r) => <span className="oui-mono cell-strong">{r.src_service || '—'}</span> },
+    { key: 'dst_service', header: 'Dst', render: (r) => <span className="oui-mono">{r.dst_service || '—'}</span> },
     { key: 'protocol', header: 'Proto', render: (r) => <Badge>{r.protocol || 'tcp'}</Badge> },
     { key: 'bytes_sent', header: 'Bytes →', num: true, render: (r) => fmtNum(r.bytes_sent) },
     { key: 'retransmits', header: 'Retrans', num: true, render: (r) => {
@@ -87,19 +87,19 @@ function NetworkLive() {
       return v > 0 ? <StatusPill tone="warn">{fmtNum(v)}</StatusPill> : fmtNum(v)
     } },
     { key: 'rtt_us', header: 'RTT', num: true, render: (r) => (Number(r.rtt_us) > 0 ? `${fmtNum(r.rtt_us)} µs` : '—') },
-    { key: 'last_seen', header: 'Seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_seen)}</span> },
+    { key: 'last_seen', header: 'Seen', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_seen)}</span> },
   ]
 
   const edgeCols = [
-    { key: 'src_service', header: 'From', render: (r) => <span className="opa-mono">{r.src_service}</span> },
-    { key: 'dst_service', header: 'To', render: (r) => <span className="opa-mono">{r.dst_service}</span> },
+    { key: 'src_service', header: 'From', render: (r) => <span className="oui-mono">{r.src_service}</span> },
+    { key: 'dst_service', header: 'To', render: (r) => <span className="oui-mono">{r.dst_service}</span> },
     { key: 'bytes', header: 'Bytes', num: true, render: (r) => fmtNum(r.bytes) },
     { key: 'rtt_us', header: 'RTT', num: true, render: (r) => (Number(r.rtt_us) > 0 ? `${fmtNum(r.rtt_us)} µs` : '—') },
     { key: 'errors', header: 'Errors', num: true, render: (r) => fmtNum(r.errors) },
   ]
 
   const dnsCols = [
-    { key: 'query_name', header: 'Query', render: (r) => <span className="opa-mono">{r.query_name}</span> },
+    { key: 'query_name', header: 'Query', render: (r) => <span className="oui-mono">{r.query_name}</span> },
     { key: 'rcode', header: 'Rcode', render: (r) => (
       <StatusPill tone={r.rcode === 'NOERROR' ? 'ok' : 'error'}>{r.rcode || '—'}</StatusPill>
     ) },
@@ -108,7 +108,7 @@ function NetworkLive() {
   ]
 
   const tlsCols = [
-    { key: 'server_name', header: 'SNI', render: (r) => <span className="opa-mono">{r.server_name || '—'}</span> },
+    { key: 'server_name', header: 'SNI', render: (r) => <span className="oui-mono">{r.server_name || '—'}</span> },
     { key: 'version', header: 'Version', render: (r) => <Badge>{r.version || '—'}</Badge> },
     { key: 'count', header: 'Count', num: true, render: (r) => fmtNum(r.count) },
     { key: 'failures', header: 'Fails', num: true, render: (r) => {
@@ -119,24 +119,24 @@ function NetworkLive() {
   ]
 
   const discCols = [
-    { key: 'name', header: 'Service', render: (r) => <span className="opa-mono cell-strong">{r.name}</span> },
+    { key: 'name', header: 'Service', render: (r) => <span className="oui-mono cell-strong">{r.name}</span> },
     { key: 'host', header: 'Host', render: (r) => r.host || '—' },
     { key: 'listen_port', header: 'Port', num: true, render: (r) => fmtNum(r.listen_port) },
     { key: 'process_name', header: 'Process', render: (r) => r.process_name || '—' },
     { key: 'source', header: 'Source', render: (r) => <Badge>{r.source || '—'}</Badge> },
-    { key: 'last_seen', header: 'Seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_seen)}</span> },
+    { key: 'last_seen', header: 'Seen', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_seen)}</span> },
   ]
 
   const profCols = [
     { key: 'host', header: 'Host', render: (r) => r.host || '—' },
     { key: 'process_name', header: 'Process', render: (r) => <Badge>{r.process_name || '—'}</Badge> },
-    { key: 'function', header: 'Function', render: (r) => <span className="opa-mono">{r.function}</span> },
+    { key: 'function', header: 'Function', render: (r) => <span className="oui-mono">{r.function}</span> },
     { key: 'samples', header: 'Samples', num: true, render: (r) => fmtNum(r.samples) },
     { key: 'cpu_pct', header: 'CPU %', num: true, render: (r) => (Number(r.cpu_pct) || 0).toFixed(1) },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">{t('net.title')}</h1>
@@ -147,12 +147,12 @@ function NetworkLive() {
       <div className="opa-grid cols-4">
         <KpiTile label="Flows 1h" icon={<FiShare2 size={12} />} value={fmtNum(s.flows_1h || 0)}
           status={s.sampler_enabled ? 'ok' : 'neutral'}
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>{s.sampler_enabled ? 'sampler on' : 'ingest / collector'}</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>{s.sampler_enabled ? 'sampler on' : 'ingest / collector'}</span>} />
         <KpiTile label="Avg RTT" icon={<FiActivity size={12} />} value={Number(s.avg_rtt_us) > 0 ? `${fmtNum(s.avg_rtt_us)} µs` : '—'} status="neutral" />
         <KpiTile label="DNS fails" icon={<FiGlobe size={12} />} value={fmtNum(s.dns_fail_1h || 0)}
           status={Number(s.dns_fail_1h) > 0 ? 'warn' : 'ok'} />
         <KpiTile label={t('net.discovered')} icon={<FiServer size={12} />} value={fmtNum(s.discovered_24h || 0)} status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>TLS fails {fmtNum(s.tls_fail_1h || 0)}</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>TLS fails {fmtNum(s.tls_fail_1h || 0)}</span>} />
       </div>
 
       <Tabs tabs={TABS} value={tab} onChange={setTab} t={t} />
@@ -177,7 +177,7 @@ function NetworkLive() {
               <input className="opa-input" value={probe} onChange={(e) => setProbe(e.target.value)} placeholder="hostname" style={{ flex: 1 }} />
               <button className="opa-btn" disabled={busy || !probe} onClick={runProbe}><FiSearch size={14} /> Probe</button>
             </div>
-            {probeOut && <pre className="opa-mono" style={{ marginTop: 12, fontSize: 12 }}>{JSON.stringify(probeOut, null, 2)}</pre>}
+            {probeOut && <pre className="oui-mono" style={{ marginTop: 12, fontSize: 12 }}>{JSON.stringify(probeOut, null, 2)}</pre>}
           </Panel>
           <Panel title="DNS resolutions" icon={<FiGlobe />} flush loading={dns.loading} error={dns.error}
             empty={!dns.loading && dnsRows.length === 0} emptyText="No DNS events">

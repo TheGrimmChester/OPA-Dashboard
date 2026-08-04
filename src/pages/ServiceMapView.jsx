@@ -7,23 +7,25 @@ import {
   FiClock, FiAlertTriangle, FiZoomIn, FiZoomOut, FiMaximize2, FiX, FiGitBranch,
   FiArrowUpRight, FiArrowDownLeft, FiSliders,
 } from 'react-icons/fi'
+import { readCssToken } from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
 
 const API = import.meta.env.VITE_API_URL || ''
 import {
   Panel, KpiTile, DataTable, InlineBar, StatusPill, SegmentedControl,
 } from '../components/ui'
-import {
-  fmtMs, fmtBytes, fmtNum, fmtPct, fmtAgo, tierColor, latencyStatus, errorRateStatus,
-} from '../theme/format'
+import { fmtMs, fmtBytes, fmtNum, fmtPct, fmtAgo, tierColor, latencyStatus, errorRateStatus, statusColor } from '../theme/format'
 import './ServiceMapView.css'
 
-// Resolve a CSS custom property to its concrete value (vis-network draws to a
-// canvas and cannot consume `var(--x)` strings).
-function cssVar(name, fallback) {
-  if (typeof window === 'undefined' || !document?.documentElement) return fallback
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-  return v || fallback
+// Resolve a design token to its concrete value. vis-network draws to a canvas,
+// so it cannot consume a `var(…)` string and needs the computed colour.
+//
+// No hard-coded fallbacks: the token layer is always loaded before React renders
+// and a contract test asserts every referenced property is defined. The old
+// fallbacks were dark-theme hexes, so on the rare path where they fired they
+// painted a dark map onto a light page.
+function cssVar(name) {
+  return readCssToken(name) ?? 'transparent'
 }
 
 // health_status -> semantic tone used across pills/dots/colors.
@@ -103,14 +105,14 @@ export default function ServiceMapView() {
   // ---- Build vis-network graph -------------------------------------------
   const graph = useMemo(() => {
     const pal = {
-      ok: cssVar('--ok', '#2FD98A'),
-      warn: cssVar('--warn', '#F5C451'),
-      error: cssVar('--error', '#FF5C6C'),
-      neutral: cssVar('--neutral', '#66748C'),
-      accent: cssVar('--accent', '#7C6CFF'),
-      surface2: cssVar('--surface-2', '#1A2130'),
-      border: cssVar('--border-subtle', '#222A38'),
-      text: cssVar('--text-primary', '#E6EAF2'),
+      ok: cssVar('--good-text'),
+      warn: cssVar('--warn-text'),
+      error: cssVar('--critical-text'),
+      neutral: cssVar('--text-muted'),
+      accent: cssVar('--accent'),
+      surface2: cssVar('--surface-2'),
+      border: cssVar('--border-subtle'),
+      text: cssVar('--text-primary'),
     }
 
     // Edge weight metric: throughput preferred, fall back to call volume when
@@ -136,7 +138,7 @@ export default function ServiceMapView() {
           hover: { background: color, border: pal.accent },
         },
         borderWidth: 2,
-        font: { color: pal.text, size: 13, face: 'Inter, system-ui, sans-serif', strokeWidth: 3, strokeColor: cssVar('--surface-1', '#121722') },
+        font: { color: pal.text, size: 13, face: readCssToken('--font-sans') ?? 'system-ui, sans-serif', strokeWidth: 3, strokeColor: cssVar('--surface-1') },
         _payload: n,
       }
     })
@@ -234,33 +236,33 @@ export default function ServiceMapView() {
   // ---- Dependencies table (also the fallback if the graph can't draw) ------
   const maxCalls = Math.max(1, ...edges.map((e) => e?.call_count || 0))
   const depColumns = [
-    { key: 'from', header: 'Source', render: (r) => <span className="cell-strong opa-mono">{r?.from}</span>, sortValue: (r) => r?.from },
+    { key: 'from', header: 'Source', render: (r) => <span className="cell-strong oui-mono">{r?.from}</span>, sortValue: (r) => r?.from },
     { key: 'to', header: 'Target', render: (r) => (
-      <span className="opa-row" style={{ gap: 6 }}>
+      <span className="oui-row" style={{ gap: 6 }}>
         <span style={{ color: tierColor(r?.dependency_type || r?.scheme) }}>●</span>
-        <span className="opa-mono">{r?.to}</span>
+        <span className="oui-mono">{r?.to}</span>
       </span>
     ), sortValue: (r) => r?.to },
-    { key: 'hostport', header: 'Host:Port', render: (r) => <span className="opa-mono opa-muted">{hostPort(r)}</span>, sortValue: (r) => hostPort(r) },
-    { key: 'resolved_host', header: 'Resolved', render: (r) => <span className="opa-mono opa-muted">{r?.resolved_host || '—'}</span>, sortValue: (r) => r?.resolved_host || '' },
+    { key: 'hostport', header: 'Host:Port', render: (r) => <span className="oui-mono oui-text-muted">{hostPort(r)}</span>, sortValue: (r) => hostPort(r) },
+    { key: 'resolved_host', header: 'Resolved', render: (r) => <span className="oui-mono oui-text-muted">{r?.resolved_host || '—'}</span>, sortValue: (r) => r?.resolved_host || '' },
     { key: 'call_count', header: 'Calls', num: true, sortValue: (r) => r?.call_count || 0, render: (r) => (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <InlineBar value={r?.call_count || 0} max={maxCalls} label={fmtNum(r?.call_count)} color="var(--accent)" width={90} />
       </div>
     ) },
     { key: 'p95_latency_ms', header: 'p95', num: true, sortValue: (r) => r?.p95_latency_ms || 0, render: (r) => (
-      <span style={{ color: `var(--${latencyStatus(r?.p95_latency_ms)})` }}>{fmtMs(r?.p95_latency_ms)}</span>
+      <span style={{ color: statusColor(latencyStatus(r?.p95_latency_ms)) }}>{fmtMs(r?.p95_latency_ms)}</span>
     ) },
     { key: 'error_rate', header: 'Error %', num: true, sortValue: (r) => r?.error_rate || 0, render: (r) => (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <InlineBar value={r?.error_rate || 0} max={100} label={fmtPct(r?.error_rate)} color={`var(--${errorRateStatus(r?.error_rate)})`} width={80} />
+        <InlineBar value={r?.error_rate || 0} max={100} label={fmtPct(r?.error_rate)} color={statusColor(errorRateStatus(r?.error_rate))} width={80} />
       </div>
     ) },
     { key: 'io', header: 'I/O (out / in)', num: true, sortValue: (r) => (r?.bytes_sent || 0) + (r?.bytes_received || 0), render: (r) => (
-      <span className="opa-mono">
-        <span style={{ color: 'var(--tier-app)' }}>↑{fmtBytes(r?.bytes_sent)}</span>
-        <span className="opa-muted"> / </span>
-        <span style={{ color: 'var(--tier-db)' }}>↓{fmtBytes(r?.bytes_received)}</span>
+      <span className="oui-mono">
+        <span style={{ color: 'var(--chart-1)' }}>↑{fmtBytes(r?.bytes_sent)}</span>
+        <span className="oui-text-muted"> / </span>
+        <span style={{ color: 'var(--chart-2)' }}>↓{fmtBytes(r?.bytes_received)}</span>
       </span>
     ) },
   ]
@@ -270,7 +272,7 @@ export default function ServiceMapView() {
   const th = thresholds.data || {}
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Service Map</h1>
@@ -278,7 +280,7 @@ export default function ServiceMapView() {
             {kpis.services} service{kpis.services === 1 ? '' : 's'} · {kpis.deps} external dependenc{kpis.deps === 1 ? 'y' : 'ies'} · {kpis.edges} connection{kpis.edges === 1 ? '' : 's'}
           </div>
         </div>
-        <div className="opa-row">
+        <div className="oui-row">
           <SegmentedControl
             options={[{ value: 'force', label: 'Force' }, { value: 'hierarchical', label: 'Hierarchical' }]}
             value={layout}
@@ -302,20 +304,20 @@ export default function ServiceMapView() {
       {/* Golden-signal KPIs across the topology */}
       <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile label="Services" icon={<FiServer size={12} />} value={fmtNum(kpis.services)} status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{fmtNum(kpis.deps)} external deps</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtNum(kpis.deps)} external deps</span>} />
         <KpiTile label="Unhealthy" icon={<FiAlertTriangle size={12} />} value={fmtNum(kpis.unhealthy)}
           status={kpis.unhealthy > 0 ? 'error' : 'ok'} />
         <KpiTile label="Total calls" icon={<FiActivity size={12} />} value={fmtNum(kpis.totalCalls)} status="neutral" />
         <KpiTile label="Avg latency" icon={<FiClock size={12} />} value={fmtMs(kpis.avgLat)} status={latencyStatus(kpis.avgLat)} />
         <KpiTile label="Error rate" icon={<FiAlertTriangle size={12} />} value={fmtPct(kpis.errRate)} status={errorRateStatus(kpis.errRate)}
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{fmtBytes(kpis.bytes)} transferred</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtBytes(kpis.bytes)} transferred</span>} />
       </div>
 
       {/* Topology graph */}
       <Panel
         title="Topology" icon={<FiShare2 />} loading={loading} error={map.error} empty={empty}
         emptyText="No service dependencies found for the selected time range."
-        actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>click a node or edge for detail</span>}
+        actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>click a node or edge for detail</span>}
       >
         <div className="smap-graph-wrap">
           <div ref={containerRef} className="smap-graph" />
@@ -325,10 +327,10 @@ export default function ServiceMapView() {
             <button onClick={fit} title="Fit to view"><FiMaximize2 size={15} /></button>
           </div>
           <div className="smap-legend">
-            <span className="lg"><span className="lg-dot" style={{ background: 'var(--ok)' }} /> Healthy</span>
-            <span className="lg"><span className="lg-dot" style={{ background: 'var(--warn)' }} /> Degraded</span>
-            <span className="lg"><span className="lg-dot" style={{ background: 'var(--error)' }} /> Down</span>
-            <span className="lg opa-muted"><FiGitBranch size={11} /> edge width = throughput</span>
+            <span className="lg"><span className="lg-dot" style={{ background: 'var(--good-text)' }} /> Healthy</span>
+            <span className="lg"><span className="lg-dot" style={{ background: 'var(--warn-text)' }} /> Degraded</span>
+            <span className="lg"><span className="lg-dot" style={{ background: 'var(--critical-text)' }} /> Down</span>
+            <span className="lg oui-text-muted"><FiGitBranch size={11} /> edge width = throughput</span>
           </div>
         </div>
       </Panel>
@@ -382,7 +384,7 @@ function ThresholdsEditor({ initial, onSaved, onClose }) {
   }
 
   const field = (label, key) => (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--fs-12)', color: 'var(--text-secondary)' }}>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
       {label}
       <input className="opa-input" type="number" min="0" value={form[key]} onChange={setNum(key)} style={{ width: 130 }} />
     </label>
@@ -393,15 +395,15 @@ function ThresholdsEditor({ initial, onSaved, onClose }) {
       title="Health thresholds" icon={<FiSliders size={14} />}
       actions={<button className="opa-btn ghost" onClick={onClose} title="Close"><FiX size={13} /></button>}
     >
-      <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         {field('Degraded latency (ms)', 'degraded_latency_ms')}
         {field('Down latency (ms)', 'down_latency_ms')}
         {field('Degraded error rate (%)', 'degraded_error_rate')}
         {field('Down error rate (%)', 'down_error_rate')}
         <button className="opa-btn primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save thresholds'}</button>
       </div>
-      {err && <div className="opa-form-err" style={{ marginTop: 'var(--sp-2)' }}>{String(err)}</div>}
-      <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginTop: 'var(--sp-2)' }}>
+      {err && <div className="opa-form-err" style={{ marginTop: 'var(--space-2)' }}>{String(err)}</div>}
+      <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
         Applied across the topology: an edge is amber past the degraded line and red past the down line.
       </div>
     </Panel>
@@ -480,11 +482,11 @@ function NodeBody({ d }) {
         <div className="smap-metrics">
           <Metric label="Throughput" value={`${fmtNum(d.throughput)} rps`} />
           <Metric label="Total spans" value={fmtNum(d.total_spans)} />
-          <Metric label="Avg latency" value={fmtMs(d.avg_duration)} color={`var(--${latencyStatus(d.avg_duration)})`}
+          <Metric label="Avg latency" value={fmtMs(d.avg_duration)} color={statusColor(latencyStatus(d.avg_duration))}
             sub={`min ${fmtMs(d.min_duration)} · max ${fmtMs(d.max_duration)}`} />
           <Metric label="p95 / p99" value={fmtMs(d.p95_duration)} sub={`p99 ${fmtMs(d.p99_duration)}`}
-            color={`var(--${latencyStatus(d.p95_duration)})`} />
-          <Metric label="Error rate" value={fmtPct(d.error_rate)} color={`var(--${errorRateStatus(d.error_rate)})`} />
+            color={statusColor(latencyStatus(d.p95_duration))} />
+          <Metric label="Error rate" value={fmtPct(d.error_rate)} color={statusColor(errorRateStatus(d.error_rate))} />
           <Metric label="Traffic" value={fmtBytes(d.total_traffic)} />
         </div>
       </div>
@@ -498,7 +500,7 @@ function NodeBody({ d }) {
       <div className="smap-section">
         <div className="smap-section-title">Identity</div>
         <div className="smap-kv">
-          <KV k="Service" v={<span className="opa-mono">{d.service || d.id}</span>} />
+          <KV k="Service" v={<span className="oui-mono">{d.service || d.id}</span>} />
           <KV k="Type" v={d.node_type || 'service'} />
         </div>
       </div>
@@ -516,8 +518,8 @@ function EdgeBody({ d, thresholds }) {
       <div className="smap-section">
         <div className="smap-section-title">Latency</div>
         <div className="smap-metrics">
-          <Metric label="Avg" value={fmtMs(d.avg_latency_ms)} color={`var(--${latencyStatus(d.avg_latency_ms)})`} />
-          <Metric label="p95" value={fmtMs(d.p95_latency_ms)} color={`var(--${latencyStatus(d.p95_latency_ms)})`} />
+          <Metric label="Avg" value={fmtMs(d.avg_latency_ms)} color={statusColor(latencyStatus(d.avg_latency_ms))} />
+          <Metric label="p95" value={fmtMs(d.p95_latency_ms)} color={statusColor(latencyStatus(d.p95_latency_ms))} />
           <Metric label="p99" value={fmtMs(d.p99_latency_ms)} />
           <Metric label="min / max" value={fmtMs(d.min_latency_ms)} sub={`max ${fmtMs(d.max_latency_ms)}`} />
         </div>
@@ -528,8 +530,8 @@ function EdgeBody({ d, thresholds }) {
         <div className="smap-metrics">
           <Metric label="Call count" value={fmtNum(d.call_count)} />
           <Metric label="Throughput" value={`${fmtNum(d.throughput)} rps`} />
-          <Metric label="Success rate" value={fmtPct(successRate)} color="var(--ok)" />
-          <Metric label="Error rate" value={fmtPct(d.error_rate)} color={`var(--${errorRateStatus(d.error_rate)})`} />
+          <Metric label="Success rate" value={fmtPct(successRate)} color="var(--good-text)" />
+          <Metric label="Error rate" value={fmtPct(d.error_rate)} color={statusColor(errorRateStatus(d.error_rate))} />
         </div>
       </div>
 
@@ -538,12 +540,12 @@ function EdgeBody({ d, thresholds }) {
         <div className="smap-io">
           <div className="smap-io-row">
             <span className="io-cap"><FiArrowUpRight size={11} /> out</span>
-            <span className="smap-io-track"><span className="smap-io-fill" style={{ width: `${(sent / maxIo) * 100}%`, background: 'var(--tier-app)' }} /></span>
+            <span className="smap-io-track"><span className="smap-io-fill" style={{ width: `${(sent / maxIo) * 100}%`, background: 'var(--chart-1)' }} /></span>
             <span className="io-val">{fmtBytes(sent)}</span>
           </div>
           <div className="smap-io-row">
             <span className="io-cap"><FiArrowDownLeft size={11} /> in</span>
-            <span className="smap-io-track"><span className="smap-io-fill" style={{ width: `${(recv / maxIo) * 100}%`, background: 'var(--tier-db)' }} /></span>
+            <span className="smap-io-track"><span className="smap-io-fill" style={{ width: `${(recv / maxIo) * 100}%`, background: 'var(--chart-2)' }} /></span>
             <span className="io-val">{fmtBytes(recv)}</span>
           </div>
         </div>
@@ -552,11 +554,11 @@ function EdgeBody({ d, thresholds }) {
       <div className="smap-section">
         <div className="smap-section-title">Connection</div>
         <div className="smap-kv">
-          <KV k="From → To" v={<span className="opa-mono">{d.from} → {d.to}</span>} />
+          <KV k="From → To" v={<span className="oui-mono">{d.from} → {d.to}</span>} />
           <KV k="Type" v={d.dependency_type} />
           <KV k="Scheme" v={d.scheme} />
-          <KV k="Host:Port" v={<span className="opa-mono">{hostPort(d)}</span>} />
-          <KV k="Resolved host" v={<span className="opa-mono">{d.resolved_host || '—'}</span>} />
+          <KV k="Host:Port" v={<span className="oui-mono">{hostPort(d)}</span>} />
+          <KV k="Resolved host" v={<span className="oui-mono">{d.resolved_host || '—'}</span>} />
         </div>
       </div>
 
@@ -595,10 +597,10 @@ function EdgeTraces({ d, navigate }) {
     <div className="smap-section">
       <div className="smap-section-title">Traces on this edge</div>
       {q.loading ? (
-        <div className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>Loading…</div>
+        <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>Loading…</div>
       ) : traces.length === 0 ? (
         <>
-          <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginBottom: 8 }}>
+          <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', marginBottom: 8 }}>
             No service-to-service traces on this edge
             {d.dependency_type && d.dependency_type !== 'service' ? ` — external ${d.dependency_type} dependency` : ''}.
           </div>
@@ -610,13 +612,13 @@ function EdgeTraces({ d, navigate }) {
             <button
               key={t.trace_id}
               className="opa-btn ghost"
-              style={{ justifyContent: 'space-between', width: '100%', fontSize: 'var(--fs-12)' }}
+              style={{ justifyContent: 'space-between', width: '100%', fontSize: 'var(--text-xs)' }}
               onClick={() => navigate(`/traces/${encodeURIComponent(t.trace_id)}`)}
               title={`Open trace ${t.trace_id}`}
             >
-              <span className="opa-mono">{String(t.trace_id || '').slice(0, 14)}</span>
-              <span style={{ color: `var(--${latencyStatus(t.duration_ms)})` }}>{fmtMs(t.duration_ms)}</span>
-              <span className="opa-muted">{fmtAgo(t.created_at)}</span>
+              <span className="oui-mono">{String(t.trace_id || '').slice(0, 14)}</span>
+              <span style={{ color: statusColor(latencyStatus(t.duration_ms)) }}>{fmtMs(t.duration_ms)}</span>
+              <span className="oui-text-muted">{fmtAgo(t.created_at)}</span>
             </button>
           ))}
           {viewAll}

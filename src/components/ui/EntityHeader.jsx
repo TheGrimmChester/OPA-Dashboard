@@ -6,8 +6,8 @@ export default function EntityHeader({ title, mono = true, subtitle, badges, met
   return (
     <div className="opa-entity-head">
       <div style={{ minWidth: 0 }}>
-        <div className="opa-row" style={{ gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
-          <span className={mono ? 'opa-entity-title' : 'opa-entity-title'} style={!mono ? { fontFamily: 'var(--font-ui)' } : undefined}>{title}</span>
+        <div className="oui-row" style={{ gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+          <span className={mono ? 'opa-entity-title' : 'opa-entity-title'} style={!mono ? { fontFamily: 'var(--font-sans)' } : undefined}>{title}</span>
           {badges}
         </div>
         {subtitle && <div className="opa-page-sub">{subtitle}</div>}

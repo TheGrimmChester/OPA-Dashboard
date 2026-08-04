@@ -59,7 +59,7 @@ const PICKER_MODES = [
 // symDiff codes are DIFF_CODES order: no-change, improvement, degradation, new.
 // Tones match ProfileComparison's legend (ok / error / neutral) so the compare
 // view's legend describes something that is actually drawn.
-const DIFF_TONE = ['var(--neutral)', 'var(--ok)', 'var(--error)', 'var(--info)']
+const DIFF_TONE = ['var(--text-muted)', 'var(--good-text)', 'var(--critical-text)', 'var(--accent)']
 
 const PICKER_ROWS = 200
 const CRUMB_CHARS = 22
@@ -77,7 +77,7 @@ const MIN_CANVAS = 200 // layoutEgo's tightest depth-1 drawing is 190px
 
 // typeFill's neutral is a surface colour — invisible on a panel-coloured box.
 function tone(op) {
-  return op >= 0 ? typeFill(TYPE_ORDER[op]) : 'var(--neutral)'
+  return op >= 0 ? typeFill(TYPE_ORDER[op]) : 'var(--text-muted)'
 }
 
 // Namespace-stripped tail: the informative part of a PHP symbol in a breadcrumb.
@@ -386,7 +386,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
         >
           <FiCrosshair size={12} aria-hidden="true" />
           <span className="opa-cg-focusname">{middleEllipsis(focusName, 44)}</span>
-          <span className="opa-muted opa-tnum">#{ranked.rankOf[focus] + 1}</span>
+          <span className="oui-text-muted oui-num">#{ranked.rankOf[focus] + 1}</span>
         </button>
         {/* Hidden when the page drives the metric from the shared toolbar, so
             the panel never shows two metric controls sitting side by side. */}
@@ -547,7 +547,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
       <div className="opa-cg-legend">
         {typesInView.map((t) => (
           <span key={t} className="opa-cg-key">
-            <i style={{ background: t === 'other' ? 'var(--neutral)' : typeFill(t) }} />
+            <i style={{ background: t === 'other' ? 'var(--text-muted)' : typeFill(t) }} />
             {t === 'other' ? 'Other' : typeLabel(t)}
           </span>
         ))}
@@ -562,7 +562,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
         )}
         {undrawnEdges > 0 && (
           <span
-            className="opa-cg-key opa-muted"
+            className="opa-cg-key oui-text-muted"
             title="Calls between two functions that are both drawn here. They are not shown because routing them across a band would run the line through other boxes."
           >
             +{fmtNum(undrawnEdges)} call{undrawnEdges === 1 ? '' : 's'} between shown functions not drawn
@@ -621,7 +621,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
                     ? (noData ? `${fmtNum(graph.eCount[r.e])}×` : fmtMetric(metric, graph.eW[metric][r.e]))
                     : (noData ? '—' : fmtMetric(metric, selfM[r.sym]))}
                 </span>
-                <span className="opa-cg-pnum opa-muted">{fmtNum(graph.callCount[r.sym])}</span>
+                <span className="opa-cg-pnum oui-text-muted">{fmtNum(graph.callCount[r.sym])}</span>
               </button>
             ))}
           </div>
@@ -631,7 +631,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
               : picker === 'in'
                 ? <><FiCornerLeftUp aria-hidden="true" />Callers, by the cost that flows through the call site</>
                 : <><FiCornerDownRight aria-hidden="true" />Callees, by the cost that flows through the call site</>}
-            <span className="opa-muted">
+            <span className="oui-text-muted">
               {pickRows.length < pickerTotal
                 ? `${fmtNum(pickRows.length)} of ${fmtNum(pickerTotal)} shown`
                 : `${fmtNum(pickRows.length)} shown`}

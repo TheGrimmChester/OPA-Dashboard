@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { FiChevronRight } from 'react-icons/fi'
-import { fmtMs, tierColor, latencyStatus } from '../theme/format'
+import { fmtMs, tierColor, latencyStatus, statusColor } from '../theme/format'
 import {
   WATERFALL_ROW_H,
   buildWaterfallDisplayRows,
@@ -103,7 +103,7 @@ export default function TraceWaterfall({
           />
           Collapse noise
         </label>
-        <span className="opa-muted tw-count" title="Rows currently rendered in the waterfall">
+        <span className="oui-text-muted tw-count" title="Rows currently rendered in the waterfall">
           Showing {visibleSpans.toLocaleString()}
           {collapsedCount > 0 ? ` (${collapsedCount.toLocaleString()} hidden in groups)` : ''}
           {' '}of {totalSpans.toLocaleString()} spans
@@ -179,7 +179,7 @@ export default function TraceWaterfall({
                       title={`${item.name} × ${item.count}: ${fmtMs(item.duration_ms)}`}
                     />
                   </div>
-                  <div className="tw-dur" style={{ color: `var(--${latencyStatus(item.duration_ms)})` }}>{fmtMs(item.duration_ms)}</div>
+                  <div className="tw-dur" style={{ color: statusColor(latencyStatus(item.duration_ms)) }}>{fmtMs(item.duration_ms)}</div>
                 </div>
               )
             }
@@ -216,7 +216,7 @@ export default function TraceWaterfall({
                 }}
               >
                 <div className="tw-label" style={{ paddingLeft: (s._depth || 0) * 14 }}>
-                  {multiService && <span className="tw-tierdot" style={{ background: serviceColor[s.service] || 'var(--neutral)' }} title={s.service} />}
+                  {multiService && <span className="tw-tierdot" style={{ background: serviceColor[s.service] || 'var(--text-muted)' }} title={s.service} />}
                   <span className="tw-tierdot" style={{ background: col }} />
                   <span className="tw-label-name" title={`${s.name} · ${s.service || ''}`}>{s.name}</span>
                   {isServiceEntry?.(s) && (
@@ -236,7 +236,7 @@ export default function TraceWaterfall({
                     title={`${s.name}${s.service ? ` · ${s.service}` : ''}: ${fmtMs(s.duration_ms)} @ +${fmtMs(s.start_ts - traceStart)}`}
                   />
                 </div>
-                <div className="tw-dur" style={{ color: `var(--${latencyStatus(s.duration_ms)})` }}>{fmtMs(s.duration_ms)}</div>
+                <div className="tw-dur" style={{ color: statusColor(latencyStatus(s.duration_ms)) }}>{fmtMs(s.duration_ms)}</div>
               </div>
             )
           })}

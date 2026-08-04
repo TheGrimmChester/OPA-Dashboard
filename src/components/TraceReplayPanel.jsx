@@ -97,13 +97,13 @@ export default function TraceReplayPanel({
     <div className="trp" data-testid="trace-replay-panel">
       <div className="trp-head">
         <strong>Trace replay</strong>
-        <span className="opa-muted" style={{ fontSize: 11 }}>
+        <span className="oui-text-muted" style={{ fontSize: 11 }}>
           {replay.data?.honesty || 'Modes appear when correlated data exists'}
         </span>
       </div>
 
-      {replay.loading && <div className="opa-muted">Loading replay modes…</div>}
-      {replay.error && <div style={{ color: 'var(--error)' }}>{String(replay.error)}</div>}
+      {replay.loading && <div className="oui-text-muted">Loading replay modes…</div>}
+      {replay.error && <div style={{ color: 'var(--critical-text)' }}>{String(replay.error)}</div>}
 
       {!replay.loading && modes.length > 0 && (
         <div className="trp-modes" role="list">
@@ -135,7 +135,7 @@ export default function TraceReplayPanel({
       )}
 
       {modes.filter((m) => !m.available).length > 0 && activeMode == null && (
-        <div className="trp-empty-hint opa-muted">
+        <div className="trp-empty-hint oui-text-muted">
           Unavailable modes stay listed with reasons — e.g. no RUM session, load run, or HTTP spans.
         </div>
       )}
@@ -162,12 +162,12 @@ export default function TraceReplayPanel({
               aria-label="Waterfall playhead"
               style={{ flex: 1 }}
             />
-            <span className="opa-mono opa-muted" style={{ fontSize: 11, minWidth: 88 }}>
+            <span className="oui-mono oui-text-muted" style={{ fontSize: 11, minWidth: 88 }}>
               {fmtMs(playhead)} / {fmtMs(totalMs)}
             </span>
             <Badge>{startedIds.length} spans</Badge>
           </div>
-          <p className="opa-muted" style={{ fontSize: 11, margin: '6px 0 0' }}>
+          <p className="oui-text-muted" style={{ fontSize: 11, margin: '6px 0 0' }}>
             Waterfall playback highlights spans that have started by the playhead. This is not a browser session recording.
           </p>
         </div>
@@ -177,9 +177,9 @@ export default function TraceReplayPanel({
         <div className="trp-linkout">
           {modes.find((m) => m.id === 'rum_session')?.available ? (
             <>
-              <p className="opa-muted" style={{ fontSize: 12 }}>
+              <p className="oui-text-muted" style={{ fontSize: 12 }}>
                 Open the masked RUM event-log player for session{' '}
-                <code className="opa-mono">{modes.find((m) => m.id === 'rum_session')?.meta?.session_id}</code>.
+                <code className="oui-mono">{modes.find((m) => m.id === 'rum_session')?.meta?.session_id}</code>.
                 {modes.find((m) => m.id === 'rum_session')?.meta?.chunk_count === 0 && (
                   <> No replay chunks stored yet — session timeline may still be useful.</>
                 )}
@@ -201,8 +201,8 @@ export default function TraceReplayPanel({
         <div className="trp-linkout">
           {modes.find((m) => m.id === 'perf_lab')?.available ? (
             <>
-              <p className="opa-muted" style={{ fontSize: 12 }}>
-                Linked load run <code className="opa-mono">{modes.find((m) => m.id === 'perf_lab')?.meta?.load_run_id}</code>
+              <p className="oui-text-muted" style={{ fontSize: 12 }}>
+                Linked load run <code className="oui-mono">{modes.find((m) => m.id === 'perf_lab')?.meta?.load_run_id}</code>
               </p>
               <Link className="opa-btn ghost" to={modes.find((m) => m.id === 'perf_lab').href}>
                 <FiExternalLink size={12} /> Open Perf Lab results
@@ -218,9 +218,9 @@ export default function TraceReplayPanel({
         <div className="trp-linkout">
           {modes.find((m) => m.id === 'synthetics')?.available ? (
             <>
-              <p className="opa-muted" style={{ fontSize: 12 }}>
+              <p className="oui-text-muted" style={{ fontSize: 12 }}>
                 Synthetic check{' '}
-                <code className="opa-mono">
+                <code className="oui-mono">
                   {modes.find((m) => m.id === 'synthetics')?.meta?.check_name
                     || modes.find((m) => m.id === 'synthetics')?.meta?.check_id}
                 </code>
@@ -270,11 +270,11 @@ export default function TraceReplayPanel({
               {steps.length > 0 && (
                 <div className="trp-steps" data-testid="trace-replay-steps">
                   {steps.map((s, i) => (
-                    <div key={`${s.span_id}-${i}`} className="trp-step opa-mono">
-                      <span className="opa-muted">{i + 1}.</span>
+                    <div key={`${s.span_id}-${i}`} className="trp-step oui-mono">
+                      <span className="oui-text-muted">{i + 1}.</span>
                       <Badge>{s.method || 'GET'}</Badge>
                       <span className="trp-step-url" title={s.url}>{s.url || '—'}</span>
-                      <span className="opa-muted">{s.status_code || '—'}</span>
+                      <span className="oui-text-muted">{s.status_code || '—'}</span>
                       <span>{fmtMs(s.duration_ms)}</span>
                     </div>
                   ))}

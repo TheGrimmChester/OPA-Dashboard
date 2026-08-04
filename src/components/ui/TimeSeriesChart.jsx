@@ -76,7 +76,7 @@ export default function TimeSeriesChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 6, right: 8, left: 0, bottom: brushZoom ? 8 : 0 }}>
-        <CartesianGrid stroke="var(--grid)" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey={xKey} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} tickLine={false} axisLine={{ stroke: 'var(--border-default)' }} minTickGap={28} />
         <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={yFmt} />
         <Tooltip content={<OpaTooltip valueFmt={valueFmt} />} cursor={{ stroke: 'var(--border-strong)' }} />
@@ -84,7 +84,7 @@ export default function TimeSeriesChart({
         {(annotations || []).slice(0, 20).map((ann, i) => {
           const x = ann.t || ann.occurred_at || ann.time
           if (!x) return null
-          return <ReferenceLine key={i} x={x} stroke="var(--warn, #c9a227)" strokeDasharray="3 3" label={{ value: ann.title || ann.kind || '', fill: 'var(--text-muted)', fontSize: 10 }} />
+          return <ReferenceLine key={i} x={x} stroke="var(--warn-text, #c9a227)" strokeDasharray="3 3" label={{ value: ann.title || ann.kind || '', fill: 'var(--text-muted)', fontSize: 10 }} />
         })}
         {series.map((s) => {
           const stackId = stacked ? 'a' : undefined

@@ -360,7 +360,7 @@ function ExecutionStackTree({ callStack }) {
       />
       <div className="stack-tree-head">
         <h3 className="stack-tree-title"><FiLayers />Execution stack</h3>
-        <div className="stack-tree-meta opa-mono opa-tnum">
+        <div className="stack-tree-meta oui-mono oui-num">
           <span title={`${exact(stats.calls)} calls captured`}>{fmtNum(stats.calls)} calls</span>
           <span className="stack-tree-sep">/</span>
           <span title="Deepest recorded stack depth">depth {fmtNum(stats.depth)}</span>
@@ -459,7 +459,7 @@ function ExecutionStackTree({ callStack }) {
       )}
 
       <div className="stack-tree-foot">
-        <span className="opa-tnum">{fmtNum(total)} rows shown</span>
+        <span className="oui-num">{fmtNum(total)} rows shown</span>
         <span className="stack-tree-legend">
           Self = this call only, Total = with children. Bar length is Self against the hottest call.
         </span>

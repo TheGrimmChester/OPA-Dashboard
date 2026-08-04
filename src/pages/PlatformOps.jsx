@@ -17,14 +17,14 @@ export default function PlatformOps() {
 
   const auditRows = audit.data?.events || []
   const cols = [
-    { key: 'created_at', header: 'When', render: (r) => <span className="opa-muted opa-mono">{String(r.created_at || '').slice(0, 19)}</span> },
-    { key: 'action', header: 'Action', render: (r) => <span className="opa-mono">{r.action}</span> },
+    { key: 'created_at', header: 'When', render: (r) => <span className="oui-text-muted oui-mono">{String(r.created_at || '').slice(0, 19)}</span> },
+    { key: 'action', header: 'Action', render: (r) => <span className="oui-mono">{r.action}</span> },
     { key: 'actor', header: 'Actor', render: (r) => r.actor || '—' },
-    { key: 'detail', header: 'Detail', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.detail || '').slice(0, 80)}</span> },
+    { key: 'detail', header: 'Detail', render: (r) => <span className="oui-mono" style={{ fontSize: 11 }}>{String(r.detail || '').slice(0, 80)}</span> },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">System</h1>
@@ -35,23 +35,23 @@ export default function PlatformOps() {
 
       <div className="opa-grid cols-4">
         <KpiTile label="Version" icon={<FiServer size={12} />} value={v.version || '—'} status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>uptime {fmtNum(v.uptime_s || 0)}s</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>uptime {fmtNum(v.uptime_s || 0)}s</span>} />
         <KpiTile label="Replicas" icon={<FiActivity size={12} />} value={fmtNum(t.replica_count || 1)} status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>shards {t.shard_count || 1} · idx {t.shard_index ?? 0}</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>shards {t.shard_count || 1} · idx {t.shard_index ?? 0}</span>} />
         <KpiTile label="Leader" icon={<FiShield size={12} />} value={t.is_leader ? 'yes' : 'no'} status={t.is_leader ? 'ok' : 'neutral'}
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>election {t.leader_election ? 'on' : 'off'}</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>election {t.leader_election ? 'on' : 'off'}</span>} />
         <KpiTile label="Ingest accepted" icon={<FiActivity size={12} />} value={fmtNum(o.ingest_accepted || 0)} status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 11 }}>shed {fmtNum(o.ingest_shed || 0)} · lag {fmtNum(o.ingest_lag_s || 0)}s</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>shed {fmtNum(o.ingest_shed || 0)} · lag {fmtNum(o.ingest_lag_s || 0)}s</span>} />
       </div>
 
       <div className="opa-grid cols-2">
         <Panel title="Topology" icon={<FiServer />} loading={topology.loading} error={topology.error}>
-          <pre className="opa-mono" style={{ fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
+          <pre className="oui-mono" style={{ fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
             {JSON.stringify(t, null, 2)}
           </pre>
         </Panel>
         <Panel title="Runtime" icon={<FiActivity />} loading={ops.loading} error={ops.error}>
-          <pre className="opa-mono" style={{ fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
+          <pre className="oui-mono" style={{ fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
             {JSON.stringify({
               goroutines: o.goroutines,
               heap_alloc_bytes: o.heap_alloc_bytes,

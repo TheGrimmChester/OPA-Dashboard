@@ -21,7 +21,7 @@ export default function HubDeferredSurface({ id, title, subtitle, embedded = fal
   if (embedded) return body
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       {(title || subtitle) && (
         <div className="opa-page-head">
           <div>

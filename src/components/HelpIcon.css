@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   position: relative;
-  margin-left: var(--spacing-xs, 4px);
+  margin-left: var(--space-1, 4px);
   cursor: help;
   vertical-align: middle;
 }
@@ -17,7 +17,7 @@
   width: 16px;
   height: 16px;
   color: var(--text-secondary, #94a3b8);
-  transition: color var(--transition-base, 0.2s);
+  transition: color var(--dur-base) var(--ease);
   flex-shrink: 0;
 }
 
@@ -29,7 +29,7 @@
 .help-tooltip {
   position: absolute;
   z-index: 999999;
-  background-color: var(--bg-elevated, #1e293b);
+  background-color: var(--surface-2, #1e293b);
   color: var(--text-primary, #e2e8f0);
   padding: 6px 10px;
   border-radius: var(--radius-md, 6px);
@@ -37,7 +37,7 @@
   line-height: 1.4;
   max-width: 250px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--border-medium, #334155);
+  border: 1px solid var(--border-strong, #334155);
   white-space: normal;
   word-wrap: break-word;
   pointer-events: none;
@@ -76,7 +76,7 @@
   left: 50%;
   transform: translateX(-50%);
   border: 6px solid transparent;
-  border-top-color: var(--bg-elevated, #1e293b);
+  border-top-color: var(--surface-2, #1e293b);
 }
 
 .help-tooltip-bottom {
@@ -93,7 +93,7 @@
   left: 50%;
   transform: translateX(-50%);
   border: 6px solid transparent;
-  border-bottom-color: var(--bg-elevated, #1e293b);
+  border-bottom-color: var(--surface-2, #1e293b);
 }
 
 .help-tooltip-right {
@@ -109,7 +109,7 @@
   top: 50%;
   transform: translateY(-50%);
   border: 6px solid transparent;
-  border-right-color: var(--bg-elevated, #1e293b);
+  border-right-color: var(--surface-2, #1e293b);
 }
 
 .help-tooltip-left {
@@ -125,7 +125,7 @@
   top: 50%;
   transform: translateY(-50%);
   border: 6px solid transparent;
-  border-left-color: var(--bg-elevated, #1e293b);
+  border-left-color: var(--surface-2, #1e293b);
 }
 
 /* Responsive adjustments */

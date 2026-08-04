@@ -1,26 +1,27 @@
 /**
  * chartTheme.js
  *
- * A cohesive, theme-aware styling layer for the recharts visualizations used
- * across the dashboard. Colors are expressed as CSS `var(--token, fallback)`
- * references so they resolve live against whatever theme the app has applied
- * (the app currently ships a dark theme in `src/index.css`; if a light theme is
- * added, the charts adapt automatically). Every reference carries a sensible
- * hard-coded fallback so charts still render if a token is missing.
+ * The theme-aware styling layer for the recharts visualizations. Colors are CSS
+ * custom-property references, so a theme switch repaints every chart with no
+ * JavaScript involved.
  *
- * This module is purely additive: importing it has no side effects and it does
- * not change any behavior on its own.
+ * The tokens come from the family design system and are always defined, so these
+ * references carry no fallbacks. The fallbacks they used to carry were a hazard
+ * rather than a safety net: the axis colour fell back to a dark-theme grey, so
+ * axis labels were unreadable in light mode whenever the token behind it was
+ * missing.
+ *
+ * This module is purely additive: importing it has no side effects.
  */
 
 /**
- * Build a CSS custom-property reference with a fallback value.
+ * Build a CSS custom-property reference.
  * Works anywhere a color string is accepted (SVG stroke/fill, inline styles).
  * @param {string} name  CSS variable name, including the leading `--`.
- * @param {string} fallback  Value used when the variable is undefined.
- * @returns {string} e.g. "var(--color-primary-blue, #3b82f6)"
+ * @returns {string} e.g. "var(--chart-1)"
  */
-export function cssVar(name, fallback) {
-  return `var(${name}, ${fallback})`
+export function cssVar(name) {
+  return `var(${name})`
 }
 
 /**
@@ -47,52 +48,72 @@ export function readCssVar(name, fallback) {
 }
 
 /**
- * Categorical color palette (8 colors) mapped onto the app's design tokens.
- * Ordered for maximum adjacent contrast when used as a rotating series palette.
+ * The categorical order. Identical in every product in the family, so charts
+ * read alike across products and only the chrome carries the product identity.
+ *
+ * Fixed — assign in order, never cycle. Colour follows the entity, not its rank,
+ * so a filter that changes the series count must not repaint the survivors.
+ *
+ * Three light-mode slots (aqua, yellow, magenta) sit below 3:1 on the light
+ * surface by design. Wherever they appear, the chart ships visible direct labels
+ * or a table view; the palette is validated on that condition.
  */
 export const chartPalette = [
-  cssVar('--color-primary-blue', '#3b82f6'),
-  cssVar('--color-primary-green', '#10b981'),
-  cssVar('--color-primary-orange', '#f59e0b'),
-  cssVar('--color-primary-purple', '#8b5cf6'),
-  cssVar('--color-primary-red', '#ef4444'),
-  cssVar('--color-info-light', '#60a5fa'),
-  '#14b8a6', // teal — no matching token, dual-mode friendly
-  '#ec4899', // pink — no matching token, dual-mode friendly
+  cssVar('--chart-1'),
+  cssVar('--chart-2'),
+  cssVar('--chart-3'),
+  cssVar('--chart-4'),
+  cssVar('--chart-5'),
+  cssVar('--chart-6'),
+  cssVar('--chart-7'),
+  cssVar('--chart-8'),
 ]
 
+/** Everything past the eighth series folds into one recessive "Other" hue. */
+export const OTHER_SERIES_COLOR = cssVar('--text-muted')
+
 /**
- * Semantic colors for recurring metric types, so the same concept keeps the
- * same color across every chart in the dashboard.
+ * Semantic colours for recurring metric types, so the same concept keeps the
+ * same colour across every chart.
+ *
+ * Latency percentiles are series identities and take categorical slots. Error
+ * and success are genuine states, so they take the reserved status *mark* steps
+ * — the steps tuned for chart marks — and never a categorical slot.
  */
 export const semanticColors = {
-  p50: cssVar('--color-primary-blue', '#3b82f6'),
-  p95: cssVar('--color-primary-purple', '#8b5cf6'),
-  p99: cssVar('--color-primary-orange', '#f59e0b'),
-  throughput: cssVar('--color-primary-green', '#10b981'),
-  latency: cssVar('--color-primary-orange', '#f59e0b'),
-  error: cssVar('--color-error', '#ef4444'),
-  success: cssVar('--color-success', '#10b981'),
-  bytesSent: cssVar('--color-primary-blue', '#3b82f6'),
-  bytesReceived: cssVar('--color-primary-green', '#10b981'),
-  requests: cssVar('--color-primary-purple', '#8b5cf6'),
+  p50: cssVar('--chart-1'),
+  p95: cssVar('--chart-2'),
+  p99: cssVar('--chart-3'),
+  throughput: cssVar('--chart-1'),
+  latency: cssVar('--chart-2'),
+  error: cssVar('--st-critical'),
+  success: cssVar('--st-good'),
+  bytesSent: cssVar('--chart-1'),
+  bytesReceived: cssVar('--chart-2'),
+  requests: cssVar('--chart-3'),
 }
 
 /**
- * Pick a categorical color for series index `i`, wrapping around the palette.
+ * Colour for categorical series index `i`, assigned in order.
+ *
+ * Past the eighth series this returns the "Other" hue rather than cycling: a
+ * ninth series that reuses the first hue makes two different entities look like
+ * the same one. Fold the tail into "Other", facet, or use small multiples.
  * @param {number} i  Zero-based series index.
  * @returns {string}
  */
 export function seriesColor(i) {
-  const len = chartPalette.length
-  const idx = ((Math.round(i) % len) + len) % len
-  return chartPalette[idx]
+  const idx = Math.max(0, Math.round(i))
+  return idx < chartPalette.length ? chartPalette[idx] : OTHER_SERIES_COLOR
 }
 
-// Shared token references reused by the props objects below.
-const gridColor = cssVar('--border-light', '#334155')
-const axisTickColor = cssVar('--text-tertiary', '#94a3b8')
-const axisLabelColor = cssVar('--text-secondary', '#cbd5e1')
+// Shared token references reused by the props objects below. Axis and value text
+// wears text tokens, never a series colour — a categorical hue is illegible as
+// text on a light surface.
+const gridColor = cssVar('--chart-grid')
+const axisColor = cssVar('--chart-axis')
+const axisTickColor = cssVar('--text-muted')
+const axisLabelColor = cssVar('--text-secondary')
 
 /**
  * Subtle CartesianGrid props. Horizontal-only lines by default keep the plot
@@ -100,8 +121,9 @@ const axisLabelColor = cssVar('--text-secondary', '#cbd5e1')
  */
 export const gridProps = {
   stroke: gridColor,
-  strokeDasharray: '3 3',
-  strokeOpacity: 0.5,
+  // Solid, one step off the surface. A dashed gridline competes with the data
+  // for attention and reads as a series in its own right.
+  strokeOpacity: 1,
   vertical: false,
 }
 
@@ -112,9 +134,9 @@ export const gridProps = {
  */
 export const axisProps = {
   tick: { fill: axisTickColor, fontSize: 12 },
-  tickLine: { stroke: gridColor },
-  axisLine: { stroke: gridColor },
-  stroke: gridColor,
+  tickLine: { stroke: axisColor },
+  axisLine: { stroke: axisColor },
+  stroke: axisColor,
 }
 
 /**
@@ -145,25 +167,22 @@ export function axisLabel(value, axis = 'left') {
  */
 export const tooltipProps = {
   contentStyle: {
-    background: cssVar('--bg-elevated', '#1e293b'),
-    border: `1px solid ${cssVar('--border-medium', '#475569')}`,
-    borderRadius: cssVar('--radius-md', '8px'),
-    boxShadow: cssVar(
-      '--shadow-lg',
-      '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4)'
-    ),
-    color: cssVar('--text-primary', '#f1f5f9'),
-    fontSize: 12,
+    background: cssVar('--surface-1'),
+    border: `1px solid ${cssVar('--border-default')}`,
+    borderRadius: cssVar('--radius-md'),
+    boxShadow: cssVar('--shadow-pop'),
+    color: cssVar('--text-primary'),
+    fontSize: 13,
   },
   labelStyle: {
-    color: cssVar('--text-secondary', '#cbd5e1'),
+    color: cssVar('--text-secondary'),
     fontWeight: 600,
     marginBottom: 4,
   },
   itemStyle: {
-    color: cssVar('--text-primary', '#f1f5f9'),
+    color: cssVar('--text-primary'),
   },
-  cursor: { stroke: gridColor, strokeOpacity: 0.6 },
+  cursor: { stroke: axisColor },
 }
 
 /**

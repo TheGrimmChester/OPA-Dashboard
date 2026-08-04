@@ -7,10 +7,10 @@
   margin: 0 0 8px 0;
   padding: 8px 10px;
   border-radius: 6px;
-  background: var(--warn-subtle, var(--surface-2));
+  background: var(--warn-bg, var(--surface-2));
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
 }
 .tw-toolbar {
   display: flex;
@@ -24,12 +24,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
 }
-.tw-count { font-size: var(--fs-12, 12px); font-variant-numeric: tabular-nums; }
+.tw-count { font-size: var(--text-xs, 12px); font-variant-numeric: tabular-nums; }
 .tw-scroller {
   overflow: auto;
   border: 1px solid var(--border-subtle);
@@ -50,7 +50,7 @@
   position: absolute;
   top: 0;
   transform: translateX(-50%);
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -77,8 +77,8 @@
 }
 .tw-row:hover { background: var(--surface-3); }
 .tw-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.tw-row.is-selected { background: var(--accent-subtle); box-shadow: inset 2px 0 0 var(--accent); }
-.tw-row.is-replay-active { background: var(--ok-subtle, var(--accent-subtle)); }
+.tw-row.is-selected { background: var(--accent-wash); box-shadow: inset 2px 0 0 var(--accent); }
+.tw-row.is-replay-active { background: var(--good-bg, var(--accent-wash)); }
 .tw-row.is-replay-dim { opacity: 0.35; }
 .tw-row.is-replay-dim.is-replay-active,
 .tw-row.is-replay-active.is-replay-dim { opacity: 1; }
@@ -101,7 +101,7 @@
 }
 .tw-label-name {
   font-family: var(--font-mono);
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -128,7 +128,7 @@
 }
 .tw-dur {
   font-family: var(--font-mono);
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   color: var(--text-secondary);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -139,22 +139,22 @@
    these wrappers supply the banding and padding they would otherwise lack. */
 .td-prof { display: flex; flex-direction: column; min-width: 0; }
 .td-prof-bar {
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-1);
 }
 .td-prof-floor {
-  gap: var(--sp-2);
-  font-size: var(--fs-12);
+  gap: var(--space-2);
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 .td-prof-sum {
-  padding: var(--sp-4);
+  padding: var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-sunken);
+  background: var(--surface-inset);
 }
 .td-prof-view { min-width: 0; }
-.td-prof-graph { padding: var(--sp-3); overflow-x: auto; }
+.td-prof-graph { padding: var(--space-3); overflow-x: auto; }
 .td-prof-graph-inner { min-width: 0; }
 
 /* ---- Stacked horizontal bar (breakdown + data transfer) ---- */
@@ -182,7 +182,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
   color: var(--text-secondary);
 }
 .tb-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
@@ -204,12 +204,12 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
   color: var(--text-secondary);
 }
 .dt-total {
   font-family: var(--font-mono);
-  font-size: var(--fs-13, 13px);
+  font-size: var(--text-sm, 13px);
   color: var(--text-primary);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -219,7 +219,7 @@
 .td-drawer-overlay {
   position: fixed;
   inset: 0;
-  background: var(--bg-overlay);
+  background: var(--overlay);
   z-index: 40;
   animation: td-fade 120ms ease;
 }
@@ -229,7 +229,7 @@
   width: min(560px, 92vw);
   background: var(--surface-1);
   border-left: 1px solid var(--border-default);
-  box-shadow: var(--shadow-drawer);
+  box-shadow: var(--shadow-pop);
   z-index: 41;
   display: flex;
   flex-direction: column;
@@ -268,11 +268,11 @@
 
 /* ---- Misc ---- */
 .td-metastat { display: flex; flex-direction: column; gap: 2px; }
-.td-metastat .k { font-size: var(--fs-11, 11px); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.td-metastat .v { font-family: var(--font-mono); font-size: var(--fs-15, 15px); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.td-metastat .k { font-size: var(--text-2xs, 11px); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.td-metastat .v { font-family: var(--font-mono); font-size: var(--text-base, 15px); color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .td-sql {
   font-family: var(--font-mono);
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -281,7 +281,7 @@
   display: block;
 }
 .td-drawer-sub {
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -289,11 +289,11 @@
 }
 
 /* variable dumps (opa_dump) */
-.td-dumps { display: flex; flex-direction: column; gap: 12px; padding: var(--sp-3); }
+.td-dumps { display: flex; flex-direction: column; gap: 12px; padding: var(--space-3); }
 .td-dump { border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); overflow: hidden; }
-.td-dump-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border-subtle); font-size: var(--fs-12); color: var(--text-muted); }
-.td-dump-loc { color: var(--tier-app); }
-.td-dump-pre { margin: 0; padding: 10px 12px; font-family: var(--font-mono); font-size: var(--fs-12); line-height: 1.5; color: var(--text-secondary); white-space: pre; overflow: auto; max-height: 340px; background: var(--bg-sunken); }
+.td-dump-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border-subtle); font-size: var(--text-xs); color: var(--text-muted); }
+.td-dump-loc { color: var(--chart-1); }
+.td-dump-pre { margin: 0; padding: 10px 12px; font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5; color: var(--text-secondary); white-space: pre; overflow: auto; max-height: 340px; background: var(--surface-inset); }
 
 /* --- Span drawer: navigation + drill links ------------------------------
    Everything the drawer states about a span is a lead worth following, so
@@ -314,7 +314,7 @@
 .td-drill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
 .td-taggrid { display: flex; flex-direction: column; gap: 6px; }
-.td-tagrow { display: grid; grid-template-columns: minmax(90px, 140px) 1fr; gap: 8px; align-items: start; font-size: var(--fs-11); }
+.td-tagrow { display: grid; grid-template-columns: minmax(90px, 140px) 1fr; gap: 8px; align-items: start; font-size: var(--text-2xs); }
 .td-tagrow .opa-entity-chip { max-width: 100%; }
 
 /* Parent / child / sibling chips — one click to any neighbouring span. */
@@ -326,16 +326,16 @@
   max-width: 100%;
   padding: 3px 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-full, 999px);
   background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: var(--fs-11);
+  font-size: var(--text-2xs);
   cursor: pointer;
   overflow: hidden;
 }
 .td-relchip:hover { border-color: var(--accent); color: var(--text-primary); }
 .td-relchip.is-sibling { opacity: 0.85; }
-.td-relchip .opa-mono {
+.td-relchip .oui-mono {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

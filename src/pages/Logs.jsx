@@ -89,8 +89,8 @@ export default function Logs() {
       key: 'timestamp', header: 'Time', width: 150,
       render: (r) => (
         <span className="logs-time">
-          <span className="opa-mono">{clockOf(r.timestamp)}</span>{' '}
-          <span className="opa-muted">{fmtAgo(new Date(Number(r.timestamp)).toISOString())}</span>
+          <span className="oui-mono">{clockOf(r.timestamp)}</span>{' '}
+          <span className="oui-text-muted">{fmtAgo(new Date(Number(r.timestamp)).toISOString())}</span>
         </span>
       ),
       sortValue: (r) => Number(r.timestamp) || 0,
@@ -104,7 +104,7 @@ export default function Logs() {
       key: 'service', header: 'Service', width: 150,
       render: (r) => (r.service
         ? <EntityChip to={serviceHref(r.service)} title={`Service ${r.service}`}>{r.service}</EntityChip>
-        : <span className="opa-muted">—</span>),
+        : <span className="oui-text-muted">—</span>),
       sortValue: (r) => r.service,
     },
     {
@@ -116,7 +116,7 @@ export default function Logs() {
       key: 'trace_id', header: 'Trace', width: 118,
       render: (r) => (r.trace_id
         ? <EntityChip to={traceHref(r.trace_id)} title={`Open trace ${r.trace_id}`}>{String(r.trace_id).slice(0, 12)}</EntityChip>
-        : <span className="opa-muted">—</span>),
+        : <span className="oui-text-muted">—</span>),
       sortValue: (r) => r.trace_id || '',
     },
   ]
@@ -127,7 +127,7 @@ export default function Logs() {
   const hasNext = !!logsQ.data?.has_more || rows.length === LIMIT
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Logs</h1>
@@ -136,7 +136,7 @@ export default function Logs() {
             {' '}· correlated to traces
           </div>
         </div>
-        <div className="opa-row">
+        <div className="oui-row">
           <select className="opa-select" value={service} onChange={(e) => setParam('service', e.target.value)} aria-label="Service filter">
             <option value="">All services</option>
             {services.map((s) => <option key={s.service} value={s.service}>{s.service}</option>)}
@@ -155,7 +155,7 @@ export default function Logs() {
       </div>
 
       {/* Full-text search over the message body. */}
-      <div className="opa-row" style={{ gap: 'var(--sp-2)', alignItems: 'center' }}>
+      <div className="oui-row" style={{ gap: 'var(--space-2)', alignItems: 'center' }}>
         <div className="logs-search">
           <FiSearch size={13} className="logs-search-icon" />
           <input
@@ -188,7 +188,7 @@ export default function Logs() {
           valueFmt={(v) => fmtNum(v)} yFmt={(v) => fmtNum(v)}
           series={[
             { key: 'other', name: 'Logs', color: 'var(--accent)', type: 'bar' },
-            { key: 'errors', name: 'Errors', color: 'var(--error)', type: 'bar' },
+            { key: 'errors', name: 'Errors', color: 'var(--critical-text)', type: 'bar' },
           ]}
         />
       </Panel>
@@ -203,7 +203,7 @@ export default function Logs() {
               onClick={() => setParam('level', level === f.value ? '' : f.value)}
             >
               <StatusPill tone={levelTone(f.value)}>{f.value || '—'}</StatusPill>
-              <span className="opa-tnum">{fmtNum(f.count)}</span>
+              <span className="oui-num">{fmtNum(f.count)}</span>
             </button>
           ))}
           {serviceFacets.map((f) => (
@@ -212,8 +212,8 @@ export default function Logs() {
               className={`logs-chip${service === f.value ? ' active' : ''}`}
               onClick={() => setParam('service', service === f.value ? '' : f.value)}
             >
-              <span className="opa-mono">{f.value || '—'}</span>
-              <span className="opa-tnum">{fmtNum(f.count)}</span>
+              <span className="oui-mono">{f.value || '—'}</span>
+              <span className="oui-num">{fmtNum(f.count)}</span>
             </button>
           ))}
         </div>
@@ -226,8 +226,8 @@ export default function Logs() {
         empty={!logsQ.loading && rows.length === 0}
         emptyText="No logs match these filters"
         actions={(
-          <div className="opa-row" style={{ fontSize: 'var(--fs-12)' }}>
-            <span className="opa-muted opa-tnum">
+          <div className="oui-row" style={{ fontSize: 'var(--text-xs)' }}>
+            <span className="oui-text-muted oui-num">
               {rows.length ? `${pageStart}–${pageEnd}` : '0 logs'}
             </span>
             <button className="opa-btn" disabled={!hasPrev}
@@ -260,7 +260,7 @@ export default function Logs() {
           <Panel
             title="Log entry" icon={<FiFileText />}
             actions={(
-              <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+              <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
                 {row.trace_id && (
                   <button className="opa-btn" onClick={() => navigate(`/traces/${encodeURIComponent(row.trace_id)}`)}>
                     Open trace
@@ -275,8 +275,8 @@ export default function Logs() {
                 <StatusPill tone={levelTone(row.level)}>{row.level || '—'}</StatusPill>
                 {row.service
                   ? <EntityChip to={serviceHref(row.service)}>{row.service}</EntityChip>
-                  : <span className="opa-mono">—</span>}
-                <span className="opa-muted">{clockOf(row.timestamp)}</span>
+                  : <span className="oui-mono">—</span>}
+                <span className="oui-text-muted">{clockOf(row.timestamp)}</span>
                 {row.trace_id && (
                   <EntityChip to={traceHref(row.trace_id)} title={row.trace_id}>
                     {String(row.trace_id).slice(0, 16)}

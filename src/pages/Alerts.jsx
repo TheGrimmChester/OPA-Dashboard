@@ -198,7 +198,7 @@ export default function Alerts() {
         <div style={{ minWidth: 0 }}>
           <div className="cell-strong">{r.name || '—'}</div>
           {r.description && (
-            <div className="opa-muted" style={{ fontSize: 'var(--fs-11)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {r.description}
             </div>
           )}
@@ -208,8 +208,8 @@ export default function Alerts() {
     {
       key: 'condition', header: 'Condition', sortValue: (r) => r.condition_type || '',
       render: (r) => (
-        <span className="opa-mono">
-          <span className="opa-muted">{r.condition_type || '—'}</span>{' '}
+        <span className="oui-mono">
+          <span className="oui-text-muted">{r.condition_type || '—'}</span>{' '}
           {opSym(r.condition_config?.operator)}{' '}
           <span className="cell-strong">{r.condition_config?.threshold ?? '—'}</span>
         </span>
@@ -218,12 +218,12 @@ export default function Alerts() {
     {
       key: 'action', header: 'Action', sortValue: (r) => r.action_type || '',
       render: (r) => (
-        <div className="opa-row" style={{ gap: 6, minWidth: 0 }}>
+        <div className="oui-row" style={{ gap: 6, minWidth: 0 }}>
           <Badge title={r.action_type}>{r.action_type || '—'}</Badge>
           <span
-            className="opa-muted opa-mono"
+            className="oui-text-muted oui-mono"
             title={actionTarget(r)}
-            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--fs-11)' }}
+            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--text-2xs)' }}
           >
             {actionTarget(r) || '—'}
           </span>
@@ -232,7 +232,7 @@ export default function Alerts() {
     },
     {
       key: 'service', header: 'Service', sortValue: (r) => r.service || '',
-      render: (r) => <span className="opa-mono opa-muted">{r.service || '—'}</span>,
+      render: (r) => <span className="oui-mono oui-text-muted">{r.service || '—'}</span>,
     },
     {
       key: 'enabled', header: 'Status', sortValue: (r) => (r.enabled ? 1 : 0),
@@ -256,13 +256,13 @@ export default function Alerts() {
   const histColumns = [
     {
       key: 'fired_at', header: 'Fired', num: true, sortValue: (r) => parseTs(r.fired_at) || 0,
-      render: (r) => <span className="opa-muted opa-tnum">{fmtAgo(parseTs(r.fired_at))}</span>,
+      render: (r) => <span className="oui-text-muted oui-num">{fmtAgo(parseTs(r.fired_at))}</span>,
     },
     {
       key: 'condition', header: 'Condition', sortable: false,
       render: (r) => (
-        <span className="opa-mono">
-          <span className="opa-muted">{r.condition_type || '—'}</span> {opSym(r.operator)} {r.threshold ?? '—'}
+        <span className="oui-mono">
+          <span className="oui-text-muted">{r.condition_type || '—'}</span> {opSym(r.operator)} {r.threshold ?? '—'}
         </span>
       ),
     },
@@ -271,7 +271,7 @@ export default function Alerts() {
       render: (r) => (
         <span className="alerts-vt">
           <span className="cell-strong">{r.value ?? '—'}</span>{' '}
-          <span className="opa-muted">vs {r.threshold ?? '—'}</span>
+          <span className="oui-text-muted">vs {r.threshold ?? '—'}</span>
         </span>
       ),
     },
@@ -290,7 +290,7 @@ export default function Alerts() {
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Alerts</h1>
@@ -304,18 +304,18 @@ export default function Alerts() {
       <div className="opa-grid cols-4">
         <KpiTile
           label="Total rules" icon={<FiBell size={12} />} value={fmtNum(total)} unit="rules" status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{servicesCovered} service{servicesCovered === 1 ? '' : 's'} scoped</span>}
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{servicesCovered} service{servicesCovered === 1 ? '' : 's'} scoped</span>}
         />
         <KpiTile
           label="Enabled" icon={<FiCheckCircle size={12} />} value={fmtNum(enabled)} status={enabled > 0 ? 'ok' : 'neutral'}
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{disabled} disabled</span>}
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{disabled} disabled</span>}
         />
         <KpiTile
           label="Webhook" icon={<FiLink size={12} />} value={fmtNum(byAction.webhook)} unit="rules" status="neutral"
         />
         <KpiTile
           label="Slack & Email" icon={<FiMessageSquare size={12} />} value={fmtNum(byAction.slack + byAction.email)} unit="rules" status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{byAction.slack} Slack · {byAction.email} Email</span>}
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{byAction.slack} Slack · {byAction.email} Email</span>}
         />
       </div>
 
@@ -415,7 +415,7 @@ export default function Alerts() {
           empty={!historyQ.loading && history.length === 0}
           emptyText="No firings recorded yet"
           actions={(
-            <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+            <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
               {testingId === selectedId && <StatusPill tone="warn">checking…</StatusPill>}
               <button className="opa-btn ghost" onClick={() => historyQ.reload()} title="Refresh"><FiRefreshCw size={12} /> Refresh</button>
               <button className="opa-btn ghost" onClick={() => setSelectedId(null)} title="Close"><FiX size={12} /></button>

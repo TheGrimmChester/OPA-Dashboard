@@ -9,9 +9,7 @@ import {
   Badge, HealthDot, LanguageBadge,
 } from '../components/ui'
 import RelatedContextRail from '../components/ui/RelatedContextRail'
-import {
-  fmtMs, fmtNum, fmtPct, fmtBytes, tierColor, latencyStatus, errorRateStatus,
-} from '../theme/format'
+import { fmtMs, fmtNum, fmtPct, fmtBytes, tierColor, latencyStatus, errorRateStatus, statusColor } from '../theme/format'
 import { logsHref, tracesHref } from '../utils/entityLinks'
 import './ServiceDetail.css'
 
@@ -70,9 +68,9 @@ export default function ServiceDetail() {
   // ---- Endpoints table ----
   const epColumns = [
     { key: 'name', header: 'Endpoint', mono: true, render: (r) => (
-      <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+      <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
         <HealthDot tone={errorRateStatus(r.count ? ((r.error_count || 0) / r.count) * 100 : 0)} />
-        <span className="cell-strong opa-mono">{r.name || '—'}</span>
+        <span className="cell-strong oui-mono">{r.name || '—'}</span>
       </div>
     ), sortValue: (r) => r.name || '' },
     { key: 'count', header: 'Count', num: true, render: (r) => (
@@ -83,14 +81,14 @@ export default function ServiceDetail() {
     { key: 'avg_duration', header: 'Avg', num: true, render: (r) => fmtMs(r.avg_duration) },
     { key: 'p95_duration', header: 'p95', num: true, render: (r) => (
       r.p95_duration != null
-        ? <span style={{ color: `var(--${latencyStatus(r.p95_duration)})` }}>{fmtMs(r.p95_duration)}</span>
-        : <span className="opa-muted">—</span>
+        ? <span style={{ color: statusColor(latencyStatus(r.p95_duration)) }}>{fmtMs(r.p95_duration)}</span>
+        : <span className="oui-text-muted">—</span>
     ) },
     { key: 'error', header: 'Errors', num: true, sortValue: (r) => (r.count ? (r.error_count || 0) / r.count : 0), render: (r) => {
       const rate = r.count ? ((r.error_count || 0) / r.count) * 100 : 0
       return (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <InlineBar value={rate} max={100} label={fmtPct(rate)} color={`var(--${errorRateStatus(rate)})`} width={80} />
+          <InlineBar value={rate} max={100} label={fmtPct(rate)} color={statusColor(errorRateStatus(rate))} width={80} />
         </div>
       )
     } },
@@ -108,22 +106,22 @@ export default function ServiceDetail() {
 
   const httpColumns = [
     { key: 'url', header: 'URL', mono: true, render: (r) => (
-      <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+      <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
         <HealthDot tone={errorRateStatus(r.error_rate)} />
-        <span className="cell-strong opa-mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.url || '—'}</span>
+        <span className="cell-strong oui-mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.url || '—'}</span>
       </div>
     ), sortValue: (r) => r.url || '' },
     { key: 'method', header: 'Method', render: (r) => <Badge>{r.method || 'GET'}</Badge>, sortValue: (r) => r.method || '' },
     { key: 'call_count', header: 'Calls', num: true, render: (r) => fmtNum(r.call_count) },
     { key: 'avg_duration', header: 'Avg', num: true, render: (r) => fmtMs(r.avg_duration) },
-    { key: 'max_duration', header: 'Max', num: true, render: (r) => <span style={{ color: `var(--${latencyStatus(r.max_duration)})` }}>{fmtMs(r.max_duration)}</span> },
-    { key: 'error_rate', header: 'Error %', num: true, render: (r) => <span style={{ color: `var(--${errorRateStatus(r.error_rate)})` }}>{fmtPct(r.error_rate)}</span> },
+    { key: 'max_duration', header: 'Max', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.max_duration)) }}>{fmtMs(r.max_duration)}</span> },
+    { key: 'error_rate', header: 'Error %', num: true, render: (r) => <span style={{ color: statusColor(errorRateStatus(r.error_rate)) }}>{fmtPct(r.error_rate)}</span> },
     { key: 'bytes_out', header: 'Sent', num: true, sortValue: (r) => r.total_bytes_sent || 0, render: (r) => xferCell(r.total_bytes_sent, maxBytesOut, 'app', '↑') },
     { key: 'bytes_in', header: 'Received', num: true, sortValue: (r) => r.total_bytes_received || 0, render: (r) => xferCell(r.total_bytes_received, maxBytesIn, 'db', '↓') },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <EntityHeader
         title={svc}
         subtitle="Service summary"
@@ -134,12 +132,12 @@ export default function ServiceDetail() {
           </>
         }
         meta={
-          <span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>
+          <span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>
             {fmtNum(s.total_traces || 0)} traces · {fmtNum(s.total_spans || 0)} spans
           </span>
         }
         actions={(
-          <div className="opa-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <div className="oui-row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <Link className="opa-btn ghost" to={tracesHref({ service: svc })}>Traces</Link>
             <Link className="opa-btn ghost" to={tracesHref({ service: svc, status: 'error' })}>Errors</Link>
             <Link className="opa-btn ghost" to={logsHref({ service: svc })}>Logs</Link>
@@ -148,34 +146,34 @@ export default function ServiceDetail() {
       />
 
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-        <div className="opa-stack" style={{ flex: 1, minWidth: 0 }}>
+        <div className="oui-stack" style={{ flex: 1, minWidth: 0 }}>
       {/* Golden signals */}
       <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile label="Throughput" icon={<FiActivity size={12} />} value={fmtNum(s.total_traces || 0)} unit="traces" status="neutral"
           spark={spark('throughput')} sparkColor="var(--accent)" current={tpCur} previous={tpPrev} />
         <KpiTile label="Avg response" icon={<FiClock size={12} />} value={fmtMs(s.avg_duration)} status={latencyStatus(s.avg_duration)} />
         <KpiTile label="p95 response" icon={<FiZap size={12} />} value={fmtMs(s.p95_duration)} status={latencyStatus(s.p95_duration)}
-          spark={spark('p95')} sparkColor="var(--warn)" current={p95Cur} previous={p95Prev} invert />
+          spark={spark('p95')} sparkColor="var(--warn-text)" current={p95Cur} previous={p95Prev} invert />
         <KpiTile label="p99 response" icon={<FiTrendingUp size={12} />} value={fmtMs(s.p99_duration)} status={latencyStatus(s.p99_duration)}
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>p50 {fmtMs(s.p50_duration)}</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>p50 {fmtMs(s.p50_duration)}</span>} />
         <KpiTile label="Error rate" icon={<FiAlertTriangle size={12} />} value={fmtPct(errorRate)} status={errorRateStatus(errorRate)}
-          spark={spark('error_rate')} sparkColor="var(--error)" current={erCur} previous={erPrev} invert
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{fmtNum(s.error_count || 0)} errors</span>} />
+          spark={spark('error_rate')} sparkColor="var(--critical-text)" current={erCur} previous={erPrev} invert
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtNum(s.error_count || 0)} errors</span>} />
       </div>
 
       {/* Charts */}
       <div className="opa-grid cols-2">
         <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
           <TimeSeriesChart brushZoom data={metrics} series={[
-            { key: 'p50', name: 'p50', color: 'var(--p50)', type: 'line' },
-            { key: 'p95', name: 'p95', color: 'var(--p95)', type: 'line' },
-            { key: 'p99', name: 'p99', color: 'var(--p99)', type: 'line' },
+            { key: 'p50', name: 'p50', color: 'var(--chart-1)', type: 'line' },
+            { key: 'p95', name: 'p95', color: 'var(--chart-2)', type: 'line' },
+            { key: 'p99', name: 'p99', color: 'var(--chart-3)', type: 'line' },
           ]} valueFmt={fmtMs} yFmt={fmtMs} height={230} />
         </Panel>
         <Panel title="Throughput & errors" icon={<FiActivity />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
           <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'throughput', name: 'Throughput', color: 'var(--accent)', type: 'bar' },
-            { key: 'error_rate', name: 'Error %', color: 'var(--error)', type: 'line' },
+            { key: 'error_rate', name: 'Error %', color: 'var(--critical-text)', type: 'line' },
           ]} valueFmt={(v) => fmtNum(v)} height={230} />
         </Panel>
       </div>
@@ -202,7 +200,7 @@ export default function ServiceDetail() {
       {/* Outbound HTTP calls */}
       <Panel title="Outbound HTTP calls" icon={<FiGlobe />} flush loading={http.loading} error={http.error}
         empty={!http.loading && httpCalls.length === 0} emptyText="No outbound HTTP calls recorded"
-        actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>{fmtNum(totalCalls)} call{totalCalls === 1 ? '' : 's'}</span>}>
+        actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{fmtNum(totalCalls)} call{totalCalls === 1 ? '' : 's'}</span>}>
         <DataTable
           columns={httpColumns} rows={httpCalls} rowKey={(r, i) => `${r.method || ''}-${r.url || i}`}
           initialSort={{ key: 'call_count', dir: 'desc' }}

@@ -5,7 +5,7 @@ import {
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, HealthDot, Badge, InlineBar } from '../components/ui'
-import { fmtNum, fmtPct } from '../theme/format'
+import { fmtNum, fmtPct, statusColor } from '../theme/format'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -24,8 +24,8 @@ function sloStatus(metric) {
   return { tone: 'ok', label: 'healthy' }
 }
 
-const budgetColor = (v) => (v == null ? 'var(--neutral)' : v < 25 ? 'var(--error)' : v < 50 ? 'var(--warn)' : 'var(--ok)')
-const burnColor = (v) => (v == null ? 'var(--text-secondary)' : v > 1 ? 'var(--error)' : v > 0.8 ? 'var(--warn)' : 'var(--ok)')
+const budgetColor = (v) => (v == null ? 'var(--text-muted)' : v < 25 ? 'var(--critical-text)' : v < 50 ? 'var(--warn-text)' : 'var(--good-text)')
+const burnColor = (v) => (v == null ? 'var(--text-secondary)' : v > 1 ? 'var(--critical-text)' : v > 0.8 ? 'var(--warn-text)' : 'var(--good-text)')
 
 // Per-row helper: fetches an SLO's latest compliance metric and reports it up so
 // the parent can enrich rows and aggregate the KPI tiles. Renders nothing.
@@ -132,15 +132,15 @@ export default function Slos() {
       render: (r) => {
         const st = sloStatus(r._c?.metric)
         return (
-          <div className="opa-row" style={{ minWidth: 0, gap: 8 }}>
+          <div className="oui-row" style={{ minWidth: 0, gap: 8 }}>
             <HealthDot tone={st.tone} title={st.label} />
             <div style={{ minWidth: 0 }}>
-              <div className="opa-row" style={{ gap: 6 }}>
+              <div className="oui-row" style={{ gap: 6 }}>
                 <span className="cell-strong">{r.name || '—'}</span>
                 <Badge title={`SLO type: ${r.slo_type}`}>{r.slo_type}</Badge>
               </div>
               {r.description && (
-                <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.description}>
+                <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.description}>
                   {r.description}
                 </div>
               )}
@@ -153,14 +153,14 @@ export default function Slos() {
       key: 'service',
       header: 'Service',
       sortValue: (r) => r.service || '',
-      render: (r) => <span className="opa-mono opa-muted">{r.service || '—'}</span>,
+      render: (r) => <span className="oui-mono oui-text-muted">{r.service || '—'}</span>,
     },
     {
       key: 'target',
       header: 'Target',
       num: true,
       sortValue: (r) => r.target_value ?? null,
-      render: (r) => <span className="opa-tnum">{fmtPct(r.target_value)}</span>,
+      render: (r) => <span className="oui-num">{fmtPct(r.target_value)}</span>,
     },
     {
       key: 'actual',
@@ -169,9 +169,9 @@ export default function Slos() {
       sortValue: (r) => r._c?.metric?.actual_value ?? null,
       render: (r) => {
         const e = r._c
-        if (!e || e.loading) return <span className="opa-muted">…</span>
-        if (!e.metric) return <span className="opa-muted">—</span>
-        return <span className="opa-tnum">{fmtPct(e.metric.actual_value)}</span>
+        if (!e || e.loading) return <span className="oui-text-muted">…</span>
+        if (!e.metric) return <span className="oui-text-muted">—</span>
+        return <span className="oui-num">{fmtPct(e.metric.actual_value)}</span>
       },
     },
     {
@@ -181,10 +181,10 @@ export default function Slos() {
       sortValue: (r) => r._c?.metric?.compliance_percentage ?? null,
       render: (r) => {
         const e = r._c
-        if (!e || e.loading) return <span className="opa-muted">…</span>
-        if (!e.metric) return <span className="opa-muted" style={{ fontStyle: 'italic' }}>Awaiting first evaluation</span>
+        if (!e || e.loading) return <span className="oui-text-muted">…</span>
+        if (!e.metric) return <span className="oui-text-muted" style={{ fontStyle: 'italic' }}>Awaiting first evaluation</span>
         const tone = sloStatus(e.metric).tone
-        return <span className="opa-tnum" style={tone !== 'neutral' ? { color: `var(--${tone})` } : undefined}>{fmtPct(e.metric.compliance_percentage)}</span>
+        return <span className="oui-num" style={tone !== 'neutral' ? { color: statusColor(tone) } : undefined}>{fmtPct(e.metric.compliance_percentage)}</span>
       },
     },
     {
@@ -194,7 +194,7 @@ export default function Slos() {
       sortValue: (r) => r._c?.metric?.error_budget_remaining ?? null,
       render: (r) => {
         const m = r._c?.metric
-        if (!m) return <span className="opa-muted">—</span>
+        if (!m) return <span className="oui-text-muted">—</span>
         const v = m.error_budget_remaining
         return (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -210,8 +210,8 @@ export default function Slos() {
       sortValue: (r) => r._c?.metric?.burn_rate ?? null,
       render: (r) => {
         const m = r._c?.metric
-        if (!m) return <span className="opa-muted">—</span>
-        return <span className="opa-tnum" style={{ color: burnColor(m.burn_rate) }}>{fmtBurn(m.burn_rate)}</span>
+        if (!m) return <span className="oui-text-muted">—</span>
+        return <span className="oui-num" style={{ color: burnColor(m.burn_rate) }}>{fmtBurn(m.burn_rate)}</span>
       },
     },
     {
@@ -230,7 +230,7 @@ export default function Slos() {
       align: 'right',
       width: 96,
       render: (r) => (
-        <div className="opa-row" style={{ justifyContent: 'flex-end', gap: 2 }}>
+        <div className="oui-row" style={{ justifyContent: 'flex-end', gap: 2 }}>
           <button className="opa-btn ghost" onClick={(e) => { e.stopPropagation(); startEdit(r) }} title="Edit SLO">
             <FiEdit2 size={13} />
           </button>
@@ -243,7 +243,7 @@ export default function Slos() {
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       {/* Per-row compliance fetchers (render nothing). */}
       {slos.map((s) => <SloComplianceFetcher key={s.id} id={s.id} onLoad={onLoad} />)}
 
@@ -283,7 +283,7 @@ export default function Slos() {
         emptyText="No SLOs yet — define one below"
         flush
       >
-        <div style={{ padding: 'var(--sp-3) var(--sp-3) 0' }}>
+        <div style={{ padding: 'var(--space-3) var(--space-3) 0' }}>
           <form className="opa-inline-form" onSubmit={submit}>
             <input className="opa-input" placeholder="Name (e.g. Checkout availability)" value={form.name} onChange={set('name')} />
             <input className="opa-input" placeholder="Service" value={form.service} onChange={set('service')} />
@@ -305,7 +305,7 @@ export default function Slos() {
           </form>
           {formErr && <div className="opa-form-err">{String(formErr)}</div>}
           {noneEvaluated && (
-            <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginBottom: 'var(--sp-3)' }}>
+            <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)' }}>
               Awaiting first evaluation — compliance metrics appear once the evaluator has run.
             </div>
           )}

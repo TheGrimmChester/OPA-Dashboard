@@ -42,7 +42,7 @@ function ExportButton({ filters = {}, label = 'Export' }) {
   }
 
   return (
-    <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+    <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
       <select
         value={format}
         onChange={(e) => setFormat(e.target.value)}

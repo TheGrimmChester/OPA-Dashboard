@@ -5,7 +5,7 @@ import { useApi } from '../hooks/useApi'
 import {
   Panel, KpiTile, DataTable, InlineBar, Badge, SegmentedControl,
 } from '../components/ui'
-import { fmtMs, fmtBytes, fmtNum, fmtPct, tierColor, latencyStatus, errorRateStatus } from '../theme/format'
+import { fmtMs, fmtBytes, fmtNum, fmtPct, tierColor, latencyStatus, errorRateStatus, statusColor } from '../theme/format'
 import './ExternalHttp.css'
 
 const SORTS = [
@@ -71,13 +71,13 @@ export default function ExternalHttp() {
     {
       key: 'url', header: 'Endpoint', sortValue: (r) => r?.url || '',
       render: (r) => (
-        <div className="exthttp-url opa-mono">
+        <div className="exthttp-url oui-mono">
           <span className="exthttp-host" title={r?.url}>{r?.url || r?.request_uri || '—'}</span>
           {r?.request_uri && <span className="exthttp-path" title={r?.request_uri}>{r?.request_uri}</span>}
         </div>
       ),
     },
-    { key: 'service', header: 'Service', sortValue: (r) => r?.service || '', render: (r) => <span className="opa-mono opa-muted">{r?.service || '—'}</span> },
+    { key: 'service', header: 'Service', sortValue: (r) => r?.service || '', render: (r) => <span className="oui-mono oui-text-muted">{r?.service || '—'}</span> },
     {
       key: 'call_count', header: 'Calls', num: true, sortValue: (r) => r?.call_count || 0,
       render: (r) => (
@@ -86,22 +86,22 @@ export default function ExternalHttp() {
         </div>
       ),
     },
-    { key: 'avg_duration', header: 'Avg', num: true, sortValue: (r) => r?.avg_duration || 0, render: (r) => <span style={{ color: `var(--${latencyStatus(r?.avg_duration)})` }}>{fmtMs(r?.avg_duration)}</span> },
-    { key: 'max_duration', header: 'Max', num: true, sortValue: (r) => r?.max_duration || 0, render: (r) => <span style={{ color: `var(--${latencyStatus(r?.max_duration)})` }}>{fmtMs(r?.max_duration)}</span> },
+    { key: 'avg_duration', header: 'Avg', num: true, sortValue: (r) => r?.avg_duration || 0, render: (r) => <span style={{ color: statusColor(latencyStatus(r?.avg_duration)) }}>{fmtMs(r?.avg_duration)}</span> },
+    { key: 'max_duration', header: 'Max', num: true, sortValue: (r) => r?.max_duration || 0, render: (r) => <span style={{ color: statusColor(latencyStatus(r?.max_duration)) }}>{fmtMs(r?.max_duration)}</span> },
     {
       key: 'error_rate', header: 'Errors', num: true, sortValue: (r) => r?.error_rate || 0,
       render: (r) => (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <InlineBar value={r?.error_rate || 0} max={100} label={fmtPct(r?.error_rate || 0)} color={`var(--${errorRateStatus(r?.error_rate || 0)})`} width={80} />
+          <InlineBar value={r?.error_rate || 0} max={100} label={fmtPct(r?.error_rate || 0)} color={statusColor(errorRateStatus(r?.error_rate || 0))} width={80} />
         </div>
       ),
     },
     {
       key: 'io', header: 'Bytes (out / in)', num: true, sortValue: (r) => (r?.total_bytes_sent || 0) + (r?.total_bytes_received || 0),
       render: (r) => (
-        <span className="opa-mono">
+        <span className="oui-mono">
           <span style={{ color: tierColor('http') }}>↑{fmtBytes(r?.total_bytes_sent)}</span>{' '}
-          <span className="opa-muted">/</span>{' '}
+          <span className="oui-text-muted">/</span>{' '}
           <span style={{ color: tierColor('app') }}>↓{fmtBytes(r?.total_bytes_received)}</span>
         </span>
       ),
@@ -109,7 +109,7 @@ export default function ExternalHttp() {
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">External Services</h1>
@@ -118,7 +118,7 @@ export default function ExternalHttp() {
             {service !== 'all' ? ` · scoped to ${service}` : ''}
           </div>
         </div>
-        <div className="opa-row">
+        <div className="oui-row">
           <select className="exthttp-select" value={service} onChange={(e) => setService(e.target.value)} aria-label="Service scope">
             <option value="all">All services</option>
             {services.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -130,9 +130,9 @@ export default function ExternalHttp() {
         <KpiTile label="Outbound calls" icon={<FiActivity size={12} />} value={fmtNum(totals.calls)} unit="calls" status="neutral" />
         <KpiTile label="Avg latency" icon={<FiClock size={12} />} value={fmtMs(avgLatency)} status={latencyStatus(avgLatency)} />
         <KpiTile label="Error rate" icon={<FiAlertTriangle size={12} />} value={fmtPct(errRate)} status={errorRateStatus(errRate)}
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{fmtNum(totals.errors)} errors</span>} />
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtNum(totals.errors)} errors</span>} />
         <KpiTile label="Bandwidth" icon={<FiHardDrive size={12} />} value={fmtBytes(bandwidth)} status="neutral"
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>
             <span style={{ color: tierColor('http') }}>↑{fmtBytes(totals.sent)}</span> · <span style={{ color: tierColor('app') }}>↓{fmtBytes(totals.recv)}</span>
           </span>} />
       </div>
@@ -141,8 +141,8 @@ export default function ExternalHttp() {
         loading={q.loading} error={q.error} empty={!q.loading && rows.length === 0}
         emptyText="No outbound HTTP calls in range"
         actions={
-          <div className="opa-row" style={{ gap: 8 }}>
-            <span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>sort</span>
+          <div className="oui-row" style={{ gap: 8 }}>
+            <span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>sort</span>
             <SegmentedControl options={SORTS} value={sort} onChange={setSort} />
           </div>
         }>

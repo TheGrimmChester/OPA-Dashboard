@@ -198,7 +198,7 @@ export default function ProfilingView() {
   const numCell = (col, row, text, color) => (
     ranked.ranker.col === col
       ? <InlineBar value={ranked.value(row)} max={ranked.max} label={text} color={color || 'var(--accent)'} />
-      : <span className="opa-tnum">{text}</span>
+      : <span className="oui-num">{text}</span>
   )
 
   const columns = [
@@ -207,7 +207,7 @@ export default function ProfilingView() {
       header: '#',
       num: true,
       width: 44,
-      render: (r) => <span className="opa-muted opa-tnum">{r._rank}</span>,
+      render: (r) => <span className="oui-text-muted oui-num">{r._rank}</span>,
       sortValue: (r) => r._rank,
     },
     {
@@ -232,7 +232,7 @@ export default function ProfilingView() {
                 {typeLabel(type)}
               </span>
             )}
-            <span className="opa-profiling-fn opa-mono cell-strong">{r.function || '—'}</span>
+            <span className="opa-profiling-fn oui-mono cell-strong">{r.function || '—'}</span>
             {r.members > 1 && <Badge title="functions folded into this group">{fmtNum(r.members)} fns</Badge>}
             {r.mixedService
               ? <Badge title="this group spans several services">multi-service</Badge>
@@ -255,7 +255,7 @@ export default function ProfilingView() {
       header: 'Self %',
       num: true,
       width: 76,
-      render: (r) => <span className="opa-tnum">{fmtPct(r.self_pct)}</span>,
+      render: (r) => <span className="oui-num">{fmtPct(r.self_pct)}</span>,
       sortValue: (r) => r.self_pct || 0,
     },
     {
@@ -263,7 +263,7 @@ export default function ProfilingView() {
       header: 'Total',
       num: true,
       width: 84,
-      render: (r) => <span className="opa-tnum">{fmtMs(r.total_wall_ms)}</span>,
+      render: (r) => <span className="oui-num">{fmtMs(r.total_wall_ms)}</span>,
       sortValue: (r) => r.total_wall_ms || 0,
     },
     {
@@ -271,7 +271,7 @@ export default function ProfilingView() {
       header: 'CPU',
       num: true,
       width: 120,
-      render: (r) => numCell('cpu', r, fmtMs(r.total_cpu_ms), 'var(--tier-app)'),
+      render: (r) => numCell('cpu', r, fmtMs(r.total_cpu_ms), 'var(--chart-1)'),
       sortValue: (r) => r.total_cpu_ms || 0,
     },
     {
@@ -281,8 +281,8 @@ export default function ProfilingView() {
       width: 120,
       render: (r) => numCell(
         'mem', r,
-        <span style={{ color: (r.memory_delta || 0) < 0 ? 'var(--ok)' : undefined }}>{fmtBytes(r.memory_delta)}</span>,
-        'var(--tier-cache)',
+        <span style={{ color: (r.memory_delta || 0) < 0 ? 'var(--good-text)' : undefined }}>{fmtBytes(r.memory_delta)}</span>,
+        'var(--chart-5)',
       ),
       sortValue: (r) => r.memory_delta || 0,
     },
@@ -291,21 +291,21 @@ export default function ProfilingView() {
       header: 'Calls',
       num: true,
       width: 110,
-      render: (r) => numCell('calls', r, fmtNum(r.call_count), 'var(--tier-db)'),
+      render: (r) => numCell('calls', r, fmtNum(r.call_count), 'var(--chart-2)'),
       sortValue: (r) => r.call_count || 0,
     },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Profiling</h1>
           <div className="opa-page-sub">
-            Aggregated function cost across all traces · call depth bounded by <span className="opa-mono">opa.stack_depth</span>
+            Aggregated function cost across all traces · call depth bounded by <span className="oui-mono">opa.stack_depth</span>
           </div>
         </div>
-        <div className="opa-row">
+        <div className="oui-row">
           <select
             className="opa-select"
             aria-label="Filter profiling data by service"
@@ -323,22 +323,22 @@ export default function ProfilingView() {
       <div className="opa-grid cols-4">
         <KpiTile
           label="Total self time" icon={<FiClock size={12} />} value={fmtMs(totalSelf)} status="neutral"
-          footer={<span className="opa-muted">{capped ? `top ${fmtNum(base.length)} covers ${fmtPct(coverage, 0)}` : 'complete'}</span>}
+          footer={<span className="oui-text-muted">{capped ? `top ${fmtNum(base.length)} covers ${fmtPct(coverage, 0)}` : 'complete'}</span>}
         />
         <KpiTile
           label={GROUP_PLURAL[groupBy] || 'Functions'} icon={<FiCode size={12} />}
           value={fmtNum(base.length)} status="neutral"
-          footer={<span className="opa-muted">{capped ? `capped at ${fmtNum(limit)}` : 'all returned'}</span>}
+          footer={<span className="oui-text-muted">{capped ? `capped at ${fmtNum(limit)}` : 'all returned'}</span>}
         />
         <KpiTile
           label="Total calls" icon={<FiHash size={12} />} value={fmtNum(baseCalls)} status="neutral"
-          footer={<span className="opa-muted">{fmtMs(avgSelf)} avg self / call</span>}
+          footer={<span className="oui-text-muted">{fmtMs(avgSelf)} avg self / call</span>}
         />
         <KpiTile
           label="Hottest share" icon={<FiTrendingUp size={12} />}
           value={hottest ? fmtPct(hottestPct) : '—'}
           status={hottestPct >= 40 ? 'warn' : 'neutral'}
-          footer={<span className="opa-muted opa-mono opa-profiling-kpifn">{hottest ? hottest.function : 'no data'}</span>}
+          footer={<span className="oui-text-muted oui-mono opa-profiling-kpifn">{hottest ? hottest.function : 'no data'}</span>}
         />
       </div>
 
@@ -370,8 +370,8 @@ export default function ProfilingView() {
                 structureMode: metricMissing, truncated: false,
               }}
               right={
-                <div className="opa-row opa-profiling-limit">
-                  <span className="opa-muted">Top</span>
+                <div className="oui-row opa-profiling-limit">
+                  <span className="oui-text-muted">Top</span>
                   <SegmentedControl options={LIMITS} value={limit} onChange={setLimit} />
                 </div>
               }
@@ -382,7 +382,7 @@ export default function ProfilingView() {
             <div className="opa-profiling-note">
               <FiAlertTriangle size={13} />
               <span>
-                <span className="opa-mono">/api/profiles</span> does not aggregate {METRIC_LABEL[metric] || metric} —
+                <span className="oui-mono">/api/profiles</span> does not aggregate {METRIC_LABEL[metric] || metric} —
                 rows are ranked by call count instead. Nothing below is a {METRIC_LABEL[metric] || metric} measurement.
               </span>
             </div>
@@ -391,7 +391,7 @@ export default function ProfilingView() {
             <div className="opa-profiling-note">
               <FiAlertTriangle size={13} />
               <span>
-                <span className="opa-mono">/api/profiles</span> rows carry no file path, so File grouping falls back
+                <span className="oui-mono">/api/profiles</span> rows carry no file path, so File grouping falls back
                 to one row per function.
               </span>
             </div>
@@ -411,7 +411,7 @@ export default function ProfilingView() {
               {selected && (
                 <div className="opa-profiling-detail">
                   <div className="opa-profiling-detail-head">
-                    <span className="opa-mono cell-strong opa-profiling-detail-name">{selected.function}</span>
+                    <span className="oui-mono cell-strong opa-profiling-detail-name">{selected.function}</span>
                     <span className="opa-badge">rank {selected._rank}</span>
                     {selected.service && <Badge>{selected.service}</Badge>}
                     <button
@@ -467,7 +467,7 @@ export default function ProfilingView() {
               ) : (
                 <>
                   <div className="opa-profiling-graph-head">
-                    <span className="opa-muted"><FiClock size={12} /> total {fmtMs(flame.data?.total_ms)}</span>
+                    <span className="oui-text-muted"><FiClock size={12} /> total {fmtMs(flame.data?.total_ms)}</span>
                   </div>
                   {/* Measured on the inner (unpadded) box so the SVG width matches
                       the real content width instead of overflowing by the padding. */}
@@ -488,7 +488,7 @@ function Stat({ k, v }) {
   return (
     <div className="opa-profiling-stat">
       <span className="k">{k}</span>
-      <span className="v opa-mono">{v}</span>
+      <span className="v oui-mono">{v}</span>
     </div>
   )
 }

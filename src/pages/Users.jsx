@@ -71,10 +71,10 @@ export default function Users() {
   }
 
   const columns = [
-    { key: 'username', header: 'Username', mono: true, render: (u) => <span className="cell-strong opa-mono">{u.username}</span>, sortValue: (u) => u.username },
-    { key: 'email', header: 'Email', render: (u) => u.email || <span className="opa-muted">—</span>, sortValue: (u) => u.email || '' },
+    { key: 'username', header: 'Username', mono: true, render: (u) => <span className="cell-strong oui-mono">{u.username}</span>, sortValue: (u) => u.username },
+    { key: 'email', header: 'Email', render: (u) => u.email || <span className="oui-text-muted">—</span>, sortValue: (u) => u.email || '' },
     { key: 'role', header: 'Role', sortValue: (u) => u.role, render: (u) => (
-      <div className="opa-row">
+      <div className="oui-row">
         <StatusPill tone={ROLE_TONE[u.role] || 'neutral'}>{u.role}</StatusPill>
         <select
           className="users-role-select"
@@ -95,13 +95,13 @@ export default function Users() {
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">Users &amp; Roles</h1>
           <div className="opa-page-sub">{fmtNum(users.length)} user{users.length === 1 ? '' : 's'} across {ROLES.length} roles</div>
         </div>
-        <div className="opa-row">
+        <div className="oui-row">
           <button className="users-icon-btn" style={{ color: 'var(--text-secondary)' }} onClick={() => q.reload()} title="Refresh"><FiRefreshCw size={15} /></button>
         </div>
       </div>

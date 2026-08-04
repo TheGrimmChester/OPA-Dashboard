@@ -1,0 +1,30 @@
+/* ============================================================================
+   OPA's own layer, loaded after the family stylesheet.
+   ============================================================================
+
+   This file is for things genuinely specific to this product, not for
+   re-implementing the design system. Anything that would be useful to a second
+   dashboard belongs in the kit instead — copy-pasting the system per product is
+   how the family ended up maintaining it five times.
+
+   The product accent is NOT set here. `applyProduct('opa')` stamps
+   `<html data-product="opa">` and the kit binds the accent from that, so this
+   file must never mention an accent value.
+
+   Component-scoped rules live next to their component (`SavedViews.css`,
+   `CommandPalette.css`, `src/pages/*.css`).
+   ============================================================================ */
+
+/* Whole-page full-screen mode: hide the shell chrome so a wall display or a
+   dense trace view gets the entire viewport. FullscreenToggle puts this class on
+   <html>, and the browser's own full-screen state is the source of truth. */
+.opa-page-fullscreen .oui-sidebar,
+.opa-page-fullscreen .oui-topbar {
+  display: none;
+}
+
+.opa-page-fullscreen .oui-content {
+  /* No rail to sit beside and no bar to sit under, so drop the centring cap. */
+  max-width: none;
+  padding-top: var(--space-4);
+}

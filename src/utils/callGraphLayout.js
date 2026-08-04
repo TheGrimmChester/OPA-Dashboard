@@ -49,7 +49,7 @@ export const EGO = {
   // pushes the name past the box edge (measured: it did).
   CHAR_W: 6.7,
   FOCUS_CHAR_W: 7.3,
-  // Both were calibrated for a 10px UI font; the CSS now uses --fs-11 (the
+  // Both were calibrated for a 10px UI font; the CSS now uses --text-2xs (the
   // smallest token, 11px) because 10px was below the type scale. Scaled by
   // 11/10 and rounded up, since over-estimating only truncates a char early
   // while under-estimating pushes text past the box edge.

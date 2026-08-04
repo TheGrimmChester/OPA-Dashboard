@@ -72,21 +72,21 @@ export default function Diagnostics() {
   }
 
   const susCols = [
-    { key: 'service', header: t('diag.service'), render: (r) => <span className="opa-mono">{r.service}</span> },
+    { key: 'service', header: t('diag.service'), render: (r) => <span className="oui-mono">{r.service}</span> },
     { key: 'release', header: t('diag.release'), render: (r) => <Badge>{r.release}</Badge> },
     { key: 'git_sha', header: 'SHA', render: (r) => r.diff_url ? (
-      <a className="opa-mono" href={r.diff_url} target="_blank" rel="noreferrer">{String(r.git_sha || '').slice(0, 8)}</a>
-    ) : <span className="opa-mono">{String(r.git_sha || '').slice(0, 8) || '—'}</span> },
+      <a className="oui-mono" href={r.diff_url} target="_blank" rel="noreferrer">{String(r.git_sha || '').slice(0, 8)}</a>
+    ) : <span className="oui-mono">{String(r.git_sha || '').slice(0, 8) || '—'}</span> },
     { key: 'author', header: t('diag.author'), render: (r) => r.author || '—' },
     { key: 'score', header: t('diag.score'), num: true, render: (r) => <StatusPill tone={r.score >= 70 ? 'warn' : 'neutral'}>{fmtNum(r.score)}</StatusPill> },
-    { key: 'evidence', header: t('diag.evidence'), render: (r) => <span className="opa-muted" style={{ fontSize: 12 }}>{(r.evidence || []).join('; ') || '—'}</span> },
+    { key: 'evidence', header: t('diag.evidence'), render: (r) => <span className="oui-text-muted" style={{ fontSize: 12 }}>{(r.evidence || []).join('; ') || '—'}</span> },
   ]
 
   const heapCols = [
-    { key: 'service', header: t('diag.service'), render: (r) => <span className="opa-mono">{r.service}</span> },
+    { key: 'service', header: t('diag.service'), render: (r) => <span className="oui-mono">{r.service}</span> },
     { key: 'runtime', header: 'Runtime', render: (r) => <Badge>{r.runtime || '—'}</Badge> },
     { key: 'total_bytes', header: t('diag.heap'), num: true, render: (r) => fmtBytes(r.total_bytes) },
-    { key: 'captured_at', header: t('diag.when'), num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.captured_at)}</span> },
+    { key: 'captured_at', header: t('diag.when'), num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.captured_at)}</span> },
   ]
 
   const parseDominators = (snap) => {
@@ -108,9 +108,9 @@ export default function Diagnostics() {
           const kids = n.children || n.dominators || n.nodes
           return (
             <li key={`${depth}-${i}-${name}`} style={{ marginBottom: 4, fontSize: 12 }}>
-              <span className="opa-mono">{name}</span>
+              <span className="oui-mono">{name}</span>
               {retained != null && (
-                <span className="opa-muted"> · {t('diag.retained')} {fmtBytes(retained)}</span>
+                <span className="oui-text-muted"> · {t('diag.retained')} {fmtBytes(retained)}</span>
               )}
               {Array.isArray(kids) && kids.length > 0 && renderDomTree(kids, depth + 1)}
             </li>
@@ -121,7 +121,7 @@ export default function Diagnostics() {
   }
 
   const thrCols = [
-    { key: 'service', header: t('diag.service'), render: (r) => <span className="opa-mono">{r.service}</span> },
+    { key: 'service', header: t('diag.service'), render: (r) => <span className="oui-mono">{r.service}</span> },
     { key: 'thread_name', header: t('diag.threads'), render: (r) => r.thread_name || '—' },
     { key: 'state', header: 'State', render: (r) => <Badge>{r.state}</Badge> },
     { key: 'samples', header: 'Samples', num: true, render: (r) => fmtNum(r.samples) },
@@ -129,15 +129,15 @@ export default function Diagnostics() {
   ]
 
   const lockCols = [
-    { key: 'service', header: t('diag.service'), render: (r) => <span className="opa-mono">{r.service}</span> },
-    { key: 'lock_name', header: t('diag.locks'), render: (r) => <span className="opa-mono">{r.lock_name}</span> },
+    { key: 'service', header: t('diag.service'), render: (r) => <span className="oui-mono">{r.service}</span> },
+    { key: 'lock_name', header: t('diag.locks'), render: (r) => <span className="oui-mono">{r.lock_name}</span> },
     { key: 'waiters', header: 'Waiters', num: true, render: (r) => fmtNum(r.waiters) },
     { key: 'wait_ms', header: 'Wait ms', num: true, render: (r) => fmtNum(r.wait_ms) },
-    { key: 'deadlock', header: 'Deadlock', render: (r) => (Number(r.deadlock) ? <StatusPill tone="error">yes</StatusPill> : <span className="opa-muted">no</span>) },
+    { key: 'deadlock', header: 'Deadlock', render: (r) => (Number(r.deadlock) ? <StatusPill tone="error">yes</StatusPill> : <span className="oui-text-muted">no</span>) },
   ]
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <h1 className="opa-page-title">{t('diag.title')}</h1>
@@ -157,7 +157,7 @@ export default function Diagnostics() {
 
       {msg && (
         <Panel title={t('diag.result')}>
-          <pre className="opa-mono" style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(msg, null, 2)}</pre>
+          <pre className="oui-mono" style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(msg, null, 2)}</pre>
         </Panel>
       )}
 
@@ -182,8 +182,8 @@ export default function Diagnostics() {
           <Panel title={t('diag.releases')} flush empty={!releases.loading && rels.length === 0} emptyText="—">
             <DataTable columns={[
               { key: 'release', header: t('diag.release'), render: (r) => <Badge>{r.release}</Badge> },
-              { key: 'git_sha', header: 'SHA', render: (r) => <span className="opa-mono">{String(r.git_sha || '').slice(0, 8)}</span> },
-              { key: 'deployed_at', header: t('diag.when'), num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.deployed_at)}</span> },
+              { key: 'git_sha', header: 'SHA', render: (r) => <span className="oui-mono">{String(r.git_sha || '').slice(0, 8)}</span> },
+              { key: 'deployed_at', header: t('diag.when'), num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.deployed_at)}</span> },
             ]} rows={rels} rowKey={(r) => r.id} maxHeight={220} />
           </Panel>
         </>
@@ -201,7 +201,7 @@ export default function Diagnostics() {
             const doms = parseDominators(row)
             return (
               <Panel title={t('diag.dominators')}>
-                {doms.length ? renderDomTree(doms) : <div className="opa-muted" style={{ fontSize: 12 }}>No dominators on this snapshot</div>}
+                {doms.length ? renderDomTree(doms) : <div className="oui-text-muted" style={{ fontSize: 12 }}>No dominators on this snapshot</div>}
               </Panel>
             )
           })()}

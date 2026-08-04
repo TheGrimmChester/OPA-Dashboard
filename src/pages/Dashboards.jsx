@@ -33,14 +33,14 @@ function WidgetCard({ widget, variables }) {
   const rows = data?.rows || []
   const cols = (data?.columns || []).map((c) => ({
     key: c, header: c,
-    render: (r) => <span className="opa-mono">{r[c] == null ? '—' : String(r[c])}</span>,
+    render: (r) => <span className="oui-mono">{r[c] == null ? '—' : String(r[c])}</span>,
   }))
 
   return (
     <Panel title={widget.title || widget.type} icon={<FiLayout />} error={err ? String(err) : null}
       style={{ gridColumn: `span ${widget.w || 4}`, minHeight: (widget.h || 3) * 56 }}>
       {widget.type === 'bignum' && (
-        <div className="opa-tnum" style={{ fontSize: 32 }}>{data?.value ?? '—'}</div>
+        <div className="oui-num" style={{ fontSize: 32 }}>{data?.value ?? '—'}</div>
       )}
       {(widget.type === 'table' || widget.type === 'toplist') && cols.length > 0 && (
         <DataTable columns={cols} rows={rows} rowKey={(_, i) => i} maxHeight={240} />
@@ -60,7 +60,7 @@ function WidgetCard({ widget, variables }) {
           series={[{ key: 'value', name: widget.title || 'value', color: 'var(--accent)', type: 'area' }]}
         />
       )}
-      {!data && !err && <div className="opa-muted">Loading…</div>}
+      {!data && !err && <div className="oui-text-muted">Loading…</div>}
     </Panel>
   )
 }
@@ -127,7 +127,7 @@ export default function Dashboards() {
   if (!id && !draft) {
     const rows = (list.data?.dashboards || []).filter((d) => d.config?.version === 2 || d.config?.widgets)
     return (
-      <div className="opa-stack">
+      <div className="oui-stack">
         <div className="opa-page-head">
           <div>
             <h1 className="opa-page-title">Dashboards</h1>
@@ -160,7 +160,7 @@ export default function Dashboards() {
             {rows.map((d) => (
               <Link key={d.id} to={`/dashboards/${d.id}`} className="opa-card" style={{ padding: 12, textDecoration: 'none' }}>
                 <div className="cell-strong">{d.name}</div>
-                <div className="opa-muted" style={{ fontSize: 12 }}>{d.description || d.id}</div>
+                <div className="oui-text-muted" style={{ fontSize: 12 }}>{d.description || d.id}</div>
                 <Badge>{(d.config?.widgets || []).length} widgets</Badge>
               </Link>
             ))}
@@ -174,7 +174,7 @@ export default function Dashboards() {
   const vars = { service: varService }
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <div className="opa-page-head">
         <div>
           <input className="opa-input" value={name} onChange={(e) => setName(e.target.value)} style={{ fontSize: 20, fontWeight: 600 }} />
