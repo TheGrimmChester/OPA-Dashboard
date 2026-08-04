@@ -4,11 +4,11 @@
 
 ### Changed
 - Dashboard is profiling/observability only: removed Security, Repo Watch, Perf Lab, review-provider settings, connectors, and roadmap from nav and routes. API traffic targets OPA-Hub via `VITE_API_URL` (nginx proxies `/api/` to `hub`).
+- Removed peer-mesh Federation UI (`/federation` route, nav, page). Topology is hub-spoke only — the dashboard talks to OPA-Hub; no legacy redirect.
 
 ### Added
 - Feature: Diagnostics page + i18n scaffold (en/fr) with locale switcher (`/diagnostics`).
 - Feature: Collaborate page — notebooks, status pages, comments, executive reports (`/collaborate`).
-- Feature: Federation page — region peers, residency policy, cross-border transfers (`/federation`).
 - Feature: Network page — flows, DNS/TLS health, agentless discovery, host profiles (`/network`).
 - Feature: Cloud page — resources, cost, tag violations, scrapes, cloud integrations (`/cloud`).
 - Feature: Automation page — ConfigBundle plan/apply/import, promote, revisions (`/automation`).
