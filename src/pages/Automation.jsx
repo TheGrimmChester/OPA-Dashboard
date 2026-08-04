@@ -4,8 +4,9 @@ import {
   FiCpu, FiDownload, FiUpload, FiGitMerge, FiPlay, FiFileText,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
+import { Panel, KpiTile, DataTable, StatusPill, Badge, HubDeferredSurface } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
+import { isHubDeferred } from '../utils/hubDeferred'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -27,6 +28,19 @@ const EMPTY_BUNDLE = `{
 
 /** Platform automation — mgmt API, plan/apply, export/import. */
 export default function Automation() {
+  if (isHubDeferred('automation')) {
+    return (
+      <HubDeferredSurface
+        id="automation"
+        title="Automation"
+        subtitle="Management API · plan / apply · export / import / promote"
+      />
+    )
+  }
+  return <AutomationLive />
+}
+
+function AutomationLive() {
   const [tab, setTab] = useState('plan')
   const [bundleText, setBundleText] = useState(EMPTY_BUNDLE)
   const [busy, setBusy] = useState(false)

@@ -4,9 +4,10 @@ import {
   FiShare2, FiGlobe, FiShield, FiServer, FiCpu, FiActivity, FiSearch,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
+import { Panel, KpiTile, DataTable, StatusPill, Badge, HubDeferredSurface } from '../components/ui'
 import { fmtNum, fmtAgo, fmtMs } from '../theme/format'
 import { useI18n } from '../contexts/I18nContext'
+import { isHubDeferred } from '../utils/hubDeferred'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -32,6 +33,14 @@ function Tabs({ tabs = [], value, onChange, t }) {
 
 /** Network ingest contract & host profiles. */
 export default function Network() {
+  const { t } = useI18n()
+  if (isHubDeferred('network')) {
+    return <HubDeferredSurface id="network" title={t('net.title')} subtitle={t('net.subtitle')} />
+  }
+  return <NetworkLive />
+}
+
+function NetworkLive() {
   const { t } = useI18n()
   const [tab, setTab] = useState('flows')
   const [probe, setProbe] = useState('example.com')

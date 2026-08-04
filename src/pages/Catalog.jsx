@@ -5,13 +5,27 @@ import {
   FiBookOpen, FiUsers, FiRefreshCw, FiShield, FiCheck, FiX, FiServer, FiLayers,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import { Panel, KpiTile, DataTable, StatusPill, Badge, HealthDot } from '../components/ui'
+import { Panel, KpiTile, DataTable, StatusPill, Badge, HealthDot, HubDeferredSurface } from '../components/ui'
 import { fmtNum, fmtPct, fmtMs, fmtAgo } from '../theme/format'
+import { isHubDeferred } from '../utils/hubDeferred'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 /** Service catalog with ownership and scorecards. */
 export default function Catalog() {
+  if (isHubDeferred('catalog')) {
+    return (
+      <HubDeferredSurface
+        id="catalog"
+        title="Service catalog"
+        subtitle="Entities · ownership · scorecards · account groups"
+      />
+    )
+  }
+  return <CatalogLive />
+}
+
+function CatalogLive() {
   const [tab, setTab] = useState('entities')
   const [kind, setKind] = useState('')
   const [busy, setBusy] = useState(false)
