@@ -14,7 +14,9 @@ const API = import.meta.env.VITE_API_URL || ''
  */
 export default function FacetSidebar({
   signal = 'spans',
-  fields = ['service', 'environment', 'release', 'host', 'status'],
+  // Prefer dims with real NAS data (language/framework). environment/host/release
+  // stay allowlisted on hub but are often empty until ingest fills them.
+  fields = ['service', 'language', 'framework', 'status'],
   value,
   onChange,
 }) {
