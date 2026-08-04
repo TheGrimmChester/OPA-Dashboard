@@ -2,8 +2,9 @@ import React, { useMemo, useState } from 'react'
 import { FiGitBranch, FiAlertTriangle } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { useTimeRange } from '../contexts/TimeRangeContext'
-import { Panel, DataTable, StatusPill, EmptyState, ErrorState, KpiTile } from './ui'
+import { Panel, DataTable, StatusPill, EmptyState, ErrorState, KpiTile, HubDeferredSurface } from './ui'
 import { fmtMs, fmtNum } from '../theme/format'
+import { isHubDeferred } from '../utils/hubDeferred'
 import './CallgraphWindowCompare.css'
 
 const CLASS_TONE = {
@@ -31,6 +32,13 @@ function defaultSplit(from, to) {
  * windows are passed.
  */
 export default function CallgraphWindowCompare({ service, transaction }) {
+  if (isHubDeferred('callgraphCompare')) {
+    return <HubDeferredSurface id="callgraphCompare" embedded />
+  }
+  return <CallgraphWindowCompareLive service={service} transaction={transaction} />
+}
+
+function CallgraphWindowCompareLive({ service, transaction }) {
   const { from, to } = useTimeRange()
   const windows = useMemo(() => defaultSplit(from, to), [from, to])
   const [svc, setSvc] = useState(service || '')
