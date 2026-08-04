@@ -11,6 +11,7 @@ describe('hubDeferred', () => {
       expect(copy.hint).toMatch(/deferred/i)
       expect(copy.hint).toMatch(/do not add fake hub routes/i)
     }
+    expect(isHubDeferred('exploreFacets')).toBe(false)
   })
 
   it('ignores unknown surfaces', () => {
