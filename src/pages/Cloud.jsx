@@ -4,9 +4,10 @@ import {
   FiCloud, FiServer, FiDollarSign, FiTag, FiActivity, FiRefreshCw,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
+import { Panel, KpiTile, DataTable, StatusPill, Badge, HubDeferredSurface } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { useI18n } from '../contexts/I18nContext'
+import { isHubDeferred } from '../utils/hubDeferred'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -31,6 +32,14 @@ function Tabs({ tabs = [], value, onChange, t }) {
 
 /** Cloud coverage — inventory, cost, tag governance. */
 export default function Cloud() {
+  const { t } = useI18n()
+  if (isHubDeferred('cloud')) {
+    return <HubDeferredSurface id="cloud" title={t('cloud.title')} subtitle={t('cloud.subtitle')} />
+  }
+  return <CloudLive />
+}
+
+function CloudLive() {
   const { t } = useI18n()
   const [tab, setTab] = useState('resources')
   const [busy, setBusy] = useState(false)
