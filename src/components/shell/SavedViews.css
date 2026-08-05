@@ -30,8 +30,8 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 .opa-savedviews-input { flex: 1 1 auto; min-width: 0; }
-.opa-savedviews-save .opa-btn { flex: 0 0 auto; }
-.opa-savedviews-save .opa-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.opa-savedviews-save .oui-btn is-secondary { flex: 0 0 auto; }
+.opa-savedviews-save .oui-btn is-secondary[disabled] { opacity: .5; cursor: not-allowed; }
 
 /* error banner */
 .opa-savedviews-err {

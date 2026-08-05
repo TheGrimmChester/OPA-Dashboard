@@ -9,6 +9,7 @@ import { ProfileToolbar } from '../components/profile'
 import { detectOpType, typeFill, typeLabel } from '../utils/opTypes'
 import { fmtMs, fmtBytes, fmtNum, fmtPct } from '../theme/format'
 import './ProfilingView.css'
+import { PageHeader } from '@open-family/ui'
 
 const ALL = '__all__'
 
@@ -227,12 +228,12 @@ export default function ProfilingView() {
             {type === 'function' || !type ? (
               <span className="opa-dot opa-profiling-type" style={{ background: typeFill(type) }} title={typeLabel(type)} />
             ) : (
-              <span className="opa-badge">
+              <span className="oui-badge">
                 <span className="opa-dot opa-profiling-type" style={{ background: typeFill(type) }} />
                 {typeLabel(type)}
               </span>
             )}
-            <span className="opa-profiling-fn oui-mono cell-strong">{r.function || '—'}</span>
+            <span className="opa-profiling-fn oui-mono oui-cell-primary">{r.function || '—'}</span>
             {r.members > 1 && <Badge title="functions folded into this group">{fmtNum(r.members)} fns</Badge>}
             {r.mixedService
               ? <Badge title="this group spans several services">multi-service</Badge>
@@ -298,16 +299,12 @@ export default function ProfilingView() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Profiling</h1>
-          <div className="opa-page-sub">
-            Aggregated function cost across all traces · call depth bounded by <span className="oui-mono">opa.stack_depth</span>
-          </div>
-        </div>
-        <div className="oui-row">
+      <PageHeader
+        title="Profiling"
+        description={<>Aggregated function cost across all traces · call depth bounded by <span className="oui-mono">opa.stack_depth</span></>}
+        actions={<><div className="oui-row">
           <select
-            className="opa-select"
+            className="oui-select"
             aria-label="Filter profiling data by service"
             value={service}
             onChange={(e) => setService(e.target.value)}
@@ -317,10 +314,10 @@ export default function ProfilingView() {
               <option key={s.service} value={s.service}>{s.service}</option>
             ))}
           </select>
-        </div>
-      </div>
+        </div></>}
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile
           label="Total self time" icon={<FiClock size={12} />} value={fmtMs(totalSelf)} status="neutral"
           footer={<span className="oui-text-muted">{capped ? `top ${fmtNum(base.length)} covers ${fmtPct(coverage, 0)}` : 'complete'}</span>}
@@ -411,11 +408,11 @@ export default function ProfilingView() {
               {selected && (
                 <div className="opa-profiling-detail">
                   <div className="opa-profiling-detail-head">
-                    <span className="oui-mono cell-strong opa-profiling-detail-name">{selected.function}</span>
-                    <span className="opa-badge">rank {selected._rank}</span>
+                    <span className="oui-mono oui-cell-primary opa-profiling-detail-name">{selected.function}</span>
+                    <span className="oui-badge">rank {selected._rank}</span>
                     {selected.service && <Badge>{selected.service}</Badge>}
                     <button
-                      className="opa-btn ghost opa-profiling-detail-close"
+                      className="oui-btn is-ghost opa-profiling-detail-close"
                       aria-label="Clear selected function"
                       onClick={() => setSelectedKey(null)}
                     >
@@ -440,6 +437,8 @@ export default function ProfilingView() {
                 </div>
               )}
               <DataTable
+          loading={view === 'hotspots' && profiles.loading}
+          error={view === 'hotspots' ? profiles.error : null}
                 columns={columns}
                 rows={rows}
                 rowKey={(r) => rowId(r)}

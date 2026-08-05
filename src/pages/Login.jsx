@@ -125,7 +125,7 @@ function Login() {
               </label>
               <input
                 id="login-username"
-                className="opa-input"
+                className="oui-input"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -140,7 +140,7 @@ function Login() {
               </label>
               <input
                 id="login-password"
-                className="opa-input"
+                className="oui-input"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -150,7 +150,7 @@ function Login() {
 
             <button
               type="submit"
-              className="opa-btn primary login-btn"
+              className="oui-btn is-primary login-btn"
               disabled={loading}
             >
               {loading ? 'Logging in…' : 'Login'}
@@ -160,7 +160,7 @@ function Login() {
           {ssoEnabled && (
             <div className="login-sso">
               <div className="login-divider"><span>or</span></div>
-              <button type="button" className="opa-btn login-btn" onClick={startSso}>
+              <button type="button" className="oui-btn is-secondary login-btn" onClick={startSso}>
                 <FiLogIn size={12} /> Login with SSO
               </button>
             </div>

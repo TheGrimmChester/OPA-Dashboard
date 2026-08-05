@@ -1,11 +1,38 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiActivity, FiClock, FiAlertTriangle, FiZap, FiServer } from 'react-icons/fi'
-import { useApi } from '../hooks/useApi'
+import { FiAlertCircle, FiClock, FiRefreshCw } from 'react-icons/fi'
 import {
-  Panel, KpiTile, DataTable, TimeSeriesChart, InlineBar, HealthDot, LanguageBadge,
-} from '../components/ui'
+  Badge, Button, Card, EmptyState, Grid, Meter, PageHeader, Skeleton, Stack,
+  StatRow, StatTile, Table,
+} from '@open-family/ui'
+import { useApi } from '../hooks/useApi'
+import { useTableSort } from '../hooks/useTableSort'
+import { TimeSeriesChart } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtBytes, latencyStatus, errorRateStatus, statusColor } from '../theme/format'
+
+// The old HealthDot was a bare colour dot with a `title` — colour alone, and a
+// tooltip no keyboard or screen-reader user reached. errorRateStatus() already
+// classifies the rate; this pairs the classification with a word.
+const HEALTH = {
+  ok: { tone: 'good', label: 'Healthy' },
+  warn: { tone: 'warning', label: 'Degraded' },
+  error: { tone: 'critical', label: 'Failing' },
+  neutral: { tone: 'neutral', label: 'No data' },
+}
+
+/**
+ * KpiTile derived its own arrow from `current`/`previous`, and `invert` flipped
+ * both the arrow and the colour. StatTile keeps them apart on purpose: a rise in
+ * latency is still a rise, it is just not welcome. `riseIsGood` is the sentiment.
+ */
+function windowDelta(current, previous, riseIsGood) {
+  if (current == null || previous == null || !previous) return undefined
+  const pct = ((current - previous) / Math.abs(previous)) * 100
+  if (!Number.isFinite(pct)) return undefined
+  if (Math.abs(pct) < 0.05) return { value: 'no change', direction: 'flat' }
+  const up = pct > 0
+  return { value: fmtPct(Math.abs(pct)), direction: up ? 'up' : 'down', good: up === riseIsGood }
+}
 
 /** Service inventory + golden signals (canonical home; formerly also labeled Overview). */
 export default function Services() {
@@ -40,74 +67,179 @@ export default function Services() {
   const maxTp = Math.max(1, ...svc.map((s) => s.total_traces || 0))
 
   const svcColumns = [
-    { key: 'service', header: 'Service', render: (r) => (
-      <div className="oui-row">
-        <HealthDot tone={errorRateStatus(r.error_rate)} title={`${fmtPct(r.error_rate)} errors`} />
-        <span className="cell-strong oui-mono">{r.service}</span>
-        {r.language && <LanguageBadge language={r.language} version={r.language_version} />}
-      </div>
-    ), sortValue: (r) => r.service },
-    { key: 'total_traces', header: 'Throughput', num: true, render: (r) => (
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={r.total_traces} max={maxTp} label={fmtNum(r.total_traces)} color="var(--accent)" width={90} /></div>
-    ) },
-    { key: 'avg_duration', header: 'Avg', num: true, render: (r) => fmtMs(r.avg_duration) },
-    { key: 'p95_duration', header: 'p95', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.p95_duration)) }}>{fmtMs(r.p95_duration)}</span> },
-    { key: 'error_rate', header: 'Error %', num: true, render: (r) => <span style={{ color: statusColor(errorRateStatus(r.error_rate)) }}>{fmtPct(r.error_rate)}</span> },
-    { key: 'sql_query_count', header: 'SQL', num: true, render: (r) => fmtNum(r.sql_query_count) },
-    { key: 'total_cpu_ms', header: 'CPU', num: true, render: (r) => fmtMs(r.total_cpu_ms) },
-    { key: 'io', header: 'I/O (out / in)', num: true, sortValue: (r) => (r.total_bytes_sent || 0) + (r.total_bytes_received || 0), render: (r) => (
-      <span className="oui-mono"><span style={{ color: 'var(--chart-1)' }}>↑{fmtBytes(r.total_bytes_sent)}</span> <span className="oui-text-muted">/</span> <span style={{ color: 'var(--chart-2)' }}>↓{fmtBytes(r.total_bytes_received)}</span></span>
-    ) },
+    {
+      key: 'service', header: 'Service', sortValue: (r) => r.service,
+      render: (r) => {
+        const health = HEALTH[errorRateStatus(r.error_rate)] || HEALTH.neutral
+        return (
+          <span className="oui-row">
+            <Badge tone={health.tone} dot>{health.label}</Badge>
+            <span className="oui-mono">{r.service}</span>
+            {r.language && (
+              <Badge>{r.language}{r.language_version ? ` ${r.language_version}` : ''}</Badge>
+            )}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'total_traces', header: 'Throughput', numeric: true, sortValue: (r) => r.total_traces || 0,
+      render: (r) => (
+        <>
+          <span className="oui-num">{fmtNum(r.total_traces)}</span>
+          <Meter
+            value={((r.total_traces || 0) / maxTp) * 100}
+            label={`Throughput for ${r.service}, ${fmtNum(r.total_traces)} traces`}
+          />
+        </>
+      ),
+    },
+    { key: 'avg_duration', header: 'Avg', numeric: true, render: (r) => fmtMs(r.avg_duration) },
+    { key: 'p95_duration', header: 'p95', numeric: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.p95_duration)) }}>{fmtMs(r.p95_duration)}</span> },
+    { key: 'error_rate', header: 'Error %', numeric: true, render: (r) => <span style={{ color: statusColor(errorRateStatus(r.error_rate)) }}>{fmtPct(r.error_rate)}</span> },
+    { key: 'sql_query_count', header: 'SQL', numeric: true, render: (r) => fmtNum(r.sql_query_count) },
+    { key: 'total_cpu_ms', header: 'CPU', numeric: true, render: (r) => fmtMs(r.total_cpu_ms) },
+    {
+      key: 'io', header: 'I/O (out / in)', numeric: true,
+      sortValue: (r) => (r.total_bytes_sent || 0) + (r.total_bytes_received || 0),
+      render: (r) => (
+        <span className="oui-mono">
+          <span style={{ color: 'var(--chart-1)' }}>↑{fmtBytes(r.total_bytes_sent)}</span>{' '}
+          <span className="oui-text-muted">/</span>{' '}
+          <span style={{ color: 'var(--chart-2)' }}>↓{fmtBytes(r.total_bytes_received)}</span>
+        </span>
+      ),
+    },
   ]
 
+  const { rows: sortedServices, columns: sortableColumns, onSort } =
+    useTableSort(svc, svcColumns, { key: 'total_traces', dir: 'desc' })
+
+  // The two charts read the same fetch, so their three states are the same
+  // decision made twice. Keeping it in one place stops one card claiming "no
+  // data" while the other renders a skeleton.
+  const chartBody = (chart, name) => {
+    if (perf.loading) return <Skeleton height={230} />
+    if (perf.error) {
+      return (
+        <EmptyState
+          inline
+          icon={<FiAlertCircle />}
+          title={`${name} failed to load`}
+          description={String(perf.error || 'The request did not complete.')}
+          actions={<Button icon={<FiRefreshCw />} onClick={perf.reload}>Retry</Button>}
+        />
+      )
+    }
+    if (metrics.length === 0) {
+      return (
+        <EmptyState
+          inline
+          icon={<FiClock />}
+          title="No samples in this time range"
+          description="The range, not the data, is empty. Widening it usually resolves this."
+        />
+      )
+    }
+    return chart
+  }
+
   return (
-    <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Service</h1>
-          <div className="opa-page-sub">Golden signals across {svc.length} service{svc.length === 1 ? '' : 's'}</div>
-        </div>
-      </div>
+    <Stack gap="sections">
+      <PageHeader
+        title="Services"
+        description="Golden signals for every instrumented service reporting into this project."
+        meta={[{ label: 'Services', value: <span className="oui-num">{svc.length}</span> }]}
+      />
 
       {/* Golden signal KPIs */}
-      <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-        <KpiTile label="Throughput" icon={<FiActivity size={12} />} value={fmtNum(g.total_traces || 0)} unit="traces" status="neutral"
-          spark={spark('throughput')} sparkColor="var(--accent)" current={tpCur} previous={tpPrev} />
-        <KpiTile label="Avg response" icon={<FiClock size={12} />} value={fmtMs(g.avg_duration)} status={latencyStatus(g.avg_duration)} />
-        <KpiTile label="p95 response" icon={<FiZap size={12} />} value={fmtMs(p95Cur ?? g.avg_duration)} status={latencyStatus(p95Cur)}
-          spark={spark('p95')} sparkColor="var(--warn-text)" current={p95Cur} previous={p95Prev} invert />
-        <KpiTile label="Error rate" icon={<FiAlertTriangle size={12} />} value={fmtPct(errRate)} status={errorRateStatus(errRate)}
-          spark={spark('error_rate')} sparkColor="var(--critical-text)" current={erCur} previous={erPrev} invert />
-        <KpiTile label="Spans" icon={<FiServer size={12} />} value={fmtNum(g.total_spans || 0)} status="neutral"
-          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtNum(g.total_sql_queries)} SQL · {fmtNum(g.total_http_requests)} HTTP</span>} />
-      </div>
+      <StatRow>
+        <StatTile
+          hero
+          label="Throughput"
+          value={`${fmtNum(g.total_traces || 0)} traces`}
+          spark={spark('throughput')}
+          delta={windowDelta(tpCur, tpPrev, true)}
+          deltaLabel="across the selected window"
+        />
+        <StatTile label="Avg response" value={fmtMs(g.avg_duration)} />
+        <StatTile
+          label="p95 response"
+          value={fmtMs(p95Cur ?? g.avg_duration)}
+          spark={spark('p95')}
+          delta={windowDelta(p95Cur, p95Prev, false)}
+          deltaLabel="across the selected window"
+        />
+        <StatTile
+          label="Error rate"
+          value={fmtPct(errRate)}
+          spark={spark('error_rate')}
+          delta={windowDelta(erCur, erPrev, false)}
+          deltaLabel="across the selected window"
+        />
+        <StatTile
+          label="Spans"
+          value={fmtNum(g.total_spans || 0)}
+          foot={(
+            <span className="oui-text-muted">
+              {fmtNum(g.total_sql_queries)} SQL · {fmtNum(g.total_http_requests)} HTTP
+            </span>
+          )}
+        />
+      </StatRow>
 
       {/* Charts */}
-      <div className="opa-grid cols-2">
-        <Panel title="Throughput & errors" icon={<FiActivity />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart brushZoom data={metrics} series={[
-            { key: 'throughput', name: 'Throughput', color: 'var(--accent)', type: 'bar' },
-            { key: 'error_rate', name: 'Error %', color: 'var(--critical-text)', type: 'line' },
-          ]} valueFmt={(v) => fmtNum(v)} height={230} />
-        </Panel>
-        <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
-          <TimeSeriesChart brushZoom data={metrics} series={[
-            { key: 'p50', name: 'p50', color: 'var(--chart-1)', type: 'line' },
-            { key: 'p95', name: 'p95', color: 'var(--chart-2)', type: 'line' },
-            { key: 'p99', name: 'p99', color: 'var(--chart-3)', type: 'line' },
-          ]} valueFmt={fmtMs} yFmt={fmtMs} height={230} />
-        </Panel>
-      </div>
+      <Grid columns={2}>
+        <Card title="Throughput and errors" description="Traces recorded per interval, with the error rate over the same window.">
+          {chartBody(
+            <TimeSeriesChart brushZoom data={metrics} series={[
+              { key: 'throughput', name: 'Throughput', color: 'var(--chart-1)', type: 'bar' },
+              { key: 'error_rate', name: 'Error %', color: 'var(--critical-text)', type: 'line' },
+            ]} valueFmt={(v) => fmtNum(v)} height={230} />,
+            'Throughput and errors',
+          )}
+        </Card>
+        <Card title="Response time percentiles" description="Median, p95 and p99 response time across every service.">
+          {chartBody(
+            <TimeSeriesChart brushZoom data={metrics} series={[
+              { key: 'p50', name: 'p50', color: 'var(--chart-1)', type: 'line' },
+              { key: 'p95', name: 'p95', color: 'var(--chart-2)', type: 'line' },
+              { key: 'p99', name: 'p99', color: 'var(--chart-3)', type: 'line' },
+            ]} valueFmt={fmtMs} yFmt={fmtMs} height={230} />,
+            'Response time percentiles',
+          )}
+        </Card>
+      </Grid>
 
       {/* Services table */}
-      <Panel title="Services" icon={<FiServer />} flush loading={services.loading} error={services.error} empty={!services.loading && svc.length === 0}
-        actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>click a row to drill in</span>}>
-        <DataTable
-          columns={svcColumns} rows={svc} rowKey={(r) => r.service}
-          initialSort={{ key: 'total_traces', dir: 'desc' }}
+      <Card flush title="Services" description="Every service reporting into this project. Select a row to drill into it.">
+        <Table
+          aria-label="Services"
+          state={services.loading ? 'loading' : services.error ? 'error' : sortedServices.length ? 'ready' : 'empty'}
+          columns={sortableColumns}
+          rows={sortedServices}
+          getRowKey={(r) => r.service}
+          onSort={onSort}
           onRowClick={(r) => navigate(`/services/${encodeURIComponent(r.service)}`)}
+          emptyState={(
+            <EmptyState
+              inline
+              icon={<FiClock />}
+              title="No services reported in this time range"
+              description="Nothing has reported into this project for the selected window. Widening the range usually resolves this."
+            />
+          )}
+          errorState={(
+            <EmptyState
+              inline
+              icon={<FiAlertCircle />}
+              title="Services failed to load"
+              description={String(services.error || 'The request did not complete.')}
+              actions={<Button icon={<FiRefreshCw />} onClick={services.reload}>Retry</Button>}
+            />
+          )}
         />
-      </Panel>
-    </div>
+      </Card>
+    </Stack>
   )
 }

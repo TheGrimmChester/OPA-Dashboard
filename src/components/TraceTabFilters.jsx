@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { FiFilter } from 'react-icons/fi'
+import { FiFilter, FiRotateCcw } from 'react-icons/fi'
+import { Button, Field, Input } from '@open-family/ui'
 import HelpIcon from './HelpIcon'
 import './TraceTabFilters.css'
 
@@ -10,8 +11,18 @@ const DEFAULT_THRESHOLDS = {
   cpu: 0, // ms
 }
 
-function TraceTabFilters({ 
-  onFiltersChange, 
+// One row per threshold: the id, the visible label and the input granularity.
+// Declaring them keeps the four controls identical instead of four near-copies
+// that drift a step or a label apart.
+const FILTER_FIELDS = [
+  { key: 'duration', label: 'Duration (ms)', step: '0.1' },
+  { key: 'memory', label: 'Memory (bytes)', step: '1' },
+  { key: 'network', label: 'Network (bytes)', step: '1' },
+  { key: 'cpu', label: 'CPU (ms)', step: '0.01' },
+]
+
+function TraceTabFilters({
+  onFiltersChange,
   availableFilters = ['duration', 'memory', 'network', 'cpu'],
   initialThresholds = {}
 }) {
@@ -81,82 +92,35 @@ function TraceTabFilters({
     <div className="trace-tab-filters">
       <div className="trace-tab-filters-header">
         <div className="filter-label">
-          <FiFilter />
+          <FiFilter aria-hidden="true" />
           <span>Filters</span>
           <HelpIcon text="Filter items by duration, memory, network, or CPU thresholds. Only items meeting the thresholds will be displayed." position="right" />
         </div>
       </div>
       <div className="trace-tab-filters-content">
           <div className="filter-controls">
-            {availableFilters.includes('duration') && (
-              <div className="filter-control">
-                <label htmlFor="filter-duration">
-                  Duration (ms)
-                </label>
-                <input
-                  id="filter-duration"
+            {FILTER_FIELDS.filter((f) => availableFilters.includes(f.key)).map((f) => (
+              <Field
+                key={f.key}
+                label={f.label}
+                htmlFor={`filter-${f.key}`}
+                hint={formatValue(f.key, thresholds[f.key])}
+              >
+                <Input
+                  id={`filter-${f.key}`}
                   type="number"
                   min="0"
-                  step="0.1"
-                  value={thresholds.duration}
-                  onChange={(e) => handleThresholdChange('duration', e.target.value)}
+                  step={f.step}
+                  value={thresholds[f.key]}
+                  onChange={(e) => handleThresholdChange(f.key, e.target.value)}
                 />
-                <span className="filter-value">{formatValue('duration', thresholds.duration)}</span>
-              </div>
-            )}
-            {availableFilters.includes('memory') && (
-              <div className="filter-control">
-                <label htmlFor="filter-memory">
-                  Memory (bytes)
-                </label>
-                <input
-                  id="filter-memory"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={thresholds.memory}
-                  onChange={(e) => handleThresholdChange('memory', e.target.value)}
-                />
-                <span className="filter-value">{formatValue('memory', thresholds.memory)}</span>
-              </div>
-            )}
-            {availableFilters.includes('network') && (
-              <div className="filter-control">
-                <label htmlFor="filter-network">
-                  Network (bytes)
-                </label>
-                <input
-                  id="filter-network"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={thresholds.network}
-                  onChange={(e) => handleThresholdChange('network', e.target.value)}
-                />
-                <span className="filter-value">{formatValue('network', thresholds.network)}</span>
-              </div>
-            )}
-            {availableFilters.includes('cpu') && (
-              <div className="filter-control">
-                <label htmlFor="filter-cpu">
-                  CPU (ms)
-                </label>
-                <input
-                  id="filter-cpu"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={thresholds.cpu}
-                  onChange={(e) => handleThresholdChange('cpu', e.target.value)}
-                />
-                <span className="filter-value">{formatValue('cpu', thresholds.cpu)}</span>
-              </div>
-            )}
+              </Field>
+            ))}
           </div>
           <div className="filter-actions">
-            <button className="filter-reset-btn" onClick={handleReset}>
-              Reset to Defaults
-            </button>
+            <Button size="sm" icon={<FiRotateCcw />} onClick={handleReset}>
+              Reset to defaults
+            </Button>
           </div>
       </div>
     </div>
@@ -164,4 +128,3 @@ function TraceTabFilters({
 }
 
 export default TraceTabFilters
-

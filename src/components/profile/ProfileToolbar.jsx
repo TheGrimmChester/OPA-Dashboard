@@ -1,6 +1,6 @@
 import React from 'react'
-import { FiSearch, FiX } from 'react-icons/fi'
-import { StatusPill } from '../ui'
+import { FiAlertTriangle, FiSearch, FiX } from 'react-icons/fi'
+import { Badge, Input, Select } from '@open-family/ui'
 import { fmtNum } from '../../theme/format'
 import { METRICS, GROUP_BY } from '../../utils/callGraphModel'
 import { EMPTY_TOTALS } from './useProfileModel'
@@ -21,6 +21,9 @@ export const GROUP_BY_LABELS = {
   file: 'File',
   namespace: 'Namespace',
 }
+
+const METRIC_OPTIONS = METRICS.map((m) => ({ value: m, label: METRIC_LABELS[m] }))
+const GROUP_BY_OPTIONS = GROUP_BY.map((g) => ({ value: g, label: GROUP_BY_LABELS[g] }))
 
 /**
  * One dense control row for the profile views: what to rank by, what to
@@ -44,30 +47,25 @@ export default function ProfileToolbar({
     <div className="oui-row opa-prof-toolbar">
       <label className="opa-prof-field">
         Metric
-        <select
-          className="opa-select"
+        <Select
           value={metric}
+          options={METRIC_OPTIONS}
           onChange={(e) => onMetricChange && onMetricChange(e.target.value)}
-        >
-          {METRICS.map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
-        </select>
+        />
       </label>
 
       <label className="opa-prof-field">
         Group by
-        <select
-          className="opa-select"
+        <Select
           value={groupBy}
+          options={GROUP_BY_OPTIONS}
           onChange={(e) => onGroupByChange && onGroupByChange(e.target.value)}
-        >
-          {GROUP_BY.map((g) => <option key={g} value={g}>{GROUP_BY_LABELS[g]}</option>)}
-        </select>
+        />
       </label>
 
       <div className="opa-prof-search">
-        <FiSearch aria-hidden="true" />
-        <input
-          className="opa-input"
+        <Input
+          icon={<FiSearch />}
           type="search"
           value={query}
           placeholder="Filter functions..."
@@ -90,10 +88,12 @@ export default function ProfileToolbar({
       </div>
 
       {t.truncated && (
-        <StatusPill tone="warn">capped at {fmtNum(t.calls)} of {fmtNum(t.scanned)}</StatusPill>
+        <Badge tone="warning" icon={<FiAlertTriangle />}>
+          capped at {fmtNum(t.calls)} of {fmtNum(t.scanned)}
+        </Badge>
       )}
       {t.structureMode && (
-        <StatusPill tone="neutral">no {metricLabel.toLowerCase()} data</StatusPill>
+        <Badge tone="neutral">no {metricLabel.toLowerCase()} data</Badge>
       )}
 
       {right && <div className="opa-prof-right">{right}</div>}

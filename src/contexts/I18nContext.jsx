@@ -203,7 +203,7 @@ export function LocaleSwitcher() {
   return (
     <label className="oui-text-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
       {t('nav.locale')}
-      <select className="opa-input" value={locale} onChange={(e) => setLocale(e.target.value)} style={{ padding: '2px 6px' }}>
+      <select className="oui-input" value={locale} onChange={(e) => setLocale(e.target.value)} style={{ padding: '2px 6px' }}>
         {locales.map((l) => <option key={l} value={l}>{l}</option>)}
       </select>
     </label>

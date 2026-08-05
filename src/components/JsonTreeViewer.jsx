@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
-import { FiChevronRight, FiChevronDown } from 'react-icons/fi'
+import { FiChevronRight, FiChevronDown, FiMaximize2, FiMinimize2 } from 'react-icons/fi'
+import { Button } from '@open-family/ui'
 import './JsonTreeViewer.css'
 
 function JsonTreeViewer({ data, level = 0, path = 'root', expandedNodes, onToggleNode, autoExpandLevels = 2 }) {
@@ -48,10 +49,11 @@ function JsonTreeViewer({ data, level = 0, path = 'root', expandedNodes, onToggl
             </button>
           )}
           {!hasItems && <span className="json-spacer" />}
-          <span className="json-bracket">[</span>
-          <span className="json-count">{data.length}</span>
-          <span className="json-bracket">]</span>
-          {!hasItems && <span className="json-bracket">[]</span>}
+          {/* The closing bracket belongs to the footer once there are children.
+              Emitting it here as well printed an empty array as "[0][]" and a
+              populated one with a stray bracket before its own contents. */}
+          <span className="json-bracket">{hasItems ? '[' : '[]'}</span>
+          {hasItems && <span className="json-count">{data.length}</span>}
         </div>
         {hasItems && isExpanded && (
           <div className="json-node-children">
@@ -193,12 +195,12 @@ function JsonTreeViewerWrapper({ data, globalExpandState = null, showControls = 
     <div className="json-tree-wrapper">
       {showControls && (
         <div className="json-tree-controls">
-          <button onClick={expandAll} className="json-control-btn">
-            Expand All
-          </button>
-          <button onClick={collapseAll} className="json-control-btn">
-            Collapse All
-          </button>
+          <Button size="sm" variant="ghost" icon={<FiMaximize2 />} onClick={expandAll}>
+            Expand all
+          </Button>
+          <Button size="sm" variant="ghost" icon={<FiMinimize2 />} onClick={collapseAll}>
+            Collapse all
+          </Button>
         </div>
       )}
       <div className="json-tree-content">

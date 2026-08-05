@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { FiChevronRight } from 'react-icons/fi'
+import { Badge } from '@open-family/ui'
 import { fmtMs, tierColor, latencyStatus, statusColor } from '../theme/format'
 import {
   WATERFALL_ROW_H,
@@ -219,9 +220,21 @@ export default function TraceWaterfall({
                   {multiService && <span className="tw-tierdot" style={{ background: serviceColor[s.service] || 'var(--text-muted)' }} title={s.service} />}
                   <span className="tw-tierdot" style={{ background: col }} />
                   <span className="tw-label-name" title={`${s.name} · ${s.service || ''}`}>{s.name}</span>
+                  {/* The wrapper carries the tooltip: Badge is presentational and
+                      does not forward a title. `.tw-label` already sets the gap, so
+                      the badge needs no margin of its own. */}
                   {isServiceEntry?.(s) && (
-                    <span className="opa-badge" style={{ marginLeft: 6, padding: '0 6px' }} title={`enters ${s.service}`}>
-                      <span className="opa-dot" style={{ background: serviceColor[s.service], width: 6, height: 6 }} />{s.service}
+                    <span title={`enters ${s.service}`}>
+                      <Badge
+                        icon={(
+                          <span
+                            className="tw-tierdot"
+                            style={{ background: serviceColor[s.service] || 'var(--text-muted)' }}
+                          />
+                        )}
+                      >
+                        {s.service}
+                      </Badge>
                     </span>
                   )}
                 </div>

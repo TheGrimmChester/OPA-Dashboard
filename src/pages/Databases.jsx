@@ -6,6 +6,7 @@ import {
   Panel, KpiTile, DataTable, InlineBar, Badge, StatusPill,
 } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus, statusColor } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 const TABS = [
   { value: 'instances', label: 'Instances', icon: <FiServer size={13} /> },
@@ -70,7 +71,7 @@ export default function Databases() {
 
   const sqlColumns = [
     { key: 'fingerprint', header: 'Query', render: (r) => (
-      <span className="cell-strong oui-mono" title={r.fingerprint} style={{ display: 'block', maxWidth: 460, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--chart-2)' }}>{r.fingerprint || '—'}</span>
+      <span className="oui-cell-primary oui-mono" title={r.fingerprint} style={{ display: 'block', maxWidth: 460, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--chart-2)' }}>{r.fingerprint || '—'}</span>
     ), sortValue: (r) => r.fingerprint || '' },
     { key: 'execution_count', header: 'Calls', num: true, render: (r) => (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={r.execution_count || 0} max={maxSqlExec} label={fmtNum(r.execution_count || 0)} color="var(--chart-2)" width={100} /></div>
@@ -105,7 +106,7 @@ export default function Databases() {
   ]
 
   const instanceColumns = [
-    { key: 'id', header: 'Instance', render: (r) => <span className="cell-strong oui-mono">{r.id}</span> },
+    { key: 'id', header: 'Instance', render: (r) => <span className="oui-cell-primary oui-mono">{r.id}</span> },
     { key: 'engine', header: 'Engine', render: (r) => <Badge>{r.engine || '—'}</Badge> },
     { key: 'sat', header: 'Conn sat %', num: true, render: (r) => {
       const v = metricNum(r.metrics, 'connection_saturation_pct')
@@ -150,19 +151,17 @@ export default function Databases() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Databases</h1>
-          <div className="opa-page-sub">Instance health · statement digests joined to app fingerprints · cache</div>
-        </div>
-        <div className="oui-row">
+      <PageHeader
+        title="Databases"
+        description="Instance health · statement digests joined to app fingerprints · cache"
+        actions={<><div className="oui-row">
           <Tabs tabs={TABS} value={tab} onChange={setTab} />
-        </div>
-      </div>
+        </div></>}
+      />
 
       {tab === 'instances' && (
         <>
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             <KpiTile label="Instances" icon={<FiServer size={12} />} value={fmtNum(inst.length)} status="neutral" />
             <KpiTile label="Fingerprint match" icon={<FiTarget size={12} />} value={fmtPct(matchRate.data?.match_rate_pct || 0)} status="neutral"
               footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>{fmtNum(matchRate.data?.matched || 0)} / {fmtNum(matchRate.data?.total || 0)}</span>} />
@@ -171,7 +170,10 @@ export default function Databases() {
           <Panel title="Instance health" icon={<FiServer />} flush loading={instances.loading} error={instances.error}
             empty={!instances.loading && inst.length === 0}
             emptyText="No DB monitors configured — set OPA_DB_MONITOR_CONFIG (see docs/db-monitoring.md)">
-            <DataTable columns={instanceColumns} rows={inst} rowKey={(r) => r.id} maxHeight={420} />
+            <DataTable
+          loading={instances.loading}
+          error={instances.error}
+          onRetry={instances.reload} columns={instanceColumns} rows={inst} rowKey={(r) => r.id} maxHeight={420} />
           </Panel>
           {unusedIdx.length > 0 && (
             <Panel title="Unused indexes" icon={<FiAlertTriangle />} flush>
@@ -183,7 +185,7 @@ export default function Databases() {
 
       {tab === 'statements' && (
         <>
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             <KpiTile label="Top statements" icon={<FiZap size={12} />} value={fmtNum(stmts.length)} status="neutral" />
             <KpiTile label="Fingerprint match" icon={<FiTarget size={12} />} value={fmtPct(matchRate.data?.match_rate_pct || 0)} status="neutral" />
             <KpiTile label="Full scans" icon={<FiAlertTriangle size={12} />} value={fmtNum(stmts.filter((s) => Number(s.full_scan)).length)} status="warn" />
@@ -194,6 +196,9 @@ export default function Databases() {
             emptyText="No statement digests yet — enable statements:true on a MySQL/Postgres target"
             actions={<span className="oui-text-muted" style={{ fontSize: 12 }}>click a row to open traces with the OPA fingerprint</span>}>
             <DataTable
+          loading={statements.loading}
+          error={statements.error}
+          onRetry={statements.reload}
               columns={stmtColumns}
               rows={stmts}
               rowKey={(r, i) => `${r.native_digest}:${i}`}
@@ -210,7 +215,7 @@ export default function Databases() {
 
       {tab === 'sql' && (
         <>
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             <KpiTile label="Unique queries" icon={<FiLayers size={12} />} value={fmtNum(sqlTotal)} unit="fingerprints" status="neutral" />
             <KpiTile label="Total executions" icon={<FiActivity size={12} />} value={fmtNum(sqlExecs)} unit="calls" status="neutral" />
             <KpiTile label="Slowest p95" icon={<FiZap size={12} />} value={fmtMs(slowestP95)} status={latencyStatus(slowestP95)} />
@@ -220,6 +225,9 @@ export default function Databases() {
             emptyText="No SQL queries captured yet"
             actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{fmtNum(queries.length)} shown · sortable</span>}>
             <DataTable
+          loading={sql.loading}
+          error={sql.error}
+          onRetry={sql.reload}
               onRowClick={(r) => r?.fingerprint && navigate(`/sql/${encodeURIComponent(r.fingerprint)}`)}
               columns={sqlColumns} rows={queries}
               rowKey={(r) => r.fingerprint}
@@ -232,7 +240,7 @@ export default function Databases() {
 
       {tab === 'redis' && (
         <>
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             <KpiTile label="Operations" icon={<FiLayers size={12} />} value={fmtNum(ops.length)} unit="commands" status="neutral" />
             <KpiTile label="Total executions" icon={<FiActivity size={12} />} value={fmtNum(redisExecs)} unit="calls" status="neutral" />
             <KpiTile label="Overall hit rate" icon={<FiTarget size={12} />} value={overallHit == null ? '—' : fmtPct(overallHit)} status={hitStatus(overallHit)}
@@ -243,6 +251,9 @@ export default function Databases() {
             emptyText="No Redis operations captured yet"
             actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{fmtNum(ops.length)} shown · sortable</span>}>
             <DataTable
+          loading={redis.loading}
+          error={redis.error}
+          onRetry={redis.reload}
               onRowClick={(r) => {
                 if (!r?.command) return
                 const filter = r.key

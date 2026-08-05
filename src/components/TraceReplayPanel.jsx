@@ -145,7 +145,7 @@ export default function TraceReplayPanel({
           <div className="trp-scrub">
             <button
               type="button"
-              className="opa-btn ghost"
+              className="oui-btn is-ghost"
               onClick={() => setPlaying((p) => !p)}
               title={playing ? 'Pause' : 'Play'}
               aria-label={playing ? 'Pause waterfall replay' : 'Play waterfall replay'}
@@ -184,7 +184,7 @@ export default function TraceReplayPanel({
                   <> No replay chunks stored yet — session timeline may still be useful.</>
                 )}
               </p>
-              <Link className="opa-btn ghost" to={modes.find((m) => m.id === 'rum_session').href}>
+              <Link className="oui-btn is-ghost" to={modes.find((m) => m.id === 'rum_session').href}>
                 <FiExternalLink size={12} /> Open RUM session replay
               </Link>
             </>
@@ -204,7 +204,7 @@ export default function TraceReplayPanel({
               <p className="oui-text-muted" style={{ fontSize: 12 }}>
                 Linked load run <code className="oui-mono">{modes.find((m) => m.id === 'perf_lab')?.meta?.load_run_id}</code>
               </p>
-              <Link className="opa-btn ghost" to={modes.find((m) => m.id === 'perf_lab').href}>
+              <Link className="oui-btn is-ghost" to={modes.find((m) => m.id === 'perf_lab').href}>
                 <FiExternalLink size={12} /> Open Perf Lab results
               </Link>
             </>
@@ -225,7 +225,7 @@ export default function TraceReplayPanel({
                     || modes.find((m) => m.id === 'synthetics')?.meta?.check_id}
                 </code>
               </p>
-              <Link className="opa-btn ghost" to={modes.find((m) => m.id === 'synthetics').href}>
+              <Link className="oui-btn is-ghost" to={modes.find((m) => m.id === 'synthetics').href}>
                 <FiExternalLink size={12} /> Open synthetics
               </Link>
             </>
@@ -245,7 +245,7 @@ export default function TraceReplayPanel({
                 {modes.find((m) => m.id === 'har_export')?.available && (
                   <button
                     type="button"
-                    className="opa-btn ghost"
+                    className="oui-btn is-ghost"
                     onClick={() => download(
                       `/api/traces/${encodeURIComponent(traceId)}/replay/har`,
                       `opa-trace-${traceId}.har`,
@@ -257,7 +257,7 @@ export default function TraceReplayPanel({
                 {modes.find((m) => m.id === 'step_list')?.available && (
                   <button
                     type="button"
-                    className="opa-btn ghost"
+                    className="oui-btn is-ghost"
                     onClick={() => download(
                       `/api/traces/${encodeURIComponent(traceId)}/replay/steps`,
                       `opa-trace-${traceId}-steps.json`,

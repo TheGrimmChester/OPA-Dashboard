@@ -1,5 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
+import { FiAlertOctagon, FiRefreshCw } from 'react-icons/fi'
+import { Button, EmptyState } from '@open-family/ui'
 import './ErrorBoundary.css'
 
 class ErrorBoundary extends React.Component {
@@ -18,26 +20,34 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const detail = this.state.error ? String(this.state.error) : ''
       return (
-        <div className="error-boundary">
-          <div className="error-boundary-content">
-            <h2>Something went wrong</h2>
-            <p>An error occurred while rendering this page.</p>
-            {process.env.NODE_ENV === 'development' && this.state.error && (
-              <details className="error-details">
-                <summary>Error details</summary>
-                <pre>{this.state.error.toString()}</pre>
-              </details>
-            )}
-            <div className="error-boundary-actions">
-              <button onClick={() => window.location.reload()}>
-                Reload Page
-              </button>
-              <Link to="/" className="button-link">
-                Go to Home
-              </Link>
-            </div>
-          </div>
+        <div className="opa-errboundary">
+          <EmptyState
+            icon={<FiAlertOctagon />}
+            title="This view stopped rendering"
+            description="The page threw while drawing itself, so nothing below this point is on screen. Reloading recovers it; the same error repeating is worth reporting with the detail below."
+            actions={
+              <>
+                <Link to="/" className="oui-btn is-secondary">Go to the overview</Link>
+                <Button
+                  variant="primary"
+                  icon={<FiRefreshCw />}
+                  onClick={() => window.location.reload()}
+                >
+                  Reload the page
+                </Button>
+              </>
+            }
+          />
+          {/* A stack trace is a developer artefact: it stays behind a disclosure and
+              only in a development build, where it is the fastest way to the cause. */}
+          {process.env.NODE_ENV === 'development' && detail && (
+            <details className="opa-errboundary-detail">
+              <summary>Error detail</summary>
+              <pre className="oui-mono">{detail}</pre>
+            </details>
+          )}
         </div>
       )
     }
@@ -47,4 +57,3 @@ class ErrorBoundary extends React.Component {
 }
 
 export default ErrorBoundary
-

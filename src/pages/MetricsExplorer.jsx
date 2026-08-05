@@ -11,6 +11,7 @@ import {
 } from '../components/ui'
 import { fmtNum, fmtBytes, fmtMs, fmtPct, SERIES } from '../theme/format'
 import './MetricsExplorer.css'
+import { PageHeader } from '@open-family/ui'
 
 // Metrics Explorer — the surface for metrics nobody anticipated needing.
 //
@@ -224,7 +225,7 @@ function MetricCatalogue({
             <>
               <button
                 type="button"
-                className="opa-btn ghost opa-btn-compact"
+                className="oui-btn is-ghost oui-btn is-secondary is-sm"
                 onClick={expandAll}
                 disabled={allExpanded}
                 title="Expand all groups"
@@ -233,7 +234,7 @@ function MetricCatalogue({
               </button>
               <button
                 type="button"
-                className="opa-btn ghost opa-btn-compact"
+                className="oui-btn is-ghost oui-btn is-secondary is-sm"
                 onClick={collapseAll}
                 disabled={allCollapsed}
                 title="Collapse all groups"
@@ -418,7 +419,7 @@ function DimensionPanel({
                 </button>
                 <button
                   type="button"
-                  className={`opa-btn opa-btn-compact${isGroup ? ' primary' : ' ghost'}`}
+                  className={`oui-btn is-secondary oui-btn is-secondary is-sm${isGroup ? ' primary' : ' ghost'}`}
                   onClick={() => onGroupBy(isGroup ? '' : l.name)}
                   title={high ? `${l.value_count} distinct values — chart may be dense` : `Group series by ${l.name}`}
                 >
@@ -610,23 +611,19 @@ export default function MetricsExplorer() {
 
   return (
     <div className="oui-stack opa-metrics-page">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Metrics Explorer</h1>
-          <div className="opa-page-sub">
-            {metric
+      <PageHeader
+        title="Metrics Explorer"
+        description={metric
               ? <>Charting <span className="oui-mono">{metric}</span>{matchers.length ? ` · ${matchers.length} filter${matchers.length === 1 ? '' : 's'}` : ''}{groupBy ? ` · grouped by ${groupBy}` : ''}</>
               : <>Browse any collector metric · filter by label · group by dimension{allMetrics.length ? ` · ${fmtNum(allMetrics.length)} available` : ''}</>}
-          </div>
-        </div>
-        {hasQueryState && (
+        actions={<>{hasQueryState && (
           <div className="oui-row">
-            <button type="button" className="opa-btn ghost" onClick={clearAll} title="Clear metric, filters, and grouping">
+            <button type="button" className="oui-btn is-ghost" onClick={clearAll} title="Clear metric, filters, and grouping">
               <FiX size={13} /> Clear
             </button>
           </div>
-        )}
-      </div>
+        )}</>}
+      />
 
       <div className="opa-metrics-explorer">
         <MetricCatalogue
@@ -732,7 +729,7 @@ export default function MetricsExplorer() {
                     </label>
                     <select
                       id="opa-mx-groupby"
-                      className="opa-select oui-mono"
+                      className="oui-select oui-mono"
                       value={groupBy}
                       onChange={(e) => setGroupBy(e.target.value)}
                       disabled={!labelList.length}

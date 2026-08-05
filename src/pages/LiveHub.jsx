@@ -4,6 +4,7 @@ import { FiRadio, FiPause, FiPlay, FiActivity, FiDatabase, FiHardDrive, FiGlobe,
 import { usePolling } from '../hooks/useApi'
 import { Panel, DataTable, Tabs, StatusPill, HealthDot, Badge, InlineBar, SegmentedControl } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus, errorRateStatus, statusColor } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 const TABS = [
   { value: 'traces', label: 'Traces', icon: <FiActivity size={13} />, path: '/api/traces', params: { limit: 25, sort: 'created_at', order: 'desc' }, key: 'traces' },
@@ -53,7 +54,7 @@ export default function LiveHub() {
 
   const columnsByTab = {
     traces: [
-      { key: 'trace_id', header: 'Trace', mono: true, render: (r) => <span className="cell-strong oui-mono">{String(r.trace_id).slice(0, 16)}</span> },
+      { key: 'trace_id', header: 'Trace', mono: true, render: (r) => <span className="oui-cell-primary oui-mono">{String(r.trace_id).slice(0, 16)}</span> },
       { key: 'service', header: 'Service', render: (r) => <span className="oui-row"><HealthDot tone={r.status === 'error' ? 'error' : 'ok'} />{r.service}</span> },
       { key: 'duration_ms', header: 'Duration', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span> },
       { key: 'span_count', header: 'Spans', num: true },
@@ -105,18 +106,16 @@ export default function LiveHub() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title"><span className="oui-row"><HealthDot tone="ok" pulse={!paused} /> Live</span></h1>
-          <div className="opa-page-sub">Streaming activity · one refresh engine across all tabs</div>
-        </div>
-        <div className="oui-row">
+      <PageHeader
+        title={<><span className="oui-row"><HealthDot tone="ok" pulse={!paused} /> Live</span></>}
+        description="Streaming activity · one refresh engine across all tabs"
+        actions={<><div className="oui-row">
           <SegmentedControl options={INTERVALS} value={intervalMs} onChange={setIntervalMs} />
-          <button className="opa-btn" onClick={() => setPaused((p) => !p)}>
+          <button className="oui-btn is-secondary" onClick={() => setPaused((p) => !p)}>
             {paused ? <><FiPlay size={13} /> Resume</> : <><FiPause size={13} /> Pause</>}
           </button>
-        </div>
-      </div>
+        </div></>}
+      />
 
       <Tabs tabs={TABS.map((t) => ({ value: t.value, label: t.label, icon: t.icon }))} value={tab} onChange={setTab} />
 
@@ -131,6 +130,8 @@ export default function LiveHub() {
         actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{paused ? 'paused' : `refreshing every ${intervalMs / 1000}s`} · {rows.length} rows</span>}
       >
         <DataTable
+          loading={loading && rows.length === 0}
+          error={error}
           columns={columnsByTab[tab]}
           rows={rows}
           rowKey={(r, i) => r.id || r.trace_id || `${r.fingerprint || r.command || r.url || r.from}-${i}`}

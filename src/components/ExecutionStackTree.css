@@ -1,7 +1,13 @@
 /* ============================================================================
    Execution stack tree — dense call list in the Blackfire/New Relic idiom.
-   Tokens only (theme/tokens.css), so the light theme comes for free via
-   theme/light.css. No hardcoded colours, no raw shadows.
+   Tokens only, from @open-family/ui, so both themes come for free. No hardcoded
+   colours, no raw shadows.
+
+   The five custom properties declared below (--col-*, --row-lead,
+   --scroll-gutter) are this component's own column geometry, not design tokens:
+   the column header sits outside the scroller and the rows sit inside it, so both
+   have to read the same widths or they drift apart. --stack-indent is set inline
+   per row by ExecutionStackTree.jsx.
    ============================================================================ */
 
 .execution-stack-tree {
@@ -114,7 +120,7 @@
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-caps);
   color: var(--text-muted);
 }
 
@@ -256,7 +262,7 @@
 .stack-tree-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   flex: 0 0 auto;
 }
 
@@ -298,11 +304,11 @@
 .stack-tree-function-type {
   padding: 0 5px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: var(--text-2xs);
   font-weight: var(--weight-medium);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
 }
 
 .stack-tree-function-type.internal {
@@ -378,7 +384,7 @@
   width: var(--col-self);
   height: 18px;
   padding: 0 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--surface-inset);
   overflow: hidden;
   color: var(--text-primary);
@@ -390,7 +396,7 @@
   left: 0;
   top: 0;
   bottom: 0;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   opacity: 0.45;
 }
 

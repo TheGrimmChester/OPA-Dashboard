@@ -1,18 +1,23 @@
 /* ============================================================================
    Profile view styles (hot spots + summary + toolbar).
-   Only what theme/ui.css does not already provide, and tokens only — light.css
-   re-declares the same tokens, so every rule here is dual-theme for free.
+
+   Only what @open-family/ui does not already provide, and tokens only, so every
+   rule here is dual-theme for free. The summary strip is StatRow/StatTile, the
+   table is Table, the controls are Select/Input/Button/Badge, and the bars are
+   Meter — none of that is restyled here.
+
+   CallGraph.css and FlameGraph.css deliberately borrow `.opa-prof-notice`,
+   `.opa-prof-crumb`, `.opa-prof-type` and `.opa-prof-foot` from this file so
+   those views read as members of the Profile panel rather than as widgets with
+   their own look. Their tests assert on those class names.
+
+   A handful of sub-4px paddings survive below. They are load-bearing: the
+   hot-spot table and the caller/callee pivot are ~22px rows, and promoting them
+   to --space-1 would grow every row by 6px and cost a screenful of functions.
    ============================================================================ */
 
 /* ---------------- summary strip ---------------- */
-/* auto-fit so 5 or 6 tiles are both dense, without a cols-N media-query ladder */
-.opa-prof-kpis { grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }
-.opa-prof-foot-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--text-2xs); min-width: 0; }
-.opa-prof-active {
-  color: var(--accent); background: var(--accent-wash); border-radius: 999px;
-  padding: 0 6px; font-size: var(--text-2xs); font-weight: var(--weight-medium);
-  text-transform: uppercase; letter-spacing: .05em;
-}
+.opa-prof-foot-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
 .opa-prof-dim { color: var(--text-disabled); }
 .opa-prof-warn { color: var(--warn-text); }
 
@@ -20,37 +25,29 @@
 .opa-prof-toolbar { flex-wrap: wrap; gap: var(--space-3); }
 .opa-prof-field {
   display: inline-flex; align-items: center; gap: var(--space-2);
-  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted);
+  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--text-muted);
 }
+/* The magnifier is the Input's own leading icon now, so the only thing this
+   wrapper still owns is the width and the anchor for the trailing clear button. */
 .opa-prof-search { position: relative; display: inline-flex; align-items: center; flex: 1 1 200px; min-width: 160px; max-width: 320px; }
-.opa-prof-search > svg { position: absolute; left: 8px; width: 13px; height: 13px; color: var(--text-muted); pointer-events: none; }
-.opa-prof-search .opa-input { width: 100%; padding-left: 27px; padding-right: 26px; }
-.opa-prof-search .opa-input::-webkit-search-cancel-button { display: none; }
-.opa-prof-search-clear {
-  position: absolute; right: 4px; display: inline-flex; padding: 2px;
-  border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm);
-}
-.opa-prof-search-clear:hover { color: var(--text-primary); background: var(--surface-3); }
+.opa-prof-search .oui-input-group { width: 100%; }
+.opa-prof-search .oui-input { width: 100%; padding-right: var(--space-8); }
+.opa-prof-search .oui-input::-webkit-search-cancel-button { display: none; }
+.opa-prof-search-clear { position: absolute; right: var(--space-1); }
 .opa-prof-sum { font-size: var(--text-xs); white-space: nowrap; }
 .opa-prof-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
 
 /* ---------------- notices ---------------- */
 .opa-prof-notice {
-  display: flex; align-items: flex-start; gap: var(--space-2);
-  padding: var(--space-2) var(--space-3); font-size: var(--text-xs); line-height: 1.45;
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); font-size: var(--text-xs); line-height: var(--text-xs-lh);
   color: var(--text-secondary); background: var(--surface-2); border-bottom: 1px solid var(--border-subtle);
 }
-.opa-prof-notice svg { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--text-muted); }
+.opa-prof-notice > svg { flex: 0 0 auto; width: 14px; height: 14px; color: var(--text-muted); align-self: flex-start; margin-top: 2px; }
 .opa-prof-notice strong { color: var(--text-primary); font-weight: var(--weight-semibold); }
 .opa-prof-notice.warn { color: var(--warn-text); background: var(--warn-bg); }
-.opa-prof-notice.warn svg, .opa-prof-notice.warn strong { color: var(--warn-text); }
-.opa-prof-notice-actions { margin-left: auto; display: flex; gap: var(--space-1); flex-wrap: wrap; }
-.opa-prof-mini {
-  border: 1px solid var(--border-default); background: var(--surface-1); color: var(--text-secondary);
-  font-family: var(--font-sans); font-size: var(--text-2xs); padding: 1px 7px; border-radius: var(--radius-sm);
-  cursor: pointer; white-space: nowrap;
-}
-.opa-prof-mini:hover { color: var(--text-primary); background: var(--surface-3); border-color: var(--border-strong); }
+.opa-prof-notice.warn > svg, .opa-prof-notice.warn strong { color: var(--warn-text); }
+.opa-prof-notice-actions { margin-left: auto; display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
 /* ---------------- hot spots table ---------------- */
 .opa-prof-hotspots { min-width: 0; }
@@ -75,6 +72,16 @@
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px;
   font-family: var(--font-sans); font-size: var(--text-2xs); color: var(--text-muted);
 }
+
+/* Proportion cell: the Meter carries the share, the figure carries the value.
+   A bar with no number beside it cannot be read off the screen. */
+.opa-prof-bar { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.opa-prof-bar .oui-meter { flex: 1 1 auto; min-width: 32px; }
+.opa-prof-bar-v {
+  flex: 0 0 auto; white-space: nowrap;
+  font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary);
+}
+
 .opa-prof-foot {
   padding: var(--space-2) var(--space-3); font-size: var(--text-2xs); color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
@@ -90,14 +97,10 @@
   color: var(--text-primary); overflow-wrap: anywhere;
 }
 .opa-prof-detail-src { margin-top: 3px; font-size: var(--text-2xs); color: var(--text-muted); overflow-wrap: anywhere; }
-.opa-prof-close {
-  flex: 0 0 auto; display: inline-flex; padding: 3px; border: none; background: none;
-  color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm);
-}
-.opa-prof-close:hover { color: var(--text-primary); background: var(--surface-3); }
+.opa-prof-close { flex: 0 0 auto; }
 .opa-prof-stats { display: flex; flex-wrap: wrap; gap: var(--space-4); padding: 0 var(--space-4) var(--space-3); }
 .opa-prof-stat { display: flex; flex-direction: column; gap: 1px; }
-.opa-prof-stat-l { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); white-space: nowrap; }
+.opa-prof-stat-l { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--text-muted); white-space: nowrap; }
 .opa-prof-stat-v { font-family: var(--font-mono); font-size: var(--text-base); font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .opa-prof-path {
   display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
@@ -120,7 +123,7 @@
 .opa-prof-col { background: var(--surface-inset); min-width: 0; padding-bottom: var(--space-2); }
 .opa-prof-col-head {
   display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3);
-  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted);
+  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--text-muted);
 }
 .opa-prof-col-head svg { width: 13px; height: 13px; }
 /* fixed numeric columns + a 1fr name that can shrink to nothing: never overflows */
@@ -129,7 +132,7 @@
   gap: var(--space-2); align-items: center; padding: 3px var(--space-3); font-size: var(--text-2xs);
 }
 .opa-prof-nhead {
-  color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: var(--tracking-caps);
   border-bottom: 1px solid var(--border-subtle);
 }
 .opa-prof-nrow {

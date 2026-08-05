@@ -7,6 +7,7 @@ import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtNum, fmtAgo, fmtBytes } from '../theme/format'
 import { useI18n } from '../contexts/I18nContext'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -138,14 +139,12 @@ export default function Diagnostics() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">{t('diag.title')}</h1>
-          <div className="opa-page-sub">{t('diag.subtitle')}</div>
-        </div>
-      </div>
+      <PageHeader
+        title={t('diag.title')}
+        description={t('diag.subtitle')}
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label={t('diag.commits')} icon={<FiGitCommit size={12} />} value={fmtNum(sus.length)} status="neutral" />
         <KpiTile label={t('diag.heap')} icon={<FiHardDrive size={12} />} value={fmtNum(snaps.length)} status="neutral" />
         <KpiTile label={t('diag.threads')} icon={<FiCpu size={12} />} value={fmtNum(thr.length)} status="neutral" />
@@ -166,21 +165,30 @@ export default function Diagnostics() {
           <Panel title={t('diag.recordRelease')}>
             <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))' }}>
               {Object.keys(releaseForm).map((k) => (
-                <input key={k} className="opa-input" placeholder={k} value={releaseForm[k]}
+                <input key={k} className="oui-input" placeholder={k} value={releaseForm[k]}
                   onChange={(e) => setReleaseForm({ ...releaseForm, [k]: e.target.value })} />
               ))}
             </div>
             <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-              <input className="opa-input" placeholder="filter service" value={service} onChange={(e) => setService(e.target.value)} />
-              <button className="opa-btn" disabled={busy} onClick={postRelease}>{t('diag.recordRelease')}</button>
+              <input className="oui-input" placeholder="filter service" value={service} onChange={(e) => setService(e.target.value)} />
+              <button className="oui-btn is-secondary" disabled={busy} onClick={postRelease}>{t('diag.recordRelease')}</button>
             </div>
           </Panel>
           <Panel title={t('diag.commits')} icon={<FiGitCommit />} flush loading={suspects.loading} error={suspects.error}
             empty={!suspects.loading && sus.length === 0} emptyText={t('diag.emptyCommits')}>
-            <DataTable columns={susCols} rows={sus} rowKey={(r) => `${r.service}:${r.release}`} maxHeight={360} />
+            <DataTable
+          loading={suspects.loading}
+          error={suspects.error}
+          onRetry={suspects.reload} columns={susCols} rows={sus} rowKey={(r) => `${r.service}:${r.release}`} maxHeight={360} />
           </Panel>
-          <Panel title={t('diag.releases')} flush empty={!releases.loading && rels.length === 0} emptyText="—">
-            <DataTable columns={[
+          <Panel title={t('diag.releases')} flush>
+            <DataTable
+              loading={releases.loading}
+              error={releases.error}
+              onRetry={releases.reload}
+              emptyTitle="No releases recorded"
+              emptyText="A release marker is created by posting to /api/releases at deploy time."
+              columns={[
               { key: 'release', header: t('diag.release'), render: (r) => <Badge>{r.release}</Badge> },
               { key: 'git_sha', header: 'SHA', render: (r) => <span className="oui-mono">{String(r.git_sha || '').slice(0, 8)}</span> },
               { key: 'deployed_at', header: t('diag.when'), num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.deployed_at)}</span> },
@@ -193,7 +201,10 @@ export default function Diagnostics() {
         <>
           <Panel title={t('diag.heap')} icon={<FiHardDrive />} flush loading={heap.loading} error={heap.error}
             empty={!heap.loading && snaps.length === 0} emptyText={t('diag.emptyHeap')}>
-            <DataTable columns={heapCols} rows={snaps} rowKey={(r) => r.id} maxHeight={280}
+            <DataTable
+          loading={heap.loading}
+          error={heap.error}
+          onRetry={heap.reload} columns={heapCols} rows={snaps} rowKey={(r) => r.id} maxHeight={280}
               onRowClick={(r) => setHeapSel(r.id === heapSel ? null : r.id)} />
           </Panel>
           {heapSel && (() => {
@@ -211,14 +222,20 @@ export default function Diagnostics() {
       {tab === 'threads' && (
         <Panel title={t('diag.threads')} icon={<FiCpu />} flush loading={threads.loading} error={threads.error}
           empty={!threads.loading && thr.length === 0} emptyText={t('diag.emptyThreads')}>
-          <DataTable columns={thrCols} rows={thr} rowKey={(r, i) => `${r.service}:${r.thread_name}:${i}`} maxHeight={420} />
+          <DataTable
+          loading={threads.loading}
+          error={threads.error}
+          onRetry={threads.reload} columns={thrCols} rows={thr} rowKey={(r, i) => `${r.service}:${r.thread_name}:${i}`} maxHeight={420} />
         </Panel>
       )}
 
       {tab === 'locks' && (
         <Panel title={t('diag.locks')} icon={<FiLock />} flush loading={locks.loading} error={locks.error}
           empty={!locks.loading && lck.length === 0} emptyText={t('diag.emptyLocks')}>
-          <DataTable columns={lockCols} rows={lck} rowKey={(r) => `${r.service}:${r.lock_name}`} maxHeight={420} />
+          <DataTable
+          loading={locks.loading}
+          error={locks.error}
+          onRetry={locks.reload} columns={lockCols} rows={lck} rowKey={(r) => `${r.service}:${r.lock_name}`} maxHeight={420} />
         </Panel>
       )}
     </div>

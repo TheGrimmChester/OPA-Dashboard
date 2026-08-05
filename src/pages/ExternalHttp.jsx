@@ -7,6 +7,7 @@ import {
 } from '../components/ui'
 import { fmtMs, fmtBytes, fmtNum, fmtPct, tierColor, latencyStatus, errorRateStatus, statusColor } from '../theme/format'
 import './ExternalHttp.css'
+import { PageHeader } from '@open-family/ui'
 
 const SORTS = [
   { value: 'call_count', label: 'Calls' },
@@ -110,23 +111,19 @@ export default function ExternalHttp() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">External Services</h1>
-          <div className="opa-page-sub">
-            Outbound HTTP calls across {services.length} service{services.length === 1 ? '' : 's'}
-            {service !== 'all' ? ` · scoped to ${service}` : ''}
-          </div>
-        </div>
-        <div className="oui-row">
+      <PageHeader
+        title="External Services"
+        description={<>Outbound HTTP calls across {services.length} service{services.length === 1 ? '' : 's'}
+            {service !== 'all' ? ` · scoped to ${service}` : ''}</>}
+        actions={<><div className="oui-row">
           <select className="exthttp-select" value={service} onChange={(e) => setService(e.target.value)} aria-label="Service scope">
             <option value="all">All services</option>
             {services.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-        </div>
-      </div>
+        </div></>}
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Outbound calls" icon={<FiActivity size={12} />} value={fmtNum(totals.calls)} unit="calls" status="neutral" />
         <KpiTile label="Avg latency" icon={<FiClock size={12} />} value={fmtMs(avgLatency)} status={latencyStatus(avgLatency)} />
         <KpiTile label="Error rate" icon={<FiAlertTriangle size={12} />} value={fmtPct(errRate)} status={errorRateStatus(errRate)}
@@ -147,6 +144,9 @@ export default function ExternalHttp() {
           </div>
         }>
         <DataTable
+          loading={q.loading}
+          error={q.error}
+          onRetry={q.reload}
           onRowClick={drillToEndpoint}
           columns={columns}
           rows={rows}

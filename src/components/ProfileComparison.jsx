@@ -215,7 +215,7 @@ const A_TITLE = <>Trace A <span className="oui-text-muted">· Baseline</span></>
 const B_TITLE = <>Trace B <span className="oui-text-muted">· New</span></>
 
 const AB_COLUMNS = [
-  { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="cell-strong">{r.label}</span> },
+  { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="oui-cell-primary">{r.label}</span> },
   { key: 'a', header: 'Baseline (A)', num: true, sortable: false, render: (r) => r.fmt(r.a) },
   { key: 'b', header: 'New (B)', num: true, sortable: false, render: (r) => r.fmt(r.b) },
   { key: 'delta', header: 'Δ', num: true, sortable: false, render: (r) => <DeltaIndicator current={r.b} previous={r.a} invert /> },
@@ -227,7 +227,7 @@ const AB_COLUMNS = [
 
 // Two panels: 2-up when comparing side by side, stacked full-width in diff mode.
 function AbSplit({ stacked, children }) {
-  return <div className={stacked ? 'oui-stack' : 'opa-grid cols-2'}>{children}</div>
+  return <div className={stacked ? 'oui-stack' : 'oui-grid is-2'}>{children}</div>
 }
 
 function dumpTotal(items) {
@@ -257,7 +257,7 @@ function DumpList({ items }) {
       {items.map((item, spanIdx) => (
         <div key={`${item.spanId || 'span'}-${spanIdx}`} className="opa-cmp-dump-group">
           <div className="opa-cmp-dump-head">
-            <span className="cell-strong">{item.span || 'unnamed span'}</span>
+            <span className="oui-cell-primary">{item.span || 'unnamed span'}</span>
             <Badge title={`Span ${item.spanId || 'unknown'}`}>{shortId(item.spanId)}</Badge>
             <span className="oui-text-muted opa-cmp-dump-count">{fmtNum(item.dumps.length)} dumps</span>
           </div>
@@ -501,7 +501,7 @@ function ProfileComparison({ trace1, trace2, viewMode = 'diff' }) {
             <StatusPill tone={verdict.tone}>{verdict.label}</StatusPill>
             <span>{verdict.text}</span>
           </div>
-          <div className="opa-grid cols-4">
+          <div className="oui-grid is-4">
             {OVERVIEW_METRICS.map((m) => {
               const a = metrics1?.[m.key] ?? 0
               const b = metrics2?.[m.key] ?? 0

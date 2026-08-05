@@ -6,6 +6,7 @@ import {
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, HealthDot, Badge, InlineBar } from '../components/ui'
 import { fmtNum, fmtPct, statusColor } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -136,7 +137,7 @@ export default function Slos() {
             <HealthDot tone={st.tone} title={st.label} />
             <div style={{ minWidth: 0 }}>
               <div className="oui-row" style={{ gap: 6 }}>
-                <span className="cell-strong">{r.name || '—'}</span>
+                <span className="oui-cell-primary">{r.name || '—'}</span>
                 <Badge title={`SLO type: ${r.slo_type}`}>{r.slo_type}</Badge>
               </div>
               {r.description && (
@@ -231,10 +232,10 @@ export default function Slos() {
       width: 96,
       render: (r) => (
         <div className="oui-row" style={{ justifyContent: 'flex-end', gap: 2 }}>
-          <button className="opa-btn ghost" onClick={(e) => { e.stopPropagation(); startEdit(r) }} title="Edit SLO">
+          <button className="oui-btn is-ghost" onClick={(e) => { e.stopPropagation(); startEdit(r) }} title="Edit SLO">
             <FiEdit2 size={13} />
           </button>
-          <button className="opa-btn ghost" onClick={(e) => { e.stopPropagation(); remove(r) }} title="Delete SLO">
+          <button className="oui-btn is-ghost" onClick={(e) => { e.stopPropagation(); remove(r) }} title="Delete SLO">
             <FiTrash2 size={13} />
           </button>
         </div>
@@ -247,17 +248,13 @@ export default function Slos() {
       {/* Per-row compliance fetchers (render nothing). */}
       {slos.map((s) => <SloComplianceFetcher key={s.id} id={s.id} onLoad={onLoad} />)}
 
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Service Level Objectives</h1>
-          <div className="opa-page-sub">
-            {slos.length} objective{slos.length === 1 ? '' : 's'}
-            {breaching > 0 ? ` · ${breaching} breaching` : ''}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Service Level Objectives"
+        description={<>{slos.length} objective{slos.length === 1 ? '' : 's'}
+            {breaching > 0 ? ` · ${breaching} breaching` : ''}</>}
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Total SLOs" icon={<FiTarget size={12} />} value={fmtNum(slos.length)} unit="defined" status="neutral" />
         <KpiTile label="Breaching" icon={<FiAlertTriangle size={12} />} value={fmtNum(breaching)} status={breaching > 0 ? 'error' : 'ok'} />
         <KpiTile
@@ -284,26 +281,26 @@ export default function Slos() {
         flush
       >
         <div style={{ padding: 'var(--space-3) var(--space-3) 0' }}>
-          <form className="opa-inline-form" onSubmit={submit}>
-            <input className="opa-input" placeholder="Name (e.g. Checkout availability)" value={form.name} onChange={set('name')} />
-            <input className="opa-input" placeholder="Service" value={form.service} onChange={set('service')} />
-            <select className="opa-select" value={form.slo_type} onChange={set('slo_type')} title="SLO type">
+          <form className="oui-row" onSubmit={submit}>
+            <input className="oui-input" placeholder="Name (e.g. Checkout availability)" value={form.name} onChange={set('name')} />
+            <input className="oui-input" placeholder="Service" value={form.service} onChange={set('service')} />
+            <select className="oui-select" value={form.slo_type} onChange={set('slo_type')} title="SLO type">
               <option value="availability">availability</option>
               <option value="error_rate">error_rate</option>
             </select>
-            <input className="opa-input" type="number" step="0.1" min="0" placeholder="Target %" title="Target (percent, e.g. 99.9)" value={form.target_value} onChange={set('target_value')} style={{ flex: '0 0 110px', minWidth: 90 }} />
-            <input className="opa-input" type="number" step="1" min="0" placeholder="Window (h)" title="Window (hours)" value={form.window_hours} onChange={set('window_hours')} style={{ flex: '0 0 120px', minWidth: 90 }} />
-            <input className="opa-input" placeholder="Description (optional)" value={form.description} onChange={set('description')} />
-            <button className="opa-btn primary" disabled={busy}>
+            <input className="oui-input" type="number" step="0.1" min="0" placeholder="Target %" title="Target (percent, e.g. 99.9)" value={form.target_value} onChange={set('target_value')} style={{ flex: '0 0 110px', minWidth: 90 }} />
+            <input className="oui-input" type="number" step="1" min="0" placeholder="Window (h)" title="Window (hours)" value={form.window_hours} onChange={set('window_hours')} style={{ flex: '0 0 120px', minWidth: 90 }} />
+            <input className="oui-input" placeholder="Description (optional)" value={form.description} onChange={set('description')} />
+            <button className="oui-btn is-primary" disabled={busy}>
               {editingId ? <><FiCheck size={13} /> {busy ? 'Saving…' : 'Update SLO'}</> : <><FiPlus size={13} /> {busy ? 'Saving…' : 'Add SLO'}</>}
             </button>
             {editingId && (
-              <button type="button" className="opa-btn ghost" onClick={cancelEdit} disabled={busy}>
+              <button type="button" className="oui-btn is-ghost" onClick={cancelEdit} disabled={busy}>
                 <FiX size={13} /> Cancel
               </button>
             )}
           </form>
-          {formErr && <div className="opa-form-err">{String(formErr)}</div>}
+          {formErr && <div className="oui-error-text">{String(formErr)}</div>}
           {noneEvaluated && (
             <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)' }}>
               Awaiting first evaluation — compliance metrics appear once the evaluator has run.
@@ -312,6 +309,9 @@ export default function Slos() {
         </div>
 
         <DataTable
+          loading={slosQ.loading}
+          error={slosQ.error}
+          onRetry={slosQ.reload}
           columns={columns}
           rows={rows}
           rowKey={(r) => r.id}

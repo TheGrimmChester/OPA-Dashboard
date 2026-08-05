@@ -1,9 +1,12 @@
 /* ============================================================================
-   Call graph (ego view). Tokens only — light.css re-declares the same tokens,
-   so every rule here is dual-theme for free. The previous version mirrored the
-   accent palette as hex literals, which tokens.css has since remapped, so those
-   colours were wrong in dark and illegible in light. CallGraph.ego.test.jsx
-   fails the build if a literal colour reappears in this file.
+   Call graph (ego view). Tokens only, from @open-family/ui — both themes resolve
+   the same semantic names, so every rule here is dual-theme for free. An earlier
+   version mirrored the accent palette as hex literals, which the design system
+   has since remapped, so those colours were wrong in dark and illegible in
+   light. CallGraph.ego.test.jsx fails the build if a literal colour reappears.
+
+   The toolbar controls, the picker's filter field and both icon buttons are kit
+   components; the rules below only place them.
    ============================================================================ */
 
 .opa-cg {
@@ -47,7 +50,9 @@
 .opa-cg-focusname { white-space: nowrap; overflow: hidden; }
 .opa-cg-metric { flex: 0 0 auto; }
 .opa-cg-depth { flex: 0 0 auto; }
-.opa-cg-back { margin-left: auto; padding: 2px var(--space-2); font-size: var(--text-xs); }
+/* The Button owns its own height and padding; this only pushes it to the end of
+   the toolbar. */
+.opa-cg-back { margin-left: auto; }
 
 /* ---------------- entry-path breadcrumb ---------------- */
 .opa-cg-crumbs {
@@ -185,18 +190,13 @@
   border-bottom: 1px solid var(--border-subtle);
   flex-wrap: wrap;
 }
-.opa-cg-picker-search { position: relative; display: inline-flex; align-items: center; flex: 1 1 140px; min-width: 120px; }
-.opa-cg-picker-search > svg {
-  position: absolute; left: 8px; width: 13px; height: 13px;
-  color: var(--text-muted); pointer-events: none;
-}
-.opa-cg-picker-search .opa-input { width: 100%; padding-left: 27px; }
-.opa-cg-picker-search .opa-input::-webkit-search-cancel-button { display: none; }
-.opa-cg-close {
-  flex: 0 0 auto; display: inline-flex; padding: 3px; border: none; background: none;
-  color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm);
-}
-.opa-cg-close:hover { color: var(--text-primary); background: var(--surface-3); }
+/* The magnifier is the Input's own leading icon now, so this wrapper only sets
+   how the field flexes inside the picker bar. */
+.opa-cg-picker-search { display: inline-flex; align-items: center; flex: 1 1 140px; min-width: 120px; }
+.opa-cg-picker-search .oui-input-group { width: 100%; }
+.opa-cg-picker-search .oui-input { width: 100%; }
+.opa-cg-picker-search .oui-input::-webkit-search-cancel-button { display: none; }
+.opa-cg-close { flex: 0 0 auto; }
 .opa-cg-picker-list { max-height: 260px; overflow-y: auto; min-width: 0; }
 .opa-cg-picker-empty { padding: var(--space-4); font-size: var(--text-xs); color: var(--text-muted); text-align: center; }
 .opa-cg-prow {

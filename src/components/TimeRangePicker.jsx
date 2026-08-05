@@ -1,34 +1,33 @@
 import React from 'react'
+import { Select } from '@open-family/ui'
 import './TimeRangePicker.css'
 
-function TimeRangePicker({ value, onChange, options = null }) {
-  const defaultOptions = [
-    { value: '1h', label: 'Last Hour' },
-    { value: '6h', label: 'Last 6 Hours' },
-    { value: '24h', label: 'Last 24 Hours' },
-    { value: '7d', label: 'Last 7 Days' },
-    { value: '30d', label: 'Last 30 Days' },
-    { value: 'custom', label: 'Custom Range' },
-  ]
+const DEFAULT_OPTIONS = [
+  { value: '1h', label: 'Last hour' },
+  { value: '6h', label: 'Last 6 hours' },
+  { value: '24h', label: 'Last 24 hours' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'custom', label: 'Custom range' },
+]
 
-  const timeOptions = options || defaultOptions
+/**
+ * Time-range select for the shell. The callback contract is unchanged: `onChange`
+ * still receives the bare option value, not the DOM event.
+ */
+function TimeRangePicker({ value, onChange, options = null }) {
+  const timeOptions = options || DEFAULT_OPTIONS
 
   return (
-    <div className="time-range-picker">
-      <select 
-        value={value} 
+    <span className="opa-timerange">
+      <Select
+        value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="time-range-select"
-      >
-        {timeOptions.map(option => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
+        options={timeOptions}
+        aria-label="Time range"
+      />
+    </span>
   )
 }
 
 export default TimeRangePicker
-

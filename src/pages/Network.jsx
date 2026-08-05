@@ -8,6 +8,7 @@ import { Panel, KpiTile, DataTable, StatusPill, Badge, HubDeferredSurface } from
 import { fmtNum, fmtAgo, fmtMs } from '../theme/format'
 import { useI18n } from '../contexts/I18nContext'
 import { isHubDeferred } from '../utils/hubDeferred'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -78,7 +79,7 @@ function NetworkLive() {
   }
 
   const flowCols = [
-    { key: 'src_service', header: 'Src', render: (r) => <span className="oui-mono cell-strong">{r.src_service || '—'}</span> },
+    { key: 'src_service', header: 'Src', render: (r) => <span className="oui-mono oui-cell-primary">{r.src_service || '—'}</span> },
     { key: 'dst_service', header: 'Dst', render: (r) => <span className="oui-mono">{r.dst_service || '—'}</span> },
     { key: 'protocol', header: 'Proto', render: (r) => <Badge>{r.protocol || 'tcp'}</Badge> },
     { key: 'bytes_sent', header: 'Bytes →', num: true, render: (r) => fmtNum(r.bytes_sent) },
@@ -119,7 +120,7 @@ function NetworkLive() {
   ]
 
   const discCols = [
-    { key: 'name', header: 'Service', render: (r) => <span className="oui-mono cell-strong">{r.name}</span> },
+    { key: 'name', header: 'Service', render: (r) => <span className="oui-mono oui-cell-primary">{r.name}</span> },
     { key: 'host', header: 'Host', render: (r) => r.host || '—' },
     { key: 'listen_port', header: 'Port', num: true, render: (r) => fmtNum(r.listen_port) },
     { key: 'process_name', header: 'Process', render: (r) => r.process_name || '—' },
@@ -137,14 +138,12 @@ function NetworkLive() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">{t('net.title')}</h1>
-          <div className="opa-page-sub">{t('net.subtitle')}</div>
-        </div>
-      </div>
+      <PageHeader
+        title={t('net.title')}
+        description={t('net.subtitle')}
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Flows 1h" icon={<FiShare2 size={12} />} value={fmtNum(s.flows_1h || 0)}
           status={s.sampler_enabled ? 'ok' : 'neutral'}
           footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>{s.sampler_enabled ? 'sampler on' : 'ingest / collector'}</span>} />
@@ -158,14 +157,20 @@ function NetworkLive() {
       <Tabs tabs={TABS} value={tab} onChange={setTab} t={t} />
 
       {tab === 'flows' && (
-        <div className="opa-grid cols-2">
+        <div className="oui-grid is-2">
           <Panel title="Service edges" icon={<FiShare2 />} flush loading={deps.loading} error={deps.error}
             empty={!deps.loading && edgeRows.length === 0} emptyText="No attributed flows yet">
-            <DataTable columns={edgeCols} rows={edgeRows} rowKey={(r) => `${r.src_service}->${r.dst_service}`} maxHeight={360} />
+            <DataTable
+          loading={deps.loading}
+          error={deps.error}
+          onRetry={deps.reload} columns={edgeCols} rows={edgeRows} rowKey={(r) => `${r.src_service}->${r.dst_service}`} maxHeight={360} />
           </Panel>
           <Panel title="Connection flows" icon={<FiActivity />} flush loading={flows.loading} error={flows.error}
             empty={!flows.loading && flowRows.length === 0} emptyText="POST /v1/network/flows or enable OPA_NETWORK_SAMPLER">
-            <DataTable columns={flowCols} rows={flowRows} rowKey={(r, i) => `${r.src_addr}:${r.src_port}-${r.dst_addr}:${i}`} maxHeight={360} />
+            <DataTable
+          loading={flows.loading}
+          error={flows.error}
+          onRetry={flows.reload} columns={flowCols} rows={flowRows} rowKey={(r, i) => `${r.src_addr}:${r.src_port}-${r.dst_addr}:${i}`} maxHeight={360} />
           </Panel>
         </div>
       )}
@@ -174,14 +179,17 @@ function NetworkLive() {
         <>
           <Panel title="Probe DNS">
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input className="opa-input" value={probe} onChange={(e) => setProbe(e.target.value)} placeholder="hostname" style={{ flex: 1 }} />
-              <button className="opa-btn" disabled={busy || !probe} onClick={runProbe}><FiSearch size={14} /> Probe</button>
+              <input className="oui-input" value={probe} onChange={(e) => setProbe(e.target.value)} placeholder="hostname" style={{ flex: 1 }} />
+              <button className="oui-btn is-secondary" disabled={busy || !probe} onClick={runProbe}><FiSearch size={14} /> Probe</button>
             </div>
             {probeOut && <pre className="oui-mono" style={{ marginTop: 12, fontSize: 12 }}>{JSON.stringify(probeOut, null, 2)}</pre>}
           </Panel>
           <Panel title="DNS resolutions" icon={<FiGlobe />} flush loading={dns.loading} error={dns.error}
             empty={!dns.loading && dnsRows.length === 0} emptyText="No DNS events">
-            <DataTable columns={dnsCols} rows={dnsRows} rowKey={(r, i) => `${r.query_name}:${r.rcode}:${i}`} maxHeight={420} />
+            <DataTable
+          loading={dns.loading}
+          error={dns.error}
+          onRetry={dns.reload} columns={dnsCols} rows={dnsRows} rowKey={(r, i) => `${r.query_name}:${r.rcode}:${i}`} maxHeight={420} />
           </Panel>
         </>
       )}
@@ -189,21 +197,30 @@ function NetworkLive() {
       {tab === 'tls' && (
         <Panel title="TLS handshakes" icon={<FiShield />} flush loading={tls.loading} error={tls.error}
           empty={!tls.loading && tlsRows.length === 0} emptyText="No TLS events — POST /v1/network/tls">
-          <DataTable columns={tlsCols} rows={tlsRows} rowKey={(r, i) => `${r.server_name}:${i}`} maxHeight={420} />
+          <DataTable
+          loading={tls.loading}
+          error={tls.error}
+          onRetry={tls.reload} columns={tlsCols} rows={tlsRows} rowKey={(r, i) => `${r.server_name}:${i}`} maxHeight={420} />
         </Panel>
       )}
 
       {tab === 'discovered' && (
         <Panel title="Agentless services" icon={<FiServer />} flush loading={discovered.loading} error={discovered.error}
           empty={!discovered.loading && svcRows.length === 0} emptyText="No discovered listeners">
-          <DataTable columns={discCols} rows={svcRows} rowKey={(r) => r.id || `${r.host}:${r.name}:${r.listen_port}`} maxHeight={420} />
+          <DataTable
+          loading={discovered.loading}
+          error={discovered.error}
+          onRetry={discovered.reload} columns={discCols} rows={svcRows} rowKey={(r) => r.id || `${r.host}:${r.name}:${r.listen_port}`} maxHeight={420} />
         </Panel>
       )}
 
       {tab === 'profiles' && (
         <Panel title="Host profiles" icon={<FiCpu />} flush loading={profiles.loading} error={profiles.error}
           empty={!profiles.loading && profRows.length === 0} emptyText="POST /v1/ebpf/profiles from an external host sampler">
-          <DataTable columns={profCols} rows={profRows} rowKey={(r, i) => `${r.host}:${r.function}:${i}`} maxHeight={420} />
+          <DataTable
+          loading={profiles.loading}
+          error={profiles.error}
+          onRetry={profiles.reload} columns={profCols} rows={profRows} rowKey={(r, i) => `${r.host}:${r.function}:${i}`} maxHeight={420} />
         </Panel>
       )}
     </div>

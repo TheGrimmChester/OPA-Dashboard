@@ -1,26 +1,36 @@
 import React from 'react'
+import { Segmented, Tabs as FamilyTabs } from '@open-family/ui'
 
-// Segmented control. options: [{value,label}] or [string].
-export function SegmentedControl({ options = [], value, onChange }) {
-  const opts = options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o))
+/**
+ * A segmented control switches a view or a density. It does not navigate — that
+ * is `Tabs`. 32px, not the 24px this used to render.
+ */
+export function SegmentedControl({ options = [], value, onChange, label }) {
+  const items = options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o))
   return (
-    <div className="opa-seg">
-      {opts.map((o) => (
-        <button key={o.value} className={value === o.value ? 'active' : ''} onClick={() => onChange(o.value)}>{o.label}</button>
-      ))}
-    </div>
+    <Segmented
+      aria-label={label || 'Select a view'}
+      value={value}
+      onChange={onChange}
+      items={items}
+    />
   )
 }
 
-// Underline tabs. tabs: [{value,label,icon?}].
-export function Tabs({ tabs = [], value, onChange }) {
+/**
+ * A tab strip for a page's own views. 40px hit target.
+ *
+ * The family's `Tabs` carries no icon slot: a tab is a short noun and an icon
+ * beside it adds a second thing to scan for no gain in a strip of four.
+ */
+export function Tabs({ tabs = [], value, onChange, label }) {
+  const items = tabs.map(({ value: v, label: l, count }) => ({ value: v, label: l, count }))
   return (
-    <div className="opa-tabs">
-      {tabs.map((t) => (
-        <button key={t.value} className={`opa-tab ${value === t.value ? 'active' : ''}`} onClick={() => onChange(t.value)}>
-          {t.icon}{t.label}
-        </button>
-      ))}
-    </div>
+    <FamilyTabs
+      aria-label={label || 'Views'}
+      value={value}
+      onChange={onChange}
+      items={items}
+    />
   )
 }

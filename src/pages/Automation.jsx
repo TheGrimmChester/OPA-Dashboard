@@ -7,6 +7,7 @@ import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge, HubDeferredSurface } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { isHubDeferred } from '../utils/hubDeferred'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -143,22 +144,20 @@ function AutomationLive() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Automation</h1>
-          <div className="opa-page-sub">Management API · plan / apply · export / import / promote</div>
-        </div>
-        <div className="oui-row" style={{ gap: 8 }}>
-          <button className="opa-btn ghost" disabled={busy} onClick={exportLive}>
+      <PageHeader
+        title="Automation"
+        description="Management API · plan / apply · export / import / promote"
+        actions={<><div className="oui-row" style={{ gap: 8 }}>
+          <button className="oui-btn is-ghost" disabled={busy} onClick={exportLive}>
             <FiDownload size={13} /> Export live
           </button>
-          <a className="opa-btn ghost" href={`${API}/api/mgmt/v1/openapi.json`} target="_blank" rel="noreferrer">
+          <a className="oui-btn is-ghost" href={`${API}/api/mgmt/v1/openapi.json`} target="_blank" rel="noreferrer">
             <FiFileText size={13} /> OpenAPI
           </a>
-        </div>
-      </div>
+        </div></>}
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Resources" icon={<FiCpu size={12} />} value={fmtNum(kpis.resources)} status="neutral" />
         <KpiTile label="Revisions" icon={<FiGitMerge size={12} />} value={fmtNum(kpis.revs)} status="neutral" />
         <KpiTile label="Plan creates" icon={<FiUpload size={12} />} value={fmtNum(kpis.create)} status="neutral" />
@@ -176,16 +175,16 @@ function AutomationLive() {
         <>
           <Panel title="ConfigBundle" icon={<FiFileText />}>
             <textarea
-              className="opa-input"
+              className="oui-input"
               style={{ width: '100%', minHeight: 220, fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}
               value={bundleText}
               onChange={(e) => setBundleText(e.target.value)}
             />
             <div className="oui-row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-              <button className="opa-btn" disabled={busy} onClick={() => run('/api/mgmt/v1/plan')}>Plan</button>
-              <button className="opa-btn primary" disabled={busy} onClick={() => run('/api/mgmt/v1/apply')}>Apply</button>
-              <button className="opa-btn" disabled={busy} onClick={() => run('/api/mgmt/v1/import')}>Import</button>
-              <button className="opa-btn ghost" disabled={busy} onClick={() => run('/api/mgmt/v1/import', { params: { prune: '1' } })}>
+              <button className="oui-btn is-secondary" disabled={busy} onClick={() => run('/api/mgmt/v1/plan')}>Plan</button>
+              <button className="oui-btn is-primary" disabled={busy} onClick={() => run('/api/mgmt/v1/apply')}>Apply</button>
+              <button className="oui-btn is-secondary" disabled={busy} onClick={() => run('/api/mgmt/v1/import')}>Import</button>
+              <button className="oui-btn is-ghost" disabled={busy} onClick={() => run('/api/mgmt/v1/import', { params: { prune: '1' } })}>
                 Import + prune
               </button>
             </div>
@@ -208,21 +207,21 @@ function AutomationLive() {
 
       {tab === 'promote' && (
         <Panel title="Promote between tenants" icon={<FiUpload />}>
-          <div className="opa-inline-form" style={{ flexWrap: 'wrap' }}>
-            <input className="opa-input" placeholder="Source org" value={promote.source_organization_id}
+          <div className="oui-row" style={{ flexWrap: 'wrap' }}>
+            <input className="oui-input" placeholder="Source org" value={promote.source_organization_id}
               onChange={(e) => setPromote({ ...promote, source_organization_id: e.target.value })} />
-            <input className="opa-input" placeholder="Source project" value={promote.source_project_id}
+            <input className="oui-input" placeholder="Source project" value={promote.source_project_id}
               onChange={(e) => setPromote({ ...promote, source_project_id: e.target.value })} />
-            <input className="opa-input" placeholder="Target org" value={promote.target_organization_id}
+            <input className="oui-input" placeholder="Target org" value={promote.target_organization_id}
               onChange={(e) => setPromote({ ...promote, target_organization_id: e.target.value })} />
-            <input className="opa-input" placeholder="Target project" value={promote.target_project_id}
+            <input className="oui-input" placeholder="Target project" value={promote.target_project_id}
               onChange={(e) => setPromote({ ...promote, target_project_id: e.target.value })} />
             <label className="oui-text-muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={!!promote.dry_run}
                 onChange={(e) => setPromote({ ...promote, dry_run: e.target.checked })} />
               Dry run
             </label>
-            <button className="opa-btn primary" disabled={busy} onClick={runPromote}>
+            <button className="oui-btn is-primary" disabled={busy} onClick={runPromote}>
               {promote.dry_run ? 'Preview promote' : 'Promote'}
             </button>
           </div>
@@ -236,15 +235,20 @@ function AutomationLive() {
       {tab === 'revisions' && (
         <Panel title="Config revisions" icon={<FiGitMerge />} flush loading={revisions.loading} error={revisions.error}
           empty={!revisions.loading && revs.length === 0} emptyText="No apply/import revisions yet">
-          <DataTable columns={revCols} rows={revs} rowKey={(r) => r.id} maxHeight={420} />
+          <DataTable
+          loading={revisions.loading}
+          error={revisions.error}
+          onRetry={revisions.reload} columns={revCols} rows={revs} rowKey={(r) => r.id} maxHeight={420} />
         </Panel>
       )}
 
       {tab === 'resources' && (
         <Panel title="Managed resources" icon={<FiCpu />} flush loading={index.loading}>
           <DataTable
+          loading={index.loading}
+          onRetry={index.reload}
             columns={[
-              { key: 'name', header: 'Resource', render: (r) => <span className="oui-mono cell-strong">{r.name}</span> },
+              { key: 'name', header: 'Resource', render: (r) => <span className="oui-mono oui-cell-primary">{r.name}</span> },
               { key: 'description', header: 'Description' },
               { key: 'table', header: 'Storage', render: (r) => <span className="oui-text-muted">{r.table}</span> },
             ]}

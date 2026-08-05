@@ -14,6 +14,7 @@ import {
 } from '../components/ui'
 import { fmtMs, fmtBytes, fmtNum } from '../theme/format'
 import { calculateOverallMetrics } from '../utils/comparisonUtils'
+import { PageHeader } from '@open-family/ui'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -156,7 +157,7 @@ export default function CompareTraces() {
   const m2 = trace2 ? calculateOverallMetrics(trace2) : null
 
   const diffColumns = [
-    { key: 'label', header: 'Metric', render: (r) => <span className="cell-strong">{r.label}</span>, sortable: false },
+    { key: 'label', header: 'Metric', render: (r) => <span className="oui-cell-primary">{r.label}</span>, sortable: false },
     { key: 'a', header: 'Baseline (A)', num: true, sortable: false, render: (r) => (
       <span className="oui-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m1?.[r.key] ?? 0)}</span>
     ) },
@@ -184,7 +185,7 @@ export default function CompareTraces() {
           onChange={(e) => setValue(e.target.value)}
           placeholder="Enter trace ID"
           list={listId}
-          className="opa-input"
+          className="oui-input"
           style={{ flex: 1, minWidth: 0 }}
         />
         <datalist id={listId}>
@@ -192,7 +193,7 @@ export default function CompareTraces() {
             <option key={idx} value={t.trace_id || t.id} />
           ))}
         </datalist>
-        <button onClick={() => fetchFn()} disabled={loading || !value.trim()} className="opa-btn primary">
+        <button onClick={() => fetchFn()} disabled={loading || !value.trim()} className="oui-btn is-primary">
           {loading ? <><FiRefreshCw style={{ animation: 'spin 1s linear infinite' }} /> Loading</> : <><FiDownload /> Load</>}
         </button>
       </div>
@@ -207,14 +208,14 @@ export default function CompareTraces() {
             badges={
               <>
                 <StatusPill tone={isError(trace) ? 'error' : 'ok'}>{isError(trace) ? 'Error' : 'OK'}</StatusPill>
-                <span className="opa-badge">{trace.spans?.length || 0} spans</span>
-                <span className="opa-badge">{fmtMs(rootSpan(trace)?.duration_ms || 0)}</span>
+                <span className="oui-badge">{trace.spans?.length || 0} spans</span>
+                <span className="oui-badge">{fmtMs(rootSpan(trace)?.duration_ms || 0)}</span>
               </>
             }
             actions={
               <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
                 <CopyToClipboard text={value} label="Copy ID" />
-                <Link to={`/traces/${value}`} className="opa-btn ghost">View trace</Link>
+                <Link to={`/traces/${value}`} className="oui-btn is-ghost">View trace</Link>
               </div>
             }
           />
@@ -225,18 +226,14 @@ export default function CompareTraces() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Compare</h1>
-          <div className="opa-page-sub">
-            {compareMode === 'cohort'
+      <PageHeader
+        title="Compare"
+        description={compareMode === 'cohort'
               ? 'Compare a transaction’s speed across runtimes, versions or services'
               : compareMode === 'callgraph'
                 ? 'Population call-graph diff across two halves of the time range'
                 : 'Side-by-side profile diff between two traces'}
-          </div>
-        </div>
-        <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
+        actions={<><div className="oui-row" style={{ gap: 'var(--space-2)' }}>
           <SegmentedControl
             options={[
               { value: 'trace', label: 'By trace' },
@@ -247,9 +244,9 @@ export default function CompareTraces() {
             onChange={setCompareMode}
           />
           {compareMode === 'trace' && bothLoaded && <ShareButton />}
-          <Link to="/traces" className="opa-btn ghost"><FiArrowLeft /> Back to Traces</Link>
-        </div>
-      </div>
+          <Link to="/traces" className="oui-btn is-ghost"><FiArrowLeft /> Back to Traces</Link>
+        </div></>}
+      />
 
       {compareMode === 'cohort' ? (
         <CohortCompare />
@@ -257,7 +254,7 @@ export default function CompareTraces() {
         <CallgraphWindowCompare />
       ) : (
       <>
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         {renderSelector('Trace A · Baseline', 'trace1', trace1Id, setTrace1Id, loading1, error1, fetchTrace1, trace1, 'recent-traces-1')}
         {renderSelector('Trace B · New', 'trace2', trace2Id, setTrace2Id, loading2, error2, fetchTrace2, trace2, 'recent-traces-2')}
       </div>
@@ -301,7 +298,7 @@ export default function CompareTraces() {
                   return (
                     <button
                       key={idx}
-                      className="opa-btn ghost"
+                      className="oui-btn is-ghost"
                       onClick={() => {
                         if (!trace1) {
                           setTrace1Id(traceId)

@@ -8,6 +8,7 @@ import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 import './Alerts.css'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -196,7 +197,7 @@ export default function Alerts() {
       key: 'name', header: 'Name', sortValue: (r) => r.name || '',
       render: (r) => (
         <div style={{ minWidth: 0 }}>
-          <div className="cell-strong">{r.name || '—'}</div>
+          <div className="oui-cell-primary">{r.name || '—'}</div>
           {r.description && (
             <div className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {r.description}
@@ -211,7 +212,7 @@ export default function Alerts() {
         <span className="oui-mono">
           <span className="oui-text-muted">{r.condition_type || '—'}</span>{' '}
           {opSym(r.condition_config?.operator)}{' '}
-          <span className="cell-strong">{r.condition_config?.threshold ?? '—'}</span>
+          <span className="oui-cell-primary">{r.condition_config?.threshold ?? '—'}</span>
         </span>
       ),
     },
@@ -242,11 +243,11 @@ export default function Alerts() {
       key: '_actions', header: '', sortable: false, align: 'right', width: 170,
       render: (r) => (
         <div className="alerts-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="opa-btn ghost" title="Test now" onClick={() => testAlert(r)} disabled={testingId === r.id}>
+          <button className="oui-btn is-ghost" title="Test now" onClick={() => testAlert(r)} disabled={testingId === r.id}>
             <FiPlay size={12} /> {testingId === r.id ? '…' : 'Test'}
           </button>
-          <button className="opa-btn ghost" title="Edit" onClick={() => startEdit(r)}><FiEdit2 size={12} /></button>
-          <button className="opa-btn ghost" title="Delete" onClick={() => deleteAlert(r)}><FiTrash2 size={12} /></button>
+          <button className="oui-btn is-ghost" title="Edit" onClick={() => startEdit(r)}><FiEdit2 size={12} /></button>
+          <button className="oui-btn is-ghost" title="Delete" onClick={() => deleteAlert(r)}><FiTrash2 size={12} /></button>
         </div>
       ),
     },
@@ -270,7 +271,7 @@ export default function Alerts() {
       key: 'value', header: 'Value / threshold', num: true, sortValue: (r) => (typeof r.value === 'number' ? r.value : 0),
       render: (r) => (
         <span className="alerts-vt">
-          <span className="cell-strong">{r.value ?? '—'}</span>{' '}
+          <span className="oui-cell-primary">{r.value ?? '—'}</span>{' '}
           <span className="oui-text-muted">vs {r.threshold ?? '—'}</span>
         </span>
       ),
@@ -291,17 +292,13 @@ export default function Alerts() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Alerts</h1>
-          <div className="opa-page-sub">
-            {total} rule{total === 1 ? '' : 's'} · {enabled} enabled
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Alerts"
+        description={<>{total} rule{total === 1 ? '' : 's'} · {enabled} enabled</>}
+      />
 
       {/* KPI rollups */}
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile
           label="Total rules" icon={<FiBell size={12} />} value={fmtNum(total)} unit="rules" status="neutral"
           footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{servicesCovered} service{servicesCovered === 1 ? '' : 's'} scoped</span>}
@@ -328,43 +325,43 @@ export default function Alerts() {
         empty={!alertsQ.loading && !showForm && alerts.length === 0}
         emptyText="No alert rules yet — create one to start monitoring"
         actions={!showForm && (
-          <button className="opa-btn primary" onClick={startCreate}><FiPlus size={13} /> New alert</button>
+          <button className="oui-btn is-primary" onClick={startCreate}><FiPlus size={13} /> New alert</button>
         )}
       >
         {showForm && (
           <form className="alerts-form" onSubmit={saveAlert}>
             <div className="alerts-field wide">
               <label>Name</label>
-              <input className="opa-input" placeholder="e.g. High error rate on checkout" value={form.name} onChange={(e) => setField('name', e.target.value)} />
+              <input className="oui-input" placeholder="e.g. High error rate on checkout" value={form.name} onChange={(e) => setField('name', e.target.value)} />
             </div>
             <div className="alerts-field">
               <label>Service</label>
-              <input className="opa-input" placeholder="all services" value={form.service} onChange={(e) => setField('service', e.target.value)} />
+              <input className="oui-input" placeholder="all services" value={form.service} onChange={(e) => setField('service', e.target.value)} />
             </div>
             <div className="alerts-field">
               <label>Cooldown (s)</label>
-              <input className="opa-input" type="number" min="0" placeholder="optional" value={form.cooldown_seconds} onChange={(e) => setField('cooldown_seconds', e.target.value)} />
+              <input className="oui-input" type="number" min="0" placeholder="optional" value={form.cooldown_seconds} onChange={(e) => setField('cooldown_seconds', e.target.value)} />
             </div>
 
             <div className="alerts-field">
               <label>Condition</label>
-              <select className="opa-select" value={form.condition_type} onChange={(e) => setField('condition_type', e.target.value)}>
+              <select className="oui-select" value={form.condition_type} onChange={(e) => setField('condition_type', e.target.value)}>
                 {CONDITION_TYPES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
             <div className="alerts-field">
               <label>Operator</label>
-              <select className="opa-select" value={form.operator} onChange={(e) => setField('operator', e.target.value)}>
+              <select className="oui-select" value={form.operator} onChange={(e) => setField('operator', e.target.value)}>
                 {OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div className="alerts-field">
               <label>Threshold</label>
-              <input className="opa-input" type="number" step="any" placeholder="e.g. 5" value={form.threshold} onChange={(e) => setField('threshold', e.target.value)} />
+              <input className="oui-input" type="number" step="any" placeholder="e.g. 5" value={form.threshold} onChange={(e) => setField('threshold', e.target.value)} />
             </div>
             <div className="alerts-field">
               <label>Action</label>
-              <select className="opa-select" value={form.action_type} onChange={(e) => setField('action_type', e.target.value)}>
+              <select className="oui-select" value={form.action_type} onChange={(e) => setField('action_type', e.target.value)}>
                 {ACTION_TYPES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
             </div>
@@ -372,7 +369,7 @@ export default function Alerts() {
             <div className="alerts-field wide">
               <label>{TARGET_LABEL[form.action_type] || 'Target'}</label>
               <input
-                className="opa-input"
+                className="oui-input"
                 type={form.action_type === 'email' ? 'email' : 'text'}
                 placeholder={form.action_type === 'email' ? 'oncall@example.com' : 'https://…'}
                 value={form.action_target}
@@ -385,16 +382,19 @@ export default function Alerts() {
                 <input type="checkbox" checked={form.enabled} onChange={(e) => setField('enabled', e.target.checked)} />
                 Enabled
               </label>
-              <button type="button" className="opa-btn ghost" onClick={closeForm}>Cancel</button>
-              <button type="submit" className="opa-btn primary" disabled={saving}>
+              <button type="button" className="oui-btn is-ghost" onClick={closeForm}>Cancel</button>
+              <button type="submit" className="oui-btn is-primary" disabled={saving}>
                 <FiPlus size={13} /> {saving ? 'Saving…' : form.id ? 'Save changes' : 'Create alert'}
               </button>
             </div>
           </form>
         )}
-        {formErr && <div className="opa-form-err">{String(formErr)}</div>}
+        {formErr && <div className="oui-error-text">{String(formErr)}</div>}
 
         <DataTable
+          loading={alertsQ.loading}
+          error={alertsQ.error}
+          onRetry={alertsQ.reload}
           columns={columns}
           rows={alerts}
           rowKey={(r) => r.id}
@@ -417,12 +417,15 @@ export default function Alerts() {
           actions={(
             <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
               {testingId === selectedId && <StatusPill tone="warn">checking…</StatusPill>}
-              <button className="opa-btn ghost" onClick={() => historyQ.reload()} title="Refresh"><FiRefreshCw size={12} /> Refresh</button>
-              <button className="opa-btn ghost" onClick={() => setSelectedId(null)} title="Close"><FiX size={12} /></button>
+              <button className="oui-btn is-ghost" onClick={() => historyQ.reload()} title="Refresh"><FiRefreshCw size={12} /> Refresh</button>
+              <button className="oui-btn is-ghost" onClick={() => setSelectedId(null)} title="Close"><FiX size={12} /></button>
             </div>
           )}
         >
           <DataTable
+          loading={historyQ.loading}
+          error={historyQ.error}
+          onRetry={historyQ.reload}
             columns={histColumns}
             rows={history}
             rowKey={(r, i) => `${r.fired_at || ''}-${i}`}

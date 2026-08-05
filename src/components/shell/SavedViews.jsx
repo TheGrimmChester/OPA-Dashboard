@@ -167,7 +167,7 @@ export default function SavedViews() {
                   <div className="opa-savedviews-item-main">
                     <div className="opa-savedviews-item-name">
                       {v.name}
-                      {v.is_shared ? <span className="opa-badge opa-savedviews-shared">shared</span> : null}
+                      {v.is_shared ? <span className="oui-badge opa-savedviews-shared">shared</span> : null}
                     </div>
                     <div className="opa-savedviews-item-meta oui-mono">{meta}</div>
                   </div>

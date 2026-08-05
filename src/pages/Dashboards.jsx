@@ -4,7 +4,9 @@ import axios from 'axios'
 import { FiLayout, FiPlus, FiSave, FiPlay } from 'react-icons/fi'
 import { Panel, EmptyState, KpiTile, DataTable, Badge } from '../components/ui'
 import TimeSeriesChart from '../components/ui/TimeSeriesChart'
-import { useToast } from '../components/ui/Toast'
+import {
+  PageHeader, Button, Field, Input, useToast,
+} from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -43,7 +45,8 @@ function WidgetCard({ widget, variables }) {
         <div className="oui-num" style={{ fontSize: 32 }}>{data?.value ?? '—'}</div>
       )}
       {(widget.type === 'table' || widget.type === 'toplist') && cols.length > 0 && (
-        <DataTable columns={cols} rows={rows} rowKey={(_, i) => i} maxHeight={240} />
+        <DataTable
+          error={err ? String(err) : null} columns={cols} rows={rows} rowKey={(_, i) => i} maxHeight={240} />
       )}
       {widget.type === 'timeseries' && (
         <TimeSeriesChart
@@ -128,12 +131,10 @@ export default function Dashboards() {
     const rows = (list.data?.dashboards || []).filter((d) => d.config?.version === 2 || d.config?.widgets)
     return (
       <div className="oui-stack">
-        <div className="opa-page-head">
-          <div>
-            <h1 className="opa-page-title">Dashboards</h1>
-            <div className="opa-page-sub">Widget builder over TQL · templates + drag-grid layout</div>
-          </div>
-          <button type="button" className="opa-btn" onClick={() => setDraft({
+        <PageHeader
+        title="Dashboards"
+        description="Widget builder over TQL · templates + drag-grid layout"
+        actions={<><button type="button" className="oui-btn is-secondary" onClick={() => setDraft({
             version: 2, layout: { cols: 12 }, variables: { service: '' },
             widgets: [{
               id: 'w1', type: 'bignum', title: 'Spans', x: 0, y: 0, w: 3, h: 2,
@@ -141,13 +142,13 @@ export default function Dashboards() {
             }],
           })}>
             <FiPlus size={14} /> Blank
-          </button>
-        </div>
+          </button></>}
+      />
 
         <Panel title="Templates" icon={<FiLayout />}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {(templates.data?.templates || []).map((tpl) => (
-              <button key={tpl.id} type="button" className="opa-btn ghost" onClick={() => createFromTemplate(tpl)}>
+              <button key={tpl.id} type="button" className="oui-btn is-ghost" onClick={() => createFromTemplate(tpl)}>
                 {tpl.name}
               </button>
             ))}
@@ -156,10 +157,10 @@ export default function Dashboards() {
 
         <Panel title="Your dashboards" icon={<FiLayout />} loading={list.loading} error={list.error}
           empty={!list.loading && rows.length === 0} emptyText="No v2 dashboards yet — start from a template">
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             {rows.map((d) => (
               <Link key={d.id} to={`/dashboards/${d.id}`} className="opa-card" style={{ padding: 12, textDecoration: 'none' }}>
-                <div className="cell-strong">{d.name}</div>
+                <div className="oui-cell-primary">{d.name}</div>
                 <div className="oui-text-muted" style={{ fontSize: 12 }}>{d.description || d.id}</div>
                 <Badge>{(d.config?.widgets || []).length} widgets</Badge>
               </Link>
@@ -175,17 +176,45 @@ export default function Dashboards() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <input className="opa-input" value={name} onChange={(e) => setName(e.target.value)} style={{ fontSize: 20, fontWeight: 600 }} />
-          <div className="opa-page-sub">Dashboard builder · variable substitution {'{{service}}'}</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input className="opa-input" placeholder="service variable" value={varService} onChange={(e) => setVarService(e.target.value)} style={{ width: 140 }} />
-          <button type="button" className="opa-btn" onClick={save}><FiSave size={14} /> Save</button>
-          <button type="button" className="opa-btn ghost" onClick={() => { setDraft(null); navigate('/dashboards') }}>Back</button>
-        </div>
-      </div>
+      {/* The editable name is a labelled field in the header, not the heading
+          itself. A bare <input> where the <h1> belongs left this page with no
+          heading at all: nothing in the document outline, and nothing for a
+          screen reader to announce as the page title. */}
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Dashboards', onClick: () => { setDraft(null); navigate('/dashboards') } },
+          { label: name || 'Untitled dashboard' },
+        ]}
+        title={name || 'Untitled dashboard'}
+        description={`Dashboard builder. Widgets substitute ${'{{service}}'} from the variable below.`}
+        actions={
+          <>
+            <Field label="Name" htmlFor="dashboard-name">
+              <Input
+                id="dashboard-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Dashboard name"
+              />
+            </Field>
+            <Field label="Service variable" htmlFor="dashboard-var-service">
+              <Input
+                id="dashboard-var-service"
+                placeholder="service"
+                value={varService}
+                onChange={(e) => setVarService(e.target.value)}
+              />
+            </Field>
+            <Button variant="primary" icon={<FiSave />} onClick={save}>Save</Button>
+            <Button
+              variant="ghost"
+              onClick={() => { setDraft(null); navigate('/dashboards') }}
+            >
+              Back
+            </Button>
+          </>
+        }
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
         {(cfg.widgets || []).map((w) => (

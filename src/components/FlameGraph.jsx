@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { FiAlertTriangle, FiChevronRight, FiInfo } from 'react-icons/fi'
-import { EmptyState, SegmentedControl } from './ui'
+import { Button, EmptyState, Segmented, Select } from '@open-family/ui'
 import { fmtBytes, fmtMs, fmtNum, fmtPct } from '../theme/format'
 import { fmtMetric, middleEllipsis } from './profile/HotSpots'
 import { METRIC_LABELS } from './profile/ProfileToolbar'
@@ -67,6 +67,8 @@ const NOISE_FLOORS = [
   { value: 1, label: '1%' },
   { value: 5, label: '5%' },
 ]
+
+const METRIC_OPTIONS = METRIC_KEYS.map((m) => ({ value: m, label: METRIC_LABELS[m] }))
 
 /* ---- paint -----------------------------------------------------------------
    op index: -2 merged run, -1 unclassified, 0..4 = opTypes.TYPE_ORDER.
@@ -943,8 +945,9 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
   if (tree.n === 0) {
     return (
       <EmptyState
+        inline
         title="No call stack to draw"
-        hint="This trace carries no profiler frames — enable the OPA profiler to record one."
+        description="This trace carries no profiler frames, so there is no shape to render. Enabling the OPA profiler on the service records one."
       />
     )
   }
@@ -1034,9 +1037,9 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
           {otherMetrics.length > 0 && (
             <div className="opa-prof-notice-actions">
               {otherMetrics.map((k) => (
-                <button key={k} type="button" className="opa-prof-mini" onClick={() => setMetric(k)}>
+                <Button key={k} size="sm" onClick={() => setMetric(k)}>
                   Show {METRIC_LABELS[k]}
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -1062,9 +1065,11 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
         {!controlled && (
           <label className="opa-prof-field">
             Metric
-            <select className="opa-select" value={metric} onChange={(e) => setMetric(e.target.value)}>
-              {METRIC_KEYS.map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
-            </select>
+            <Select
+              value={metric}
+              options={METRIC_OPTIONS}
+              onChange={(e) => setMetric(e.target.value)}
+            />
           </label>
         )}
         {!structural && (
@@ -1073,7 +1078,12 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
             title={`Hide frames worth less than this share of the ${metricLabel.toLowerCase()} in view. A parent stays whenever any descendant passes.`}
           >
             <span className="opa-prof-field">Floor</span>
-            <SegmentedControl options={NOISE_FLOORS} value={minPct} onChange={setMinPct} />
+            <Segmented
+              aria-label="Noise floor"
+              items={NOISE_FLOORS}
+              value={minPct}
+              onChange={setMinPct}
+            />
           </div>
         )}
 
@@ -1140,8 +1150,9 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
         <div className="fg-canvas" ref={scrollRef}>
           {layout.frames.length === 0 ? (
             <EmptyState
+              inline
               title="Nothing passes the floor"
-              hint={`No frame reaches ${minPct}% of the ${metricLabel.toLowerCase()} in view. Lower the floor to see the rest.`}
+              description={`No frame reaches ${minPct}% of the ${metricLabel.toLowerCase()} in view. This is the filter, not the trace — lowering the floor shows the rest.`}
             />
           ) : (
             <svg
@@ -1216,7 +1227,7 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
         </div>
       )}
 
-      <div className="fg-sr" aria-live="polite">{srText}</div>
+      <div className="oui-visually-hidden" aria-live="polite">{srText}</div>
     </div>
   )
 }
