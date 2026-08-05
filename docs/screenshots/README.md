@@ -16,3 +16,18 @@ No API backend was running, so panels that depend on one show their **error**
 state and the rest show their **empty** state. That is deliberate: those two
 states plus loading are what this migration was largely about, and they are the
 states a screenshot of a populated dashboard would never show.
+
+## Per-route time range
+
+`timerange-*` was captured later, for the change that made the range switch
+conditional on the route (see `docs/architecture.md`). Same method, same 1600×1000
+viewport:
+
+- `timerange-traces-light-desktop.png` / `timerange-traces-dark-desktop.png` —
+  Traces still carries the switch; the trace list is windowed on `from`/`to`.
+- `timerange-account-light-desktop.png` / `timerange-account-dark-desktop.png` —
+  Account no longer carries it, because nothing on that page reads the range.
+  Refresh is still there in both, which is the point: it is a separate concern.
+
+In all four, `document.documentElement` has **no** `data-theme` attribute — the
+theme came from the emulated media query, not from a stamped attribute.
