@@ -1,32 +1,15 @@
-.time-range-picker {
-  display: inline-block;
-  height: 44px;
-}
+/* The kit's Select owns the height (--control-h), the border, the hover and the
+   focus ring. The previous rules hard-coded a 44px box, painted the focus border
+   with --chart-1 (a categorical chart hue, reserved for series) and drew the ring
+   with a literal rgba() that existed in neither theme.
 
-.time-range-select {
-  padding: var(--spacing-md) var(--spacing-md);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  cursor: pointer;
+   All that remains is the wrapper width, so the control does not resize as the
+   selected label changes length. */
+.opa-timerange {
+  display: inline-flex;
   min-width: 150px;
-  min-height: 44px;
-  line-height: 1.5;
-  transition: all var(--transition-base);
-  box-sizing: border-box;
 }
 
-.time-range-select:hover {
-  border-color: var(--border-medium);
-  background-color: var(--bg-elevated);
+.opa-timerange .oui-select {
+  width: 100%;
 }
-
-.time-range-select:focus {
-  outline: none;
-  border-color: var(--color-primary-blue);
-  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
-  background-color: var(--bg-elevated);
-}
-

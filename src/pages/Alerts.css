@@ -4,36 +4,36 @@
 .alerts-form {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-3);
+  gap: var(--space-3);
   align-items: end;
-  margin-bottom: var(--sp-4);
-  padding: var(--sp-4);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
 }
 .alerts-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .alerts-field > label {
-  font-size: var(--fs-11);
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: .05em;
   color: var(--text-muted);
 }
-.alerts-field .opa-input,
-.alerts-field .opa-select { width: 100%; }
+.alerts-field .oui-input,
+.alerts-field .oui-select { width: 100%; }
 .alerts-field.wide { grid-column: span 2; }
 .alerts-form-foot {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--space-3);
   justify-content: flex-end;
 }
 .alerts-form-check {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--fs-13);
+  font-size: var(--text-sm);
   color: var(--text-secondary);
   margin-right: auto;
   cursor: pointer;

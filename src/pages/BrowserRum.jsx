@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   FiGlobe, FiClock, FiAlertTriangle, FiEye, FiZap, FiActivity, FiLayers, FiInfo,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import { Panel, KpiTile, TimeSeriesChart, StatusPill, EmptyState, DataTable, Badge, InlineBar, SegmentedControl, EntityChip } from '../components/ui'
-import { fmtMs, fmtNum, fmtBytes, fmtAgo, fmtPct, latencyStatus, errorRateStatus, tierColor } from '../theme/format'
+import { Panel, KpiTile, StatusPill, EmptyState, DataTable, Badge, InlineBar, SegmentedControl, EntityChip } from '../components/ui'
+import { fmtMs, fmtNum, fmtBytes, fmtAgo, fmtPct, latencyStatus, errorRateStatus, tierColor, statusColor } from '../theme/format'
 import { rumSessionHref, sessionTracesHref, traceHref, tracesHref } from '../utils/entityLinks'
 import SessionReplayPlayer from '../components/SessionReplayPlayer'
 import './BrowserRum.css'
+import { PageHeader } from '@open-family/ui'
 
 const ell = { display: 'block', maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
@@ -60,17 +62,17 @@ function CoreWebVitalCard({ meta, vital, prominent }) {
   return (
     <div className={`cwv-card cwv-${tone}${prominent ? ' cwv-core' : ''}${meta.legacy ? ' cwv-legacy' : ''}`}>
       <div className="cwv-head">
-        <span className="cwv-label opa-mono">{meta.label}</span>
+        <span className="cwv-label oui-mono">{meta.label}</span>
         <StatusPill tone={tone}>{ratingLabel(rating)}</StatusPill>
       </div>
-      <div className="cwv-value opa-tnum">{fmtVital(v.p75, isCls)}</div>
-      <div className="cwv-name opa-muted">{meta.name}</div>
+      <div className="cwv-value oui-num">{fmtVital(v.p75, isCls)}</div>
+      <div className="cwv-name oui-text-muted">{meta.name}</div>
       <HistBar histogram={v.histogram} />
-      <div className="cwv-meta opa-muted">
+      <div className="cwv-meta oui-text-muted">
         <span>p75 · field</span>
         <span>{samples ? `${fmtNum(samples)} samples` : 'no samples'}</span>
       </div>
-      <div className="cwv-budget opa-muted">
+      <div className="cwv-budget oui-text-muted">
         <span className="cwv-budget-good">Good {meta.good}</span>
         <span className="cwv-budget-poor">Poor {meta.poor}</span>
       </div>
@@ -79,14 +81,14 @@ function CoreWebVitalCard({ meta, vital, prominent }) {
 }
 
 function AttrTable({ rows, valueKey = 'p75', valueFmt }) {
-  if (!rows?.length) return <div className="opa-muted" style={{ fontSize: 12, padding: '4px 0' }}>No attribution yet — beacon ships element selectors when available.</div>
+  if (!rows?.length) return <div className="oui-text-muted" style={{ fontSize: 12, padding: '4px 0' }}>No attribution yet — beacon ships element selectors when available.</div>
   return (
     <div className="cwv-attr-list">
       {rows.slice(0, 8).map((r, i) => (
         <div key={i} className="cwv-attr-row">
-          <span className="opa-mono cwv-attr-el" title={r.element}>{r.element || '—'}</span>
-          <span className="opa-tnum opa-muted">{fmtNum(r.count)}</span>
-          <span className="opa-tnum">{valueFmt ? valueFmt(r[valueKey]) : fmtMs(r[valueKey])}</span>
+          <span className="oui-mono cwv-attr-el" title={r.element}>{r.element || '—'}</span>
+          <span className="oui-num oui-text-muted">{fmtNum(r.count)}</span>
+          <span className="oui-num">{valueFmt ? valueFmt(r[valueKey]) : fmtMs(r[valueKey])}</span>
         </div>
       ))}
     </div>
@@ -176,44 +178,44 @@ export default function BrowserRum() {
   })
 
   const resourceCols = [
-    { key: 'name', header: 'Resource', render: (r) => <span className="opa-mono" style={{ ...ell, color: tierColor(r.type) }}>{r.name || '—'}</span> },
+    { key: 'name', header: 'Resource', render: (r) => <span className="oui-mono" style={{ ...ell, color: tierColor(r.type) }}>{r.name || '—'}</span> },
     { key: 'type', header: 'Type', render: (r) => <Badge>{r.type || '—'}</Badge> },
     { key: 'count', header: 'Count', num: true, sortValue: (r) => Number(r.count), render: (r) => (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={Number(r.count)} max={maxRes} label={fmtNum(r.count)} color={tierColor(r.type)} width={80} /></div>
     ) },
-    { key: 'avg_duration', header: 'Avg', num: true, sortValue: (r) => Number(r.avg_duration), render: (r) => <span style={{ color: `var(--${latencyStatus(Number(r.avg_duration))})` }}>{fmtMs(Number(r.avg_duration))}</span> },
+    { key: 'avg_duration', header: 'Avg', num: true, sortValue: (r) => Number(r.avg_duration), render: (r) => <span style={{ color: statusColor(latencyStatus(Number(r.avg_duration))) }}>{fmtMs(Number(r.avg_duration))}</span> },
     { key: 'avg_size', header: 'Avg size', num: true, sortValue: (r) => Number(r.avg_size), render: (r) => fmtBytes(Number(r.avg_size)) },
   ]
   const ajaxCols = [
     { key: 'method', header: 'Method', render: (r) => <Badge>{r.method || 'GET'}</Badge> },
-    { key: 'url', header: 'URL', render: (r) => <span className="opa-mono" style={ell}>{r.url || '—'}</span> },
+    { key: 'url', header: 'URL', render: (r) => <span className="oui-mono" style={ell}>{r.url || '—'}</span> },
     { key: 'count', header: 'Count', num: true, sortValue: (r) => Number(r.count), render: (r) => (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={Number(r.count)} max={maxAjax} label={fmtNum(r.count)} color="var(--accent)" width={80} /></div>
     ) },
-    { key: 'avg_duration', header: 'Avg', num: true, sortValue: (r) => Number(r.avg_duration), render: (r) => <span style={{ color: `var(--${latencyStatus(Number(r.avg_duration))})` }}>{fmtMs(Number(r.avg_duration))}</span> },
+    { key: 'avg_duration', header: 'Avg', num: true, sortValue: (r) => Number(r.avg_duration), render: (r) => <span style={{ color: statusColor(latencyStatus(Number(r.avg_duration))) }}>{fmtMs(Number(r.avg_duration))}</span> },
     { key: 'error_count', header: 'Errors', num: true, sortValue: (r) => Number(r.error_count), render: (r) => {
       const rate = Number(r.count) ? (Number(r.error_count) / Number(r.count)) * 100 : 0
-      return <span style={{ color: `var(--${errorRateStatus(rate)})` }}>{fmtNum(r.error_count)} <span className="opa-muted">({fmtPct(rate, 0)})</span></span>
+      return <span style={{ color: statusColor(errorRateStatus(rate)) }}>{fmtNum(r.error_count)} <span className="oui-text-muted">({fmtPct(rate, 0)})</span></span>
     } },
     {
       key: 'trace_id', header: 'Trace', width: 120,
       render: (r) => (r.trace_id
         ? <EntityChip to={traceHref(r.trace_id)} title={r.trace_id} onClick={(e) => e.stopPropagation()}>{String(r.trace_id).slice(0, 12)}</EntityChip>
-        : <span className="opa-muted">—</span>),
+        : <span className="oui-text-muted">—</span>),
       sortValue: (r) => r.trace_id || '',
     },
   ]
   const pvCols = [
-    { key: 'page_url', header: 'Page', render: (r) => <span className="opa-mono" style={ell}>{r.page_url || '—'}</span> },
-    { key: 'load_ms', header: 'Load', num: true, sortValue: (r) => Number(r.load_ms), render: (r) => <span style={{ color: `var(--${latencyStatus(Number(r.load_ms))})` }}>{fmtMs(Number(r.load_ms))}</span> },
+    { key: 'page_url', header: 'Page', render: (r) => <span className="oui-mono" style={ell}>{r.page_url || '—'}</span> },
+    { key: 'load_ms', header: 'Load', num: true, sortValue: (r) => Number(r.load_ms), render: (r) => <span style={{ color: statusColor(latencyStatus(Number(r.load_ms))) }}>{fmtMs(Number(r.load_ms))}</span> },
     { key: 'session_id', header: 'Session', mono: true, render: (r) => (
       r.session_id
         ? <EntityChip to={rumSessionHref(r.session_id)} title={`Open session ${r.session_id}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); selectSession(r.session_id) }}>
             {String(r.session_id).slice(0, 12)}
           </EntityChip>
-        : <span className="opa-muted">—</span>
+        : <span className="oui-text-muted">—</span>
     ) },
-    { key: 'occurred_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.occurred_at)}</span> },
+    { key: 'occurred_at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.occurred_at)}</span> },
   ]
   // One row per browser session (the beacon keeps a session id for the tab and
   // rotates page_view_id on each SPA route change).
@@ -229,39 +231,39 @@ export default function BrowserRum() {
     {
       key: 'error_count', header: 'Errors', num: true, sortValue: (r) => Number(r.error_count),
       render: (r) => (Number(r.error_count) > 0
-        ? <span style={{ color: 'var(--error)' }}>{fmtNum(r.error_count)}</span>
-        : <span className="opa-muted">0</span>),
+        ? <span style={{ color: 'var(--critical-text)' }}>{fmtNum(r.error_count)}</span>
+        : <span className="oui-text-muted">0</span>),
     },
-    { key: 'avg_load_ms', header: 'Avg load', num: true, sortValue: (r) => Number(r.avg_load_ms), render: (r) => <span style={{ color: `var(--${latencyStatus(Number(r.avg_load_ms))})` }}>{fmtMs(Number(r.avg_load_ms))}</span> },
-    { key: 'user_agent', header: 'User agent', render: (r) => <span className="opa-muted" style={ell}>{r.user_agent || '—'}</span> },
-    { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_seen)}</span>, sortValue: (r) => Date.parse(r.last_seen) || 0 },
+    { key: 'avg_load_ms', header: 'Avg load', num: true, sortValue: (r) => Number(r.avg_load_ms), render: (r) => <span style={{ color: statusColor(latencyStatus(Number(r.avg_load_ms))) }}>{fmtMs(Number(r.avg_load_ms))}</span> },
+    { key: 'user_agent', header: 'User agent', render: (r) => <span className="oui-text-muted" style={ell}>{r.user_agent || '—'}</span> },
+    { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_seen)}</span>, sortValue: (r) => Date.parse(r.last_seen) || 0 },
     {
       key: 'traces', header: 'APM',
       render: (r) => (r.session_id
         ? <EntityChip to={sessionTracesHref(r.session_id)} title="Correlated traces" onClick={(e) => e.stopPropagation()}>traces</EntityChip>
-        : <span className="opa-muted">—</span>),
+        : <span className="oui-text-muted">—</span>),
     },
   ]
 
   const mobileSessionRows = mobileSessions.data?.sessions || []
   const mobileCrashRows = mobileCrashes.data?.crashes || mobileCrashes.data?.rows || (Array.isArray(mobileCrashes.data) ? mobileCrashes.data : [])
   const mobileSessionCols = [
-    { key: 'session_id', header: 'Session', render: (r) => <span className="opa-mono cell-strong">{String(r.session_id || '').slice(0, 16)}</span> },
+    { key: 'session_id', header: 'Session', render: (r) => <span className="oui-mono oui-cell-primary">{String(r.session_id || '').slice(0, 16)}</span> },
     { key: 'platform', header: 'Platform', render: (r) => <Badge>{r.platform || '—'}</Badge> },
-    { key: 'crashes', header: 'Crashes', num: true, sortValue: (r) => Number(r.crashes), render: (r) => <span style={{ color: 'var(--error)' }}>{fmtNum(r.crashes)}</span> },
-    { key: 'app_version', header: 'App', render: (r) => <span className="opa-muted">{r.app_version || '—'}</span> },
-    { key: 'device_model', header: 'Device', render: (r) => <span className="opa-muted">{r.device_model || '—'}</span> },
-    { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_seen)}</span> },
+    { key: 'crashes', header: 'Crashes', num: true, sortValue: (r) => Number(r.crashes), render: (r) => <span style={{ color: 'var(--critical-text)' }}>{fmtNum(r.crashes)}</span> },
+    { key: 'app_version', header: 'App', render: (r) => <span className="oui-text-muted">{r.app_version || '—'}</span> },
+    { key: 'device_model', header: 'Device', render: (r) => <span className="oui-text-muted">{r.device_model || '—'}</span> },
+    { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_seen)}</span> },
   ]
   const mobileCrashCols = [
-    { key: 'exception_name', header: 'Exception', render: (r) => <span className="cell-strong">{r.exception_name || r.crash_type || '—'}</span> },
-    { key: 'exception_message', header: 'Message', render: (r) => <span className="opa-muted" style={ell}>{r.exception_message || '—'}</span> },
+    { key: 'exception_name', header: 'Exception', render: (r) => <span className="oui-cell-primary">{r.exception_name || r.crash_type || '—'}</span> },
+    { key: 'exception_message', header: 'Message', render: (r) => <span className="oui-text-muted" style={ell}>{r.exception_message || '—'}</span> },
     { key: 'platform', header: 'Platform', render: (r) => <Badge>{r.platform || '—'}</Badge> },
-    { key: 'session_id', header: 'Session', render: (r) => <span className="opa-mono">{String(r.session_id || '').slice(0, 14)}</span> },
+    { key: 'session_id', header: 'Session', render: (r) => <span className="oui-mono">{String(r.session_id || '').slice(0, 14)}</span> },
     { key: 'trace_id', header: 'Trace', render: (r) => (r.trace_id
       ? <EntityChip to={traceHref(r.trace_id)} onClick={(e) => e.stopPropagation()}>{String(r.trace_id).slice(0, 12)}</EntityChip>
-      : <span className="opa-muted">—</span>) },
-    { key: 'occurred_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.occurred_at)}</span> },
+      : <span className="oui-text-muted">—</span>) },
+    { key: 'occurred_at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.occurred_at)}</span> },
   ]
 
   // Merge the session's page views, AJAX calls and JS errors into one
@@ -286,21 +288,21 @@ export default function BrowserRum() {
     },
     {
       key: 'label', header: 'Event',
-      render: (r) => <span className={r.kind === 'error' ? '' : 'opa-mono'} style={{ ...ell, maxWidth: 520, color: r.kind === 'error' ? 'var(--error)' : undefined }}>{r.label || '—'}</span>,
+      render: (r) => <span className={r.kind === 'error' ? '' : 'oui-mono'} style={{ ...ell, maxWidth: 520, color: r.kind === 'error' ? 'var(--critical-text)' : undefined }}>{r.label || '—'}</span>,
     },
-    { key: 'meta', header: 'Detail', render: (r) => <span className="opa-muted">{r.meta || '—'}</span> },
+    { key: 'meta', header: 'Detail', render: (r) => <span className="oui-text-muted">{r.meta || '—'}</span> },
     {
       key: 'trace', header: 'Trace', width: 120,
       render: (r) => (r.trace_id
         ? <EntityChip to={traceHref(r.trace_id)} onClick={(e) => e.stopPropagation()}>{String(r.trace_id).slice(0, 12)}</EntityChip>
-        : <span className="opa-muted">—</span>),
+        : <span className="oui-text-muted">—</span>),
     },
-    { key: 'at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.at)}</span>, sortValue: (r) => Date.parse(r.at) || 0 },
+    { key: 'at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.at)}</span>, sortValue: (r) => Date.parse(r.at) || 0 },
   ]
 
   const routeRows = attr.by_route || []
   const routeCols = [
-    { key: 'route', header: 'Route', render: (r) => <span className="opa-mono" style={ell}>{r.route || '/'}</span> },
+    { key: 'route', header: 'Route', render: (r) => <span className="oui-mono" style={ell}>{r.route || '/'}</span> },
     { key: 'views', header: 'Views', num: true, sortValue: (r) => Number(r.views), render: (r) => fmtNum(r.views) },
     { key: 'lcp_p75', header: 'LCP p75', num: true, sortValue: (r) => Number(r.lcp_p75) || 0, render: (r) => (Number(r.lcp_n) ? fmtMs(r.lcp_p75) : '—') },
     { key: 'inp_p75', header: 'INP p75', num: true, sortValue: (r) => Number(r.inp_p75) || 0, render: (r) => (Number(r.inp_n) ? fmtMs(r.inp_p75) : '—') },
@@ -328,13 +330,11 @@ export default function BrowserRum() {
   }))
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Browser</h1>
-          <div className="opa-page-sub">Real user monitoring · Core Web Vitals (field p75) · mobile crash bridge</div>
-        </div>
-      </div>
+    <div className="oui-stack">
+      <PageHeader
+        title="Browser"
+        description="Real user monitoring · Core Web Vitals (field p75) · mobile crash bridge"
+      />
 
       {/* Core Web Vitals — CrUX-style field data */}
       <Panel
@@ -352,7 +352,7 @@ export default function BrowserRum() {
           />
         ) : (
           <>
-            <div className="cwv-honesty opa-muted">
+            <div className="cwv-honesty oui-text-muted">
               <FiInfo size={14} />
               <span>
                 Field p75 over deduped page views{d.honesty ? ` · ${d.honesty}` : ''}.
@@ -376,22 +376,22 @@ export default function BrowserRum() {
       </Panel>
 
       {/* SLO budgets + facets */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="CWV budgets (p75)" icon={<FiZap />} loading={slo.loading} error={slo.error}
           empty={!slo.loading && !slo.data?.slo} emptyText="No SLO data yet — ingest field beacons first">
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             {['lcp', 'inp', 'cls'].map((k) => {
               const s = slo.data?.slo?.[k] || {}
               const tone = ratingTone(s.rating)
               return (
                 <div key={k} className="cwv-slo-cell">
-                  <div className="opa-muted opa-mono" style={{ fontSize: 11 }}>{k.toUpperCase()} p75</div>
-                  <div className="opa-tnum" style={{ fontSize: 18 }}>
+                  <div className="oui-text-muted oui-mono" style={{ fontSize: 11 }}>{k.toUpperCase()} p75</div>
+                  <div className="oui-num" style={{ fontSize: 18 }}>
                     {k === 'cls' ? (s.p75 == null ? '—' : Number(s.p75).toFixed(3)) : (s.p75 == null ? '—' : fmtMs(s.p75))}
                   </div>
                   <StatusPill tone={tone}>{ratingLabel(s.rating) || '—'}</StatusPill>
                   <HistBar histogram={s.histogram} />
-                  <div className="opa-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                  <div className="oui-text-muted" style={{ fontSize: 11, marginTop: 4 }}>
                     {Number(s.samples) ? `${fmtNum(s.samples)} samples` : 'no samples'}
                     {k === 'cls' ? ' · budget 0.1' : ` · budget ${fmtMs(s.budget_ms || (k === 'lcp' ? 2500 : 200))}`}
                   </div>
@@ -414,7 +414,7 @@ export default function BrowserRum() {
       </div>
 
       {/* Attribution + by-route */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Vital attribution" icon={<FiActivity />} loading={attribution.loading} error={attribution.error}
           empty={!attribution.loading && !(attr.lcp_elements || []).length && !(attr.inp_targets || []).length && !(attr.cls_sources || []).length}
           emptyText="No element attribution yet — ensure opa-rum.js ≥ 0.3 ships web_vitals_elements">
@@ -435,13 +435,16 @@ export default function BrowserRum() {
         </Panel>
         <Panel title="CWV by route" icon={<FiLayers />} flush loading={attribution.loading} error={attribution.error}
           empty={!attribution.loading && routeRows.length === 0} emptyText="No route breakdown yet">
-          <DataTable columns={routeCols} rows={routeRows} rowKey={(r, i) => i}
+          <DataTable
+          loading={attribution.loading}
+          error={attribution.error}
+          onRetry={attribution.reload} columns={routeCols} rows={routeRows} rowKey={(r, i) => i}
             initialSort={{ key: 'views', dir: 'desc' }} maxHeight={280} />
         </Panel>
       </div>
 
       {/* KPI tiles */}
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Page views" icon={<FiEye size={12} />} value={fmtNum(d.total_page_views || 0)}
           unit="views" status="neutral" />
         <KpiTile label="JS errors" icon={<FiAlertTriangle size={12} />} value={fmtNum(d.total_errors || 0)}
@@ -458,8 +461,8 @@ export default function BrowserRum() {
         <TimeSeriesChart data={timeline} xKey="time" height={260}
           valueFmt={fmtMs} yFmt={fmtMs}
           series={[
-            { key: 'avg_load_time', name: 'Avg load', color: 'var(--p50)', type: 'line' },
-            { key: 'p95_load_time', name: 'p95 load', color: 'var(--p95)', type: 'line' },
+            { key: 'avg_load_time', name: 'Avg load', color: 'var(--chart-1)', type: 'line' },
+            { key: 'p95_load_time', name: 'p95 load', color: 'var(--chart-2)', type: 'line' },
           ]} />
       </Panel>
 
@@ -480,7 +483,9 @@ export default function BrowserRum() {
               hint={tab === 'mobile'
                 ? 'POST mobile crashes with session_id to /api/mobile/crashes — link appears here.'
                 : 'Add the opa-rum.js snippet (<script src=&quot;/opa-rum.js&quot; …>) to your app to start capturing resource timing, AJAX calls and page views.'} />
-          : <DataTable columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
+          : <DataTable
+          loading={tableLoading}
+          error={tab === 'mobile' ? mobileSessions.error : detail.error} columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
               onRowClick={tab === 'ajax' ? drillAjax
                 : tab === 'sessions' ? (r) => selectSession(r.session_id)
                   : tab === 'mobile' ? (r) => setMobileSession(r.session_id === mobileSession ? '' : r.session_id)
@@ -494,8 +499,11 @@ export default function BrowserRum() {
           loading={mobileCrashes.loading} error={mobileCrashes.error}
           empty={!mobileCrashes.loading && mobileCrashRows.length === 0}
           emptyText="No crash detail rows for this session_id"
-          actions={<button type="button" className="opa-btn ghost" onClick={() => setMobileSession('')}>Clear</button>}>
-          <DataTable columns={mobileCrashCols} rows={mobileCrashRows} rowKey={(r, i) => i} maxHeight={360} />
+          actions={<button type="button" className="oui-btn is-ghost" onClick={() => setMobileSession('')}>Clear</button>}>
+          <DataTable
+          loading={mobileCrashes.loading}
+          error={mobileCrashes.error}
+          onRetry={mobileCrashes.reload} columns={mobileCrashCols} rows={mobileCrashRows} rowKey={(r, i) => i} maxHeight={360} />
         </Panel>
       )}
 
@@ -506,16 +514,19 @@ export default function BrowserRum() {
           empty={!sessionDetail.loading && timelineRows.length === 0}
           emptyText="No events recorded for this session"
           actions={
-            <div className="opa-row" style={{ gap: 8 }}>
-              <Link className="opa-btn ghost" to={sessionTracesHref(session)}>Correlated traces</Link>
-              <button className="opa-btn ghost" onClick={() => setSession(null)}>Close</button>
+            <div className="oui-row" style={{ gap: 8 }}>
+              <Link className="oui-btn is-ghost" to={sessionTracesHref(session)}>Correlated traces</Link>
+              <button className="oui-btn is-ghost" onClick={() => setSession(null)}>Close</button>
             </div>
           }>
-          <DataTable columns={timelineCols} rows={timelineRows} rowKey={(r, i) => i}
+          <DataTable
+          loading={sessionDetail.loading}
+          error={sessionDetail.error}
+          onRetry={sessionDetail.reload} columns={timelineCols} rows={timelineRows} rowKey={(r, i) => i}
             onRowClick={(r) => r.trace_id && navigate(traceHref(r.trace_id))}
             maxHeight={420} />
           {(replay.data?.chunks || []).length > 0 && (
-            <div style={{ padding: '8px 12px' }} className="opa-muted">
+            <div style={{ padding: '8px 12px' }} className="oui-text-muted">
               Session replay: {fmtNum(replay.data.chunks.length)} chunk(s) · {(replay.data.chunks.reduce((n, c) => n + (Number(c.bytes) || 0), 0))} bytes (masked)
             </div>
           )}

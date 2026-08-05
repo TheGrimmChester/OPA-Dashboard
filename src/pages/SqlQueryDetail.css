@@ -1,8 +1,8 @@
 .opa-sqlq-back {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-1);
-  font-size: var(--fs-12);
+  gap: var(--space-1);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   text-decoration: none;
 }
@@ -15,21 +15,21 @@
   align-items: center;
   padding: 1px 7px;
   border-radius: 4px;
-  font-size: var(--fs-11);
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--tier-db);
-  background: color-mix(in srgb, var(--tier-db) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tier-db) 32%, transparent);
+  color: var(--chart-2);
+  background: color-mix(in srgb, var(--chart-2) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chart-2) 32%, transparent);
 }
 
 .opa-sqlq-code {
   margin: 0;
-  padding: var(--sp-3);
+  padding: var(--space-3);
   font-family: var(--font-mono);
-  font-size: var(--fs-13);
+  font-size: var(--text-sm);
   line-height: 1.6;
-  color: var(--tier-db);
+  color: var(--chart-2);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;

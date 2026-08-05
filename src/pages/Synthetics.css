@@ -14,7 +14,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--fs-11);
+  font-size: var(--text-2xs);
 }
 
 .syn-err {
@@ -23,16 +23,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--error);
-  font-size: var(--fs-12);
+  color: var(--critical-text);
+  font-size: var(--text-xs);
 }
 
 .syn-error {
-  margin-bottom: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--error);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--critical-text);
   border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, var(--error) 12%, transparent);
+  background: color-mix(in srgb, var(--critical-text) 12%, transparent);
   color: var(--text-primary);
-  font-size: var(--fs-12);
+  font-size: var(--text-xs);
 }

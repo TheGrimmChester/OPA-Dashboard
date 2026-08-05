@@ -1,10 +1,10 @@
 .metric-comparison-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
+  background: var(--canvas);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg, 8px);
-  padding: var(--spacing-lg, 16px);
+  padding: var(--space-6, 16px);
   box-shadow: var(--shadow-sm, 0 2px 4px rgba(0, 0, 0, 0.1));
-  transition: all var(--transition-base, 0.2s);
+  transition: all var(--dur-base) var(--ease);
 }
 
 .metric-comparison-card:hover {
@@ -15,92 +15,92 @@
 .metric-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm, 8px);
-  margin-bottom: var(--spacing-md, 12px);
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-4, 12px);
 }
 
 .metric-icon {
-  font-size: var(--font-size-lg, 18px);
-  color: var(--color-primary, #007bff);
+  font-size: var(--text-lg, 18px);
+  color: var(--accent, #007bff);
 }
 
 .metric-label {
   margin: 0;
-  font-size: var(--font-size-sm, 14px);
-  font-weight: var(--font-weight-semibold, 600);
+  font-size: var(--text-base, 14px);
+  font-weight: var(--weight-semibold, 600);
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: var(--letter-spacing-wide, 0.5px);
+  letter-spacing: var(--tracking-caps, 0.5px);
 }
 
 .metric-values {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-md, 12px);
-  margin-bottom: var(--spacing-md, 12px);
+  gap: var(--space-4, 12px);
+  margin-bottom: var(--space-4, 12px);
 }
 
 .metric-value-group {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs, 4px);
+  gap: var(--space-1, 4px);
 }
 
 .metric-value-label {
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-tertiary);
-  font-weight: var(--font-weight-medium, 500);
+  font-size: var(--text-xs, 12px);
+  color: var(--text-muted);
+  font-weight: var(--weight-medium, 500);
 }
 
 .metric-value {
-  font-size: var(--font-size-xl, 20px);
-  font-weight: var(--font-weight-bold, 700);
+  font-size: var(--text-xl, 20px);
+  font-weight: var(--weight-bold, 700);
   color: var(--text-primary);
-  font-family: var(--font-family-mono, 'Monaco', 'Menlo', monospace);
+  font-family: var(--font-mono, 'Monaco', 'Menlo', monospace);
 }
 
 .metric-footer {
   display: flex;
   justify-content: center;
-  padding-top: var(--spacing-sm, 8px);
-  border-top: 1px solid var(--border-light, #e0e0e0);
+  padding-top: var(--space-2, 8px);
+  border-top: 1px solid var(--border-default, #e0e0e0);
 }
 
 .metric-change {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs, 4px);
-  font-size: var(--font-size-sm, 14px);
-  font-weight: var(--font-weight-semibold, 600);
-  padding: var(--spacing-xs, 4px) var(--spacing-sm, 8px);
+  gap: var(--space-1, 4px);
+  font-size: var(--text-base, 14px);
+  font-weight: var(--weight-semibold, 600);
+  padding: var(--space-1, 4px) var(--space-2, 8px);
   border-radius: var(--radius-md, 4px);
 }
 
 .metric-change.improvement {
-  color: var(--color-success);
-  background-color: var(--color-success-bg);
+  color: var(--good-text);
+  background-color: var(--good-bg);
 }
 
 .metric-change.degradation {
-  color: var(--color-error);
-  background-color: var(--color-error-bg);
+  color: var(--critical-text);
+  background-color: var(--critical-bg);
 }
 
 .metric-change.no-change {
   color: var(--text-secondary);
-  background-color: var(--bg-tertiary);
+  background-color: var(--surface-2);
 }
 
 .change-icon {
-  font-size: var(--font-size-base, 16px);
+  font-size: var(--text-md, 16px);
 }
 
 .change-icon.improvement {
-  color: var(--color-success);
+  color: var(--good-text);
 }
 
 .change-icon.degradation {
-  color: var(--color-error);
+  color: var(--critical-text);
 }
 
 .change-icon.no-change {
@@ -108,6 +108,6 @@
 }
 
 .change-value {
-  font-family: var(--font-family-mono, 'Monaco', 'Menlo', monospace);
+  font-family: var(--font-mono, 'Monaco', 'Menlo', monospace);
 }
 

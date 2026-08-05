@@ -1,13 +1,12 @@
 import React from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   FiDatabase, FiActivity, FiClock, FiZap, FiTrendingUp, FiArrowLeft, FiCode, FiBarChart2, FiGitBranch,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import {
-  Panel, KpiTile, TimeSeriesChart, EntityHeader, EmptyState, DataTable,
-} from '../components/ui'
-import { fmtMs, fmtNum, fmtAgo, latencyStatus } from '../theme/format'
+import { Panel, KpiTile, EntityHeader, EmptyState, DataTable } from '../components/ui'
+import { fmtMs, fmtNum, fmtAgo, latencyStatus, statusColor } from '../theme/format'
 import './SqlQueryDetail.css'
 
 export default function SqlQueryDetail() {
@@ -35,11 +34,11 @@ export default function SqlQueryDetail() {
     { key: 'service', header: 'Service', render: (r) => r.service || '—', sortValue: (r) => r.service },
     {
       key: 'duration_ms', header: 'Duration', num: true,
-      render: (r) => <span style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span>,
+      render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span>,
     },
     {
       key: 'created_at', header: 'When', num: true,
-      render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span>,
+      render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span>,
       sortValue: (r) => Date.parse(r.created_at) || 0,
     },
   ]
@@ -54,7 +53,7 @@ export default function SqlQueryDetail() {
   const hasTrends = trends.length > 0
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <EntityHeader
         title={fingerprint || '—'}
         mono
@@ -68,7 +67,7 @@ export default function SqlQueryDetail() {
       />
 
       {/* Cost KPIs */}
-      <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+      <div className="oui-grid is-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile
           label="Executions" icon={<FiActivity size={12} />}
           value={fmtNum(d.total_executions || 0)} unit="runs" status="neutral"
@@ -104,8 +103,8 @@ export default function SqlQueryDetail() {
             data={trends}
             xKey="time"
             series={[
-              { key: 'avg_duration', name: 'Avg', color: 'var(--p50)', type: 'line' },
-              { key: 'p95_duration', name: 'p95', color: 'var(--p95)', type: 'line' },
+              { key: 'avg_duration', name: 'Avg', color: 'var(--chart-1)', type: 'line' },
+              { key: 'p95_duration', name: 'p95', color: 'var(--chart-2)', type: 'line' },
             ]}
             valueFmt={fmtMs}
             yFmt={fmtMs}
@@ -128,6 +127,9 @@ export default function SqlQueryDetail() {
         emptyText="No sample traces recorded for this query"
       >
         <DataTable
+          loading={t.loading}
+          error={t.error}
+          onRetry={t.reload}
           columns={traceColumns}
           rows={traces}
           rowKey={(r) => r.trace_id}

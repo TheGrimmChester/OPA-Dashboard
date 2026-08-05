@@ -14,6 +14,7 @@ import {
 } from '../components/ui'
 import { fmtMs, fmtBytes, fmtNum } from '../theme/format'
 import { calculateOverallMetrics } from '../utils/comparisonUtils'
+import { PageHeader } from '@open-family/ui'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -28,16 +29,16 @@ function isError(trace) {
 
 // Metric rows for the side-by-side diff table. `invert` = more-is-worse.
 const METRIC_ROWS = [
-  { key: 'duration', label: 'Duration', fmt: fmtMs, invert: true, color: 'var(--tier-app)' },
-  { key: 'cpu', label: 'CPU time', fmt: fmtMs, invert: true, color: 'var(--tier-app)' },
+  { key: 'duration', label: 'Duration', fmt: fmtMs, invert: true, color: 'var(--chart-1)' },
+  { key: 'cpu', label: 'CPU time', fmt: fmtMs, invert: true, color: 'var(--chart-1)' },
   { key: 'memory', label: 'Memory', fmt: fmtBytes, invert: true },
   { key: 'spans', label: 'Spans', fmt: fmtNum, invert: false },
-  { key: 'sqlQueries', label: 'SQL queries', fmt: fmtNum, invert: true, color: 'var(--tier-db)' },
-  { key: 'httpRequests', label: 'HTTP requests', fmt: fmtNum, invert: true, color: 'var(--tier-http)' },
-  { key: 'redisOperations', label: 'Redis ops', fmt: fmtNum, invert: true, color: 'var(--tier-redis)' },
-  { key: 'cacheOperations', label: 'Cache ops', fmt: fmtNum, invert: true, color: 'var(--tier-cache)' },
-  { key: 'networkSent', label: 'Bytes sent', fmt: fmtBytes, invert: true, color: 'var(--tier-app)' },
-  { key: 'networkReceived', label: 'Bytes received', fmt: fmtBytes, invert: true, color: 'var(--tier-db)' },
+  { key: 'sqlQueries', label: 'SQL queries', fmt: fmtNum, invert: true, color: 'var(--chart-2)' },
+  { key: 'httpRequests', label: 'HTTP requests', fmt: fmtNum, invert: true, color: 'var(--chart-4)' },
+  { key: 'redisOperations', label: 'Redis ops', fmt: fmtNum, invert: true, color: 'var(--chart-3)' },
+  { key: 'cacheOperations', label: 'Cache ops', fmt: fmtNum, invert: true, color: 'var(--chart-5)' },
+  { key: 'networkSent', label: 'Bytes sent', fmt: fmtBytes, invert: true, color: 'var(--chart-1)' },
+  { key: 'networkReceived', label: 'Bytes received', fmt: fmtBytes, invert: true, color: 'var(--chart-2)' },
 ]
 
 export default function CompareTraces() {
@@ -156,12 +157,12 @@ export default function CompareTraces() {
   const m2 = trace2 ? calculateOverallMetrics(trace2) : null
 
   const diffColumns = [
-    { key: 'label', header: 'Metric', render: (r) => <span className="cell-strong">{r.label}</span>, sortable: false },
+    { key: 'label', header: 'Metric', render: (r) => <span className="oui-cell-primary">{r.label}</span>, sortable: false },
     { key: 'a', header: 'Baseline (A)', num: true, sortable: false, render: (r) => (
-      <span className="opa-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m1?.[r.key] ?? 0)}</span>
+      <span className="oui-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m1?.[r.key] ?? 0)}</span>
     ) },
     { key: 'b', header: 'New (B)', num: true, sortable: false, render: (r) => (
-      <span className="opa-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m2?.[r.key] ?? 0)}</span>
+      <span className="oui-mono" style={r.color ? { color: r.color } : undefined}>{r.fmt(m2?.[r.key] ?? 0)}</span>
     ) },
     { key: 'delta', header: 'Δ', num: true, sortable: false, render: (r) => (
       <DeltaIndicator current={m2?.[r.key] ?? 0} previous={m1?.[r.key] ?? 0} invert={r.invert} />
@@ -174,9 +175,9 @@ export default function CompareTraces() {
     <Panel
       title={label}
       icon={<FiShuffle />}
-      actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>GET /api/traces/{'{id}'}/full</span>}
+      actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>GET /api/traces/{'{id}'}/full</span>}
     >
-      <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+      <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
         <input
           id={id}
           type="text"
@@ -184,7 +185,7 @@ export default function CompareTraces() {
           onChange={(e) => setValue(e.target.value)}
           placeholder="Enter trace ID"
           list={listId}
-          className="opa-input"
+          className="oui-input"
           style={{ flex: 1, minWidth: 0 }}
         />
         <datalist id={listId}>
@@ -192,29 +193,29 @@ export default function CompareTraces() {
             <option key={idx} value={t.trace_id || t.id} />
           ))}
         </datalist>
-        <button onClick={() => fetchFn()} disabled={loading || !value.trim()} className="opa-btn primary">
+        <button onClick={() => fetchFn()} disabled={loading || !value.trim()} className="oui-btn is-primary">
           {loading ? <><FiRefreshCw style={{ animation: 'spin 1s linear infinite' }} /> Loading</> : <><FiDownload /> Load</>}
         </button>
       </div>
 
-      {error && <div style={{ marginTop: 'var(--sp-3)' }}><ErrorState message={error} /></div>}
+      {error && <div style={{ marginTop: 'var(--space-3)' }}><ErrorState message={error} /></div>}
 
       {trace && (
-        <div style={{ marginTop: 'var(--sp-3)' }}>
+        <div style={{ marginTop: 'var(--space-3)' }}>
           <EntityHeader
             title={value}
             subtitle={rootSpan(trace)?.service || 'unknown service'}
             badges={
               <>
                 <StatusPill tone={isError(trace) ? 'error' : 'ok'}>{isError(trace) ? 'Error' : 'OK'}</StatusPill>
-                <span className="opa-badge">{trace.spans?.length || 0} spans</span>
-                <span className="opa-badge">{fmtMs(rootSpan(trace)?.duration_ms || 0)}</span>
+                <span className="oui-badge">{trace.spans?.length || 0} spans</span>
+                <span className="oui-badge">{fmtMs(rootSpan(trace)?.duration_ms || 0)}</span>
               </>
             }
             actions={
-              <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+              <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
                 <CopyToClipboard text={value} label="Copy ID" />
-                <Link to={`/traces/${value}`} className="opa-btn ghost">View trace</Link>
+                <Link to={`/traces/${value}`} className="oui-btn is-ghost">View trace</Link>
               </div>
             }
           />
@@ -224,19 +225,15 @@ export default function CompareTraces() {
   )
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Compare</h1>
-          <div className="opa-page-sub">
-            {compareMode === 'cohort'
+    <div className="oui-stack">
+      <PageHeader
+        title="Compare"
+        description={compareMode === 'cohort'
               ? 'Compare a transaction’s speed across runtimes, versions or services'
               : compareMode === 'callgraph'
                 ? 'Population call-graph diff across two halves of the time range'
                 : 'Side-by-side profile diff between two traces'}
-          </div>
-        </div>
-        <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
+        actions={<><div className="oui-row" style={{ gap: 'var(--space-2)' }}>
           <SegmentedControl
             options={[
               { value: 'trace', label: 'By trace' },
@@ -247,9 +244,9 @@ export default function CompareTraces() {
             onChange={setCompareMode}
           />
           {compareMode === 'trace' && bothLoaded && <ShareButton />}
-          <Link to="/traces" className="opa-btn ghost"><FiArrowLeft /> Back to Traces</Link>
-        </div>
-      </div>
+          <Link to="/traces" className="oui-btn is-ghost"><FiArrowLeft /> Back to Traces</Link>
+        </div></>}
+      />
 
       {compareMode === 'cohort' ? (
         <CohortCompare />
@@ -257,7 +254,7 @@ export default function CompareTraces() {
         <CallgraphWindowCompare />
       ) : (
       <>
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         {renderSelector('Trace A · Baseline', 'trace1', trace1Id, setTrace1Id, loading1, error1, fetchTrace1, trace1, 'recent-traces-1')}
         {renderSelector('Trace B · New', 'trace2', trace2Id, setTrace2Id, loading2, error2, fetchTrace2, trace2, 'recent-traces-2')}
       </div>
@@ -293,15 +290,15 @@ export default function CompareTraces() {
             hint="Load a baseline and a new trace above to see the diff."
           />
           {recentTraces.length > 0 && (
-            <div style={{ marginTop: 'var(--sp-4)' }}>
-              <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginBottom: 'var(--sp-2)' }}>Recent traces</div>
-              <div className="opa-row" style={{ flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+            <div style={{ marginTop: 'var(--space-4)' }}>
+              <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', marginBottom: 'var(--space-2)' }}>Recent traces</div>
+              <div className="oui-row" style={{ flexWrap: 'wrap', gap: 'var(--space-2)' }}>
                 {recentTraces.slice(0, 10).map((t, idx) => {
                   const traceId = t.trace_id || t.id
                   return (
                     <button
                       key={idx}
-                      className="opa-btn ghost"
+                      className="oui-btn is-ghost"
                       onClick={() => {
                         if (!trace1) {
                           setTrace1Id(traceId)
@@ -313,8 +310,8 @@ export default function CompareTraces() {
                       }}
                     >
                       <FiClock size={11} />
-                      <span className="opa-mono">{String(traceId).substring(0, 16)}…</span>
-                      <span className="opa-muted">{fmtMs(t.duration_ms || 0)}</span>
+                      <span className="oui-mono">{String(traceId).substring(0, 16)}…</span>
+                      <span className="oui-text-muted">{fmtMs(t.duration_ms || 0)}</span>
                     </button>
                   )
                 })}

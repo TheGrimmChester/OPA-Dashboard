@@ -23,15 +23,15 @@
   top: 0;
   bottom: 0;
   width: 0;
-  border-left: 1px dashed var(--p95);
+  border-left: 1px dashed var(--chart-2);
   pointer-events: none;
 }
 .tx-hist-p95-label {
   position: absolute;
   top: 0;
   transform: translateX(4px);
-  font-size: var(--fs-11);
-  color: var(--p95);
+  font-size: var(--text-2xs);
+  color: var(--chart-2);
   font-family: var(--font-mono);
   white-space: nowrap;
 }
@@ -40,7 +40,7 @@
   display: flex;
   justify-content: space-between;
   margin-top: 6px;
-  font-size: var(--fs-11);
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);

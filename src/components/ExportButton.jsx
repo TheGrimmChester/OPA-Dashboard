@@ -1,8 +1,15 @@
 import React, { useState } from 'react'
 import { FiDownload } from 'react-icons/fi'
 import axios from 'axios'
+import { Button, Row, Select } from '@open-family/ui'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+
+const FORMATS = [
+  { value: 'json', label: 'JSON' },
+  { value: 'csv', label: 'CSV' },
+  { value: 'ndjson', label: 'NDJSON' },
+]
 
 function ExportButton({ filters = {}, label = 'Export' }) {
   const [exporting, setExporting] = useState(false)
@@ -18,11 +25,11 @@ function ExportButton({ filters = {}, label = 'Export' }) {
         }
       })
       params.append('format', format)
-      
+
       const response = await axios.get(`${API_URL}/api/export/traces?${params.toString()}`, {
         responseType: 'blob',
       })
-      
+
       // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
@@ -42,25 +49,19 @@ function ExportButton({ filters = {}, label = 'Export' }) {
   }
 
   return (
-    <div className="opa-row" style={{ gap: 'var(--sp-2)' }}>
-      <select
+    <Row>
+      <Select
         value={format}
         onChange={(e) => setFormat(e.target.value)}
-        className="opa-select"
+        options={FORMATS}
         disabled={exporting}
         aria-label="Export format"
-      >
-        <option value="json">JSON</option>
-        <option value="csv">CSV</option>
-        <option value="ndjson">NDJSON</option>
-      </select>
-      <button className="opa-btn" onClick={handleExport} disabled={exporting}>
-        <FiDownload size={13} />
+      />
+      <Button icon={<FiDownload />} loading={exporting} onClick={handleExport}>
         {exporting ? 'Exporting…' : label}
-      </button>
-    </div>
+      </Button>
+    </Row>
   )
 }
 
 export default ExportButton
-

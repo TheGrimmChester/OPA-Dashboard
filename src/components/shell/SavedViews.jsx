@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { FiBookmark, FiChevronDown, FiTrash2 } from 'react-icons/fi'
 import axios from 'axios'
+import { Button, Input } from '@open-family/ui'
 import { useTimeRange } from '../../contexts/TimeRangeContext'
 import './SavedViews.css'
 
@@ -20,7 +21,6 @@ export default function SavedViews() {
   const [name, setName] = useState('')
 
   const ref = useRef(null)
-  const inputRef = useRef(null)
   const location = useLocation()
   const navigate = useNavigate()
   const { range, setRange } = useTimeRange()
@@ -41,10 +41,14 @@ export default function SavedViews() {
   }, [uid])
 
   // (re)load the list every time the popover opens, and focus the name input.
+  // The input is queried from the popover rather than held by a ref: the kit's
+  // `Input` is a plain function component and does not forward one.
   useEffect(() => {
     if (!open) return
     load()
-    const t = setTimeout(() => inputRef.current?.focus(), 0)
+    const t = setTimeout(() => {
+      ref.current?.querySelector('.opa-savedviews-input')?.focus()
+    }, 0)
     return () => clearTimeout(t)
   }, [open, load])
 
@@ -104,44 +108,47 @@ export default function SavedViews() {
 
   return (
     <div className="opa-savedviews" ref={ref}>
-      <button
-        className="opa-btn ghost"
+      <Button
+        variant="ghost"
         onClick={() => setOpen((o) => !o)}
         title="Saved views"
         aria-haspopup="true"
         aria-expanded={open}
+        icon={<FiBookmark />}
+        iconAfter={<FiChevronDown />}
       >
-        <FiBookmark size={14} /> <span className="opa-savedviews-trigger-label">Views</span> <FiChevronDown size={12} />
-      </button>
+        <span className="opa-savedviews-trigger-label">Views</span>
+      </Button>
 
       {open && (
         <div className="opa-savedviews-pop" role="menu">
           <div className="opa-savedviews-save">
-            <input
-              ref={inputRef}
-              className="opa-input opa-savedviews-input"
+            <Input
+              className="opa-savedviews-input"
               placeholder="Save current view…"
+              aria-label="Name for the current view"
               value={name}
               maxLength={80}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') saveCurrent() }}
             />
-            <button
-              className="opa-btn primary"
+            <Button
+              variant="primary"
               onClick={saveCurrent}
               disabled={!name.trim() || saving}
+              loading={saving}
             >
               {saving ? 'Saving…' : 'Save'}
-            </button>
+            </Button>
           </div>
 
           {error && <div className="opa-savedviews-err">{error}</div>}
 
           <div className="opa-savedviews-list">
-            {loading && <div className="opa-savedviews-state opa-muted">Loading…</div>}
+            {loading && <div className="opa-savedviews-state oui-text-muted">Loading…</div>}
 
             {!loading && !error && views.length === 0 && (
-              <div className="opa-savedviews-state opa-muted">No saved views yet</div>
+              <div className="opa-savedviews-state oui-text-muted">No saved views yet</div>
             )}
 
             {!loading && views.map((v) => {
@@ -160,9 +167,9 @@ export default function SavedViews() {
                   <div className="opa-savedviews-item-main">
                     <div className="opa-savedviews-item-name">
                       {v.name}
-                      {v.is_shared ? <span className="opa-badge opa-savedviews-shared">shared</span> : null}
+                      {v.is_shared ? <span className="oui-badge opa-savedviews-shared">shared</span> : null}
                     </div>
-                    <div className="opa-savedviews-item-meta opa-mono">{meta}</div>
+                    <div className="opa-savedviews-item-meta oui-mono">{meta}</div>
                   </div>
                   <button
                     className="opa-savedviews-del"

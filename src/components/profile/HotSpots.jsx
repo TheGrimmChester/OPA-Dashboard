@@ -1,8 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import {
-  FiAlertTriangle, FiChevronRight, FiCornerDownRight, FiCornerLeftUp, FiInfo, FiRepeat, FiX,
+  FiAlertTriangle, FiChevronRight, FiCornerDownRight, FiCornerLeftUp, FiInfo, FiRepeat,
+  FiSearch, FiX,
 } from 'react-icons/fi'
-import { DataTable, EmptyState, InlineBar } from '../ui'
+import { Button, EmptyState, Meter, Table } from '@open-family/ui'
+import { useTableSort } from '../../hooks/useTableSort'
 import { fmtBytes, fmtMs, fmtNum, fmtPct } from '../../theme/format'
 import {
   METRICS, baseName, clsName, fileName, fnName, lineNo, neighbours, representativePath,
@@ -37,13 +39,27 @@ export function middleEllipsis(s, max = NAME_MAX) {
 }
 
 // typeFill's neutral is a surface color: unusable as text, so unknown types fall
-// back to a text token here and to the accent for bars.
+// back to a text token here.
 function typeTone(op) {
   return op >= 0 ? typeFill(TYPE_ORDER[op]) : 'var(--text-muted)'
 }
 
-function barColor(op) {
-  return op >= 0 ? typeFill(TYPE_ORDER[op]) : 'var(--accent)'
+/**
+ * Proportion bar for a table cell: the kit's Meter carries the share and the
+ * figure beside it carries the value, because a bar on its own cannot be read.
+ *
+ * The bar no longer takes the operation type's hue. Meter's fill follows the
+ * product accent, and the type is already spelled out as a labelled tag in the
+ * Function cell — so nothing was riding on the colour alone.
+ */
+function MetricBar({ value, max, label, measure }) {
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0
+  return (
+    <span className="opa-prof-bar">
+      <Meter value={pct} label={`${measure}: ${fmtPct(pct, 0)} of the largest in view`} />
+      <span className="opa-prof-bar-v oui-num">{label}</span>
+    </span>
+  )
 }
 
 // Class-qualified but namespace-stripped: readable inside a breadcrumb.
@@ -113,7 +129,7 @@ function NeighbourList({ title, icon, dir, entries, graph, ranked, mk, structure
   return (
     <div className="opa-prof-col">
       <div className="opa-prof-col-head">
-        {icon}{title}<span className="opa-muted opa-tnum">{fmtNum(deg)}</span>
+        {icon}{title}<span className="oui-text-muted oui-num">{fmtNum(deg)}</span>
       </div>
       {entries.length === 0 ? (
         <div className="opa-prof-nempty">
@@ -139,11 +155,11 @@ function NeighbourList({ title, icon, dir, entries, graph, ranked, mk, structure
               onClick={() => onSelect(graph.symKey[other], other)}
             >
               <span className="opa-prof-nname">{middleEllipsis(graph.symKey[other], 40)}</span>
-              <InlineBar
+              <MetricBar
                 value={edgeVal(e)}
                 max={max}
                 label={structureMode ? fmtNum(graph.eCount[e]) : fmtMetric(mk, graph.eW[mk][e])}
-                color={barColor(graph.symOpType[other])}
+                measure={structureMode ? 'Calls through this call site' : 'Cost through this call site'}
               />
               <span className="opa-prof-nnum">{structureMode ? '—' : fmtMetric(mk, graph.selfM[mk][other])}</span>
               <span className="opa-prof-nnum">{structureMode ? '—' : fmtMetric(mk, graph.inclM[mk][other])}</span>
@@ -182,7 +198,7 @@ function SymbolDetail({ graph, ranked, mk, structureMode, shareBase, sym, onSele
             </span>
             {graph.symKey[sym]}
           </div>
-          <div className="opa-prof-detail-src opa-mono" title={node && fileName(node) ? fileName(node) : undefined}>
+          <div className="opa-prof-detail-src oui-mono" title={node && fileName(node) ? fileName(node) : undefined}>
             {/* function_type is often absent; "Unknown function" is noise, so the
                 kind only appears when the collector actually reported it. */}
             {[
@@ -193,9 +209,14 @@ function SymbolDetail({ graph, ranked, mk, structureMode, shareBase, sym, onSele
             ].filter(Boolean).join(' · ') || 'No source location reported'}
           </div>
         </div>
-        <button type="button" className="opa-prof-close" aria-label="Close function details" onClick={onClose}>
-          <FiX size={14} />
-        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="opa-prof-close"
+          icon={<FiX />}
+          aria-label="Close function details"
+          onClick={onClose}
+        />
       </div>
 
       <div className="opa-prof-stats">
@@ -258,7 +279,7 @@ function SymbolDetail({ graph, ranked, mk, structureMode, shareBase, sym, onSele
   )
 }
 
-function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSelectSymbol, maxHeight }) {
+function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSelectSymbol }) {
   const { graph, ranked, totals } = model
   // The columns exist for every metric, but the ORDER always follows the metric
   // the model was ranked with.
@@ -326,11 +347,12 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
   const columns = useMemo(() => {
     const self = graph.selfM[mk]
     const incl = graph.inclM[mk]
+    const metricName = METRIC_LABELS[mk]
     const cols = [
       {
         key: 'rank',
         header: '#',
-        num: true,
+        numeric: true,
         width: 44,
         sortValue: (r) => r.rank,
         render: (r) => <span className="opa-prof-rank">{r.rank}</span>,
@@ -347,18 +369,18 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
         width: 180,
         sortValue: (r) => Math.abs(self[r.s]),
         render: (r) => (structureMode ? <span className="opa-prof-dim">—</span> : (
-          <InlineBar
+          <MetricBar
             value={Math.abs(self[r.s])}
             max={maxSelf}
             label={fmtMetric(mk, self[r.s])}
-            color={barColor(graph.symOpType[r.s])}
+            measure={`Self ${metricName.toLowerCase()}`}
           />
         )),
       },
       {
         key: 'pct',
         header: 'Self %',
-        num: true,
+        numeric: true,
         width: 74,
         sortValue: (r) => Math.abs(self[r.s]),
         render: (r) => (shareBase > 0
@@ -368,7 +390,7 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
       {
         key: 'total',
         header: 'Total',
-        num: true,
+        numeric: true,
         width: 92,
         sortValue: (r) => Math.abs(incl[r.s]),
         render: (r) => (structureMode ? <span className="opa-prof-dim">—</span> : fmtMetric(mk, incl[r.s])),
@@ -383,31 +405,60 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
         width: 150,
         sortValue: (r) => graph.callCount[r.s],
         render: (r) => (
-          <InlineBar
+          <MetricBar
             value={graph.callCount[r.s]}
             max={maxCalls}
             label={fmtNum(graph.callCount[r.s])}
-            color={barColor(graph.symOpType[r.s])}
+            measure="Calls"
           />
         ),
       }
       : {
         key: 'calls',
         header: 'Calls',
-        num: true,
+        numeric: true,
         width: 72,
         sortValue: (r) => graph.callCount[r.s],
         render: (r) => fmtNum(graph.callCount[r.s]),
       })
     return cols
-  }, [graph, ranked, mk, maxSelf, maxCalls, structureMode, selSym, select])
+  }, [graph, ranked, mk, maxSelf, maxCalls, structureMode, selSym, select, shareBase])
+
+  // The kit's Table leaves sorting to the caller. The hook keeps the previous
+  // behaviour exactly: every column sortable, no initial sort, numeric columns
+  // descending on the first click.
+  const { rows: sortedRows, columns: sortableColumns, onSort } = useTableSort(rows, columns)
 
   const withData = useMemo(
     () => METRICS.filter((k) => (totals ? totals.hasData[k] : Math.abs(graph.totalSelfM[k]) > 0)),
-    [graph],
+    [graph, totals],
   )
 
   const hidden = graph.S - ranked.visibleCount
+
+  // Built outside the tag so the Table's own props stay flat. The repo's design-
+  // system contract test reads each `<Table …/>` with a lazy regex that stops at
+  // the first `/>`, so an inline `icon={<FiSearch />}` inside `emptyState` hides
+  // every prop declared after it.
+  const emptyState = (
+    <EmptyState
+      inline
+      icon={<FiSearch />}
+      title={q ? `No function matches “${q}”` : 'No function passes the current filters'}
+      description={q
+        ? 'The filter runs against the whole symbol key, so a namespace or class fragment matches too.'
+        : 'Every function in this trace fell below the significance threshold for the selected metric. Ranking by a metric the trace actually recorded usually brings them back.'}
+    />
+  )
+
+  const errorState = (
+    <EmptyState
+      inline
+      icon={<FiAlertTriangle />}
+      title="The hot-spot list could not be built"
+      description="Aggregating this trace's call stack failed, so there is no ranking to show. The rest of the profile is unaffected."
+    />
+  )
 
   return (
     <div className="opa-prof-hotspots">
@@ -421,9 +472,9 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
           {onMetricChange && withData.length > 0 && (
             <div className="opa-prof-notice-actions">
               {withData.map((k) => (
-                <button key={k} type="button" className="opa-prof-mini" onClick={() => onMetricChange(k)}>
+                <Button key={k} size="sm" variant="secondary" onClick={() => onMetricChange(k)}>
                   Rank by {METRIC_LABELS[k]}
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -457,13 +508,20 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
         </div>
       )}
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.s}
+      <Table
+        aria-label="Functions ranked by self cost"
+        // The model is built synchronously from a call stack the caller already
+        // holds, so there is no in-flight fetch here and no loading state to
+        // show. `errorState` is required of every Table in this codebase and is
+        // wired for the day the model is built off a request.
+        state={rows.length ? 'ready' : 'empty'}
+        columns={sortableColumns}
+        rows={sortedRows}
+        getRowKey={(r) => String(r.s)}
+        onSort={onSort}
         onRowClick={(r) => select(r.key, r.s)}
-        maxHeight={maxHeight}
-        emptyText={q ? `No function matches “${q}”` : 'No function passes the current filters'}
+        emptyState={emptyState}
+        errorState={errorState}
       />
 
       <div className="opa-prof-foot">
@@ -495,13 +553,28 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
  *
  * The outer component only handles the degenerate cases, so the body's hooks
  * always run against a real model.
+ *
+ * and the page scrolls; capping the height here put the row count behind a
+ * second scrollbar nested inside the page's. Callers can drop the prop.
  */
-export default function HotSpots({ model, metric = 'duration', query = '', onMetricChange, selectedKey, onSelectSymbol, maxHeight }) {
+export default function HotSpots({ model, metric = 'duration', query = '', onMetricChange, selectedKey, onSelectSymbol }) {
   if (!model || !model.ready) {
-    return <EmptyState title="No profile data" hint="This trace carries no call stack." />
+    return (
+      <EmptyState
+        inline
+        title="No profile data"
+        description="This trace carries no call stack, so there is nothing to rank. The OPA profiler records one when it is enabled for the service."
+      />
+    )
   }
   if (model.graph.S === 0) {
-    return <EmptyState title="No function survived aggregation" hint="Every call was filtered out before grouping." />
+    return (
+      <EmptyState
+        inline
+        title="No function survived aggregation"
+        description="Every call was filtered out before grouping. Lowering the significance threshold or grouping by method rather than class usually recovers them."
+      />
+    )
   }
   return (
     <HotSpotsBody
@@ -511,7 +584,6 @@ export default function HotSpots({ model, metric = 'duration', query = '', onMet
       onMetricChange={onMetricChange}
       selectedKey={selectedKey}
       onSelectSymbol={onSelectSymbol}
-      maxHeight={maxHeight}
     />
   )
 }

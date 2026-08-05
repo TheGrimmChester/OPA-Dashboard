@@ -3,6 +3,13 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // The kit is a `file:` dependency, so it is symlinked and Vite resolves
+  // through the symlink to its real path. Without deduping, `import 'react'`
+  // from inside the kit finds the kit's own copy and every hook throws
+  // "invalid hook call".
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   test: {
     exclude: ['**/node_modules/**', '**/dist/**', '**/.agents/**'],
   },

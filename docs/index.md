@@ -3,6 +3,7 @@
 ## Contents
 
 - [Architecture](architecture.md) — hub-spoke UI topology
+- [Design system](design-system.md) — the shared family kit, what this product adds, and the rules the test suite enforces
 - [Configuration](configuration.md) — `VITE_API_URL` and image tags
 - [Licensing](LICENSING.md)
 

@@ -1,0 +1,284 @@
+/* ============================================================================
+   OPA's own layer, loaded after the family stylesheet.
+   ============================================================================
+
+   This file is for things genuinely specific to this product, not for
+   re-implementing the design system. Anything that would be useful to a second
+   dashboard belongs in the kit instead — copy-pasting the system per product is
+   how the family ended up maintaining it five times.
+
+   The product accent is NOT set here. `applyProduct('opa')` stamps
+   `<html data-product="opa">` and the kit binds the accent from that, so this
+   file must never mention an accent value.
+
+   Component-scoped rules live next to their component (`SavedViews.css`,
+   `CommandPalette.css`, `src/pages/*.css`).
+   ============================================================================ */
+
+/* Whole-page full-screen mode: hide the shell chrome so a wall display or a
+   dense trace view gets the entire viewport. FullscreenToggle puts this class on
+   <html>, and the browser's own full-screen state is the source of truth. */
+.opa-page-fullscreen .oui-sidebar,
+.opa-page-fullscreen .oui-topbar {
+  display: none;
+}
+
+.opa-page-fullscreen .oui-content {
+  /* No rail to sit beside and no bar to sit under, so drop the centring cap. */
+  max-width: none;
+  padding-top: var(--space-4);
+}
+
+/* ── Top bar at narrow widths ─────────────────────────────────────────────
+   Below the drawer breakpoint the scope switcher overlaps the search trigger.
+
+   Measured cause: `.oui-topbar-left` is a flex item with `min-width: 0`, so it
+   shrinks — at 820px it lands on 107px. But the `.oui-menu-anchor` the switcher
+   is wrapped in keeps the default `min-width: auto`, so it cannot shrink below its
+   content and renders 215px wide, overflowing its own parent and painting across
+   the search box that follows it. The switcher's own `min-width: 0` never gets a
+   chance to apply.
+
+   So the anchor needs `min-width: 0` and the two switcher labels need to be
+   allowed to truncate. This is a defect in the shared TopBar rather than anything
+   specific to this product, so it is a stopgap here and is being raised upstream
+   rather than fixed by forking the component. Remove this block once the kit
+   ships the fix. */
+@media (max-width: 900px) {
+  .oui-topbar-left,
+  .oui-topbar-left .oui-menu-anchor,
+  .oui-topbar .oui-switcher,
+  .oui-topbar .oui-switcher-body {
+    min-width: 0;
+  }
+
+  .oui-topbar .oui-switcher-org,
+  .oui-topbar .oui-switcher-project,
+  .oui-topbar .oui-search-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .oui-topbar .oui-search {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+/* ── Panel expansion ──────────────────────────────────────────────────────
+   A card can take the whole viewport. The dense blocks here — waterfalls,
+   flame graphs, call graphs, wide tables — are limited by their grid cell, and
+   a user reading one needs the room. No kit equivalent yet. */
+.opa-panel-expanded {
+  position: fixed;
+  inset: var(--space-6);
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.opa-panel-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: var(--overlay);
+}
+
+/* ── Proportion bar inside a table cell ───────────────────────────────────
+   The meter carries the comparison against the column maximum; the number
+   beside it carries the value. */
+.opa-inline-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 120px;
+}
+
+.opa-inline-meter .oui-meter {
+  flex: 1 1 auto;
+}
+
+.opa-inline-meter-label {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+/* ── Linked entity chip ───────────────────────────────────────────────────
+   A `Badge` is not a link, so a navigable identifier chip stays local. */
+.opa-entity-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.opa-entity-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.opa-entity-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  color: var(--accent-ink);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-full);
+}
+
+.opa-entity-chip:hover {
+  border-color: var(--accent);
+}
+
+.opa-entity-chip.is-plain {
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-color: var(--border-default);
+}
+
+.opa-entity-chip.is-secondary {
+  margin-left: calc(var(--space-1) * -1);
+  color: var(--text-secondary);
+  background: var(--surface-2);
+}
+
+/* ── Facet rail ───────────────────────────────────────────────────────────
+   Include / exclude filter chips beside the trace list. */
+.opa-facets {
+  min-width: 200px;
+  max-width: 260px;
+}
+
+.opa-facets-head {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.opa-facets-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.opa-facet-group {
+  margin-bottom: var(--space-4);
+}
+
+.opa-facet-field {
+  margin-bottom: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.opa-facet-values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.opa-facet-chip {
+  justify-content: space-between;
+}
+
+.opa-facet-chip.is-included {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+/* Excluded, not disabled — it still reads, and clicking it again undoes it. */
+.opa-facet-chip.is-excluded .opa-facet-chip-label {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.opa-facet-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opa-facet-dsl {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  word-break: break-all;
+}
+
+/* ── Chart and waterfall legend swatch ────────────────────────────────────
+   A small colour key beside a label in a chart legend or a waterfall row. This
+   is the one legitimate use of a bare colour mark: it sits immediately next to
+   the text it identifies, so the colour is not carrying the meaning alone. It is
+   never a status indicator — those are `Badge`s with a word in them. */
+.opa-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  /* A ring in the surface colour keeps the mark legible on any fill it lands on. */
+  box-shadow: 0 0 0 2px var(--surface-1);
+}
+
+/* Inline states for the few places that render one without a table or card. */
+.opa-empty,
+.opa-errstate {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.opa-errstate {
+  color: var(--critical-text);
+}
+
+.opa-skel {
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  animation: opaSkeletonPulse var(--dur-slow) var(--ease) infinite alternate;
+}
+
+@keyframes opaSkeletonPulse {
+  from { opacity: 1; }
+  to { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opa-skel {
+    animation: none;
+  }
+}
+
+/* ── Side-by-side comparison cells ────────────────────────────────────────
+   A comparison row stacks several measures per side, so each side is a small
+   label/value list rather than one value. */
+.opa-cmp-side {
+  --stack-gap: var(--space-1);
+  min-width: 140px;
+}
+
+.opa-cmp-query {
+  display: block;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opa-cmp-codes {
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}

@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { FiClock, FiActivity, FiAlertTriangle, FiZap, FiDownload, FiUpload, FiGlobe, FiWifi, FiBarChart2 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { useTimeRange } from '../contexts/TimeRangeContext'
-import { Panel, KpiTile, TimeSeriesChart } from '../components/ui'
+import { Panel, KpiTile } from '../components/ui'
 import { fmtMs, fmtBytes, fmtNum, fmtPct, latencyStatus, errorRateStatus } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 const hhmm = (t) => (t || '').slice(11, 16)
 
@@ -93,49 +95,45 @@ export default function PerformanceView() {
   const netEmpty = !net.loading && nm.length === 0
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Performance</h1>
-          <div className="opa-page-sub">
-            Response times, throughput &amp; network across {pm.length} interval{pm.length === 1 ? '' : 's'}
-            {compare && <span className="opa-muted"> · overlaying previous period (dashed)</span>}
-          </div>
-        </div>
-        <div className="opa-row">
+    <div className="oui-stack">
+      <PageHeader
+        title="Performance"
+        description={<>Response times, throughput &amp; network across {pm.length} interval{pm.length === 1 ? '' : 's'}
+            {compare && <span className="oui-text-muted"> · overlaying previous period (dashed)</span>}</>}
+        actions={<><div className="oui-row">
           <button
-            className={`opa-btn ${compare ? 'primary' : 'ghost'}`}
+            className={`oui-btn is-secondary ${compare ? 'primary' : 'ghost'}`}
             onClick={() => setCompare((c) => !c)}
             aria-pressed={compare}
             title="Overlay the immediately-preceding period of equal length as dashed lines"
           >
             <FiBarChart2 size={14} /> Compare to previous period
           </button>
-        </div>
-      </div>
+        </div></>}
+      />
 
       {/* KPIs */}
-      <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+      <div className="oui-grid is-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile label="p95 response" icon={<FiZap size={12} />} value={fmtMs(p95Cur)} status={latencyStatus(p95Cur)}
-          spark={pm.map((m) => m.p95)} sparkColor="var(--p95)" current={p95Cur} previous={p95Prev} invert />
+          spark={pm.map((m) => m.p95)} sparkColor="var(--chart-2)" current={p95Cur} previous={p95Prev} invert />
         <KpiTile label="p99 response" icon={<FiClock size={12} />} value={fmtMs(p99Cur)} status={latencyStatus(p99Cur)}
-          spark={pm.map((m) => m.p99)} sparkColor="var(--p99)" current={p99Cur} previous={p99Prev} invert />
+          spark={pm.map((m) => m.p99)} sparkColor="var(--chart-3)" current={p99Cur} previous={p99Prev} invert />
         <KpiTile label="Error rate" icon={<FiAlertTriangle size={12} />} value={fmtPct(erCur || 0)} status={errorRateStatus(erCur)}
-          spark={pm.map((m) => m.error_rate)} sparkColor="var(--error)" current={erCur} previous={erPrev} invert />
+          spark={pm.map((m) => m.error_rate)} sparkColor="var(--critical-text)" current={erCur} previous={erPrev} invert />
         <KpiTile label="Throughput" icon={<FiActivity size={12} />} value={fmtNum(totalThroughput)} unit="req" status="neutral"
           spark={pm.map((m) => m.throughput)} sparkColor="var(--accent)" />
         <KpiTile label="Avg latency" icon={<FiWifi size={12} />} value={fmtMs(latCur)} status={latencyStatus(latCur)}
-          spark={nm.map((m) => m.avg_latency)} sparkColor="var(--tier-http)" current={latCur} previous={latPrev} invert
-          footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{fmtNum(totalReq)} requests</span>} />
+          spark={nm.map((m) => m.avg_latency)} sparkColor="var(--chart-4)" current={latCur} previous={latPrev} invert
+          footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtNum(totalReq)} requests</span>} />
       </div>
 
       {/* Charts */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={perfEmpty}>
           <TimeSeriesChart data={pm} series={[
-            { key: 'p50', name: 'p50', color: 'var(--p50)', type: 'line' },
-            { key: 'p95', name: 'p95', color: 'var(--p95)', type: 'line' },
-            { key: 'p99', name: 'p99', color: 'var(--p99)', type: 'line' },
+            { key: 'p50', name: 'p50', color: 'var(--chart-1)', type: 'line' },
+            { key: 'p95', name: 'p95', color: 'var(--chart-2)', type: 'line' },
+            { key: 'p99', name: 'p99', color: 'var(--chart-3)', type: 'line' },
             ...(compare ? [prevLine('p50_prev', 'p50'), prevLine('p95_prev', 'p95'), prevLine('p99_prev', 'p99')] : []),
           ]} valueFmt={fmtMs} yFmt={fmtMs} height={240} />
         </Panel>
@@ -143,30 +141,30 @@ export default function PerformanceView() {
         <Panel title="Throughput &amp; error rate" icon={<FiActivity />} loading={perf.loading} error={perf.error} empty={perfEmpty}>
           <TimeSeriesChart data={pm} series={[
             { key: 'throughput', name: 'Throughput', color: 'var(--accent)', type: 'bar' },
-            { key: 'error_rate', name: 'Error %', color: 'var(--error)', type: 'line' },
+            { key: 'error_rate', name: 'Error %', color: 'var(--critical-text)', type: 'line' },
             ...(compare ? [prevLine('throughput_prev', 'Throughput'), prevLine('error_rate_prev', 'Error %')] : []),
           ]} valueFmt={(v) => fmtNum(v)} height={240} />
         </Panel>
 
         <Panel title="Network bandwidth" icon={<FiGlobe />} loading={net.loading} error={net.error} empty={netEmpty}
-          actions={<span className="opa-mono" style={{ fontSize: 'var(--fs-12)' }}>
-            <span style={{ color: 'var(--tier-app)' }}>↑{fmtBytes(totalOut)}</span>{' '}
-            <span className="opa-muted">/</span>{' '}
-            <span style={{ color: 'var(--tier-db)' }}>↓{fmtBytes(totalIn)}</span>
+          actions={<span className="oui-mono" style={{ fontSize: 'var(--text-xs)' }}>
+            <span style={{ color: 'var(--chart-1)' }}>↑{fmtBytes(totalOut)}</span>{' '}
+            <span className="oui-text-muted">/</span>{' '}
+            <span style={{ color: 'var(--chart-2)' }}>↓{fmtBytes(totalIn)}</span>
           </span>}>
           {/* Unstack when comparing so the dashed prev lines (which don't
               stack) share the current series' zero baseline and stay aligned. */}
           <TimeSeriesChart data={nm} stacked={!compare} series={[
-            { key: 'bytes_sent', name: 'Sent', color: 'var(--tier-app)', type: 'area' },
-            { key: 'bytes_received', name: 'Received', color: 'var(--tier-db)', type: 'area' },
+            { key: 'bytes_sent', name: 'Sent', color: 'var(--chart-1)', type: 'area' },
+            { key: 'bytes_received', name: 'Received', color: 'var(--chart-2)', type: 'area' },
             ...(compare ? [prevLine('bytes_sent_prev', 'Sent'), prevLine('bytes_received_prev', 'Received')] : []),
           ]} valueFmt={fmtBytes} yFmt={fmtBytes} height={240} />
         </Panel>
 
         <Panel title="Latency &amp; request volume" icon={<FiWifi />} loading={net.loading} error={net.error} empty={netEmpty}>
           <TimeSeriesChart data={nm} series={[
-            { key: 'request_count', name: 'Requests', color: 'var(--tier-http)', type: 'bar' },
-            { key: 'avg_latency', name: 'Avg latency', color: 'var(--warn)', type: 'line' },
+            { key: 'request_count', name: 'Requests', color: 'var(--chart-4)', type: 'bar' },
+            { key: 'avg_latency', name: 'Avg latency', color: 'var(--warn-text)', type: 'line' },
             ...(compare ? [prevLine('request_count_prev', 'Requests'), prevLine('avg_latency_prev', 'Avg latency')] : []),
           ]} valueFmt={(v) => fmtNum(v)} height={240} />
         </Panel>

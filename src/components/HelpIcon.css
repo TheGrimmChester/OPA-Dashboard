@@ -1,8 +1,14 @@
+/* Inline help affordance. Tokens only: every colour, radius, shadow, duration and
+   stacking level comes from the design system, so both themes are covered without
+   a second rule. The previous version carried hex fallbacks inside var() (which
+   made the dark palette the fallback in light), a literal rgba() shadow, and a
+   z-index of 999999 that out-ranked every layer the system defines. */
+
 .help-icon-wrapper {
   display: inline-flex;
   align-items: center;
   position: relative;
-  margin-left: var(--spacing-xs, 4px);
+  margin-left: var(--space-1);
   cursor: help;
   vertical-align: middle;
 }
@@ -16,42 +22,37 @@
 .help-icon {
   width: 16px;
   height: 16px;
-  color: var(--text-secondary, #94a3b8);
-  transition: color var(--transition-base, 0.2s);
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease);
   flex-shrink: 0;
 }
 
 .help-icon-wrapper:hover .help-icon,
-.help-icon-wrapper:focus .help-icon {
-  color: var(--text-primary, #e2e8f0);
+.help-icon-wrapper:focus-visible .help-icon {
+  color: var(--text-primary);
 }
 
 .help-tooltip {
   position: absolute;
-  z-index: 999999;
-  background-color: var(--bg-elevated, #1e293b);
-  color: var(--text-primary, #e2e8f0);
-  padding: 6px 10px;
-  border-radius: var(--radius-md, 6px);
-  font-size: 0.75rem;
-  line-height: 1.4;
+  /* Above the page and the sticky chrome, below modals and toasts. The component
+     switches to position:fixed inside the rail so this level actually applies. */
+  z-index: var(--z-overlay);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-lh);
   max-width: 250px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--border-medium, #334155);
+  box-shadow: var(--shadow-pop);
   white-space: normal;
-  word-wrap: break-word;
+  overflow-wrap: break-word;
   pointer-events: none;
-  animation: tooltipFadeIn 0.2s ease-out;
+  animation: opaHelpTooltipIn var(--dur-fast) var(--ease);
 }
 
-/* Special handling for tooltips in navigation menu - z-index only, position handled by JS */
-.main-nav .help-tooltip,
-.nav-group-dropdown .help-tooltip,
-.nav-group-item .help-tooltip {
-  z-index: 999999 !important;
-}
-
-@keyframes tooltipFadeIn {
+@keyframes opaHelpTooltipIn {
   from {
     opacity: 0;
     transform: translateY(-4px);
@@ -62,8 +63,14 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .help-tooltip {
+    animation: none;
+  }
+}
+
 .help-tooltip-top {
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + var(--space-2));
   left: 50%;
   transform: translateX(-50%);
   margin-bottom: 0;
@@ -76,11 +83,11 @@
   left: 50%;
   transform: translateX(-50%);
   border: 6px solid transparent;
-  border-top-color: var(--bg-elevated, #1e293b);
+  border-top-color: var(--surface-2);
 }
 
 .help-tooltip-bottom {
-  top: calc(100% + 8px);
+  top: calc(100% + var(--space-2));
   left: 50%;
   transform: translateX(-50%);
   margin-top: 0;
@@ -93,11 +100,11 @@
   left: 50%;
   transform: translateX(-50%);
   border: 6px solid transparent;
-  border-bottom-color: var(--bg-elevated, #1e293b);
+  border-bottom-color: var(--surface-2);
 }
 
 .help-tooltip-right {
-  left: calc(100% + 8px);
+  left: calc(100% + var(--space-2));
   top: 50%;
   transform: translateY(-50%);
 }
@@ -109,11 +116,11 @@
   top: 50%;
   transform: translateY(-50%);
   border: 6px solid transparent;
-  border-right-color: var(--bg-elevated, #1e293b);
+  border-right-color: var(--surface-2);
 }
 
 .help-tooltip-left {
-  right: calc(100% + 8px);
+  right: calc(100% + var(--space-2));
   top: 50%;
   transform: translateY(-50%);
 }
@@ -125,15 +132,15 @@
   top: 50%;
   transform: translateY(-50%);
   border: 6px solid transparent;
-  border-left-color: var(--bg-elevated, #1e293b);
+  border-left-color: var(--surface-2);
 }
 
-/* Responsive adjustments */
+/* Narrow viewports: a smaller box, but never below the 11px floor. */
 @media (max-width: 768px) {
   .help-tooltip {
     max-width: 200px;
-    font-size: 0.7rem;
-    padding: 5px 8px;
+    font-size: var(--text-2xs);
+    line-height: var(--text-2xs-lh);
+    padding: var(--space-1) var(--space-2);
   }
 }
-

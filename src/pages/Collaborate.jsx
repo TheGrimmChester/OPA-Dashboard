@@ -7,6 +7,7 @@ import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { useI18n } from '../contexts/I18nContext'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -163,58 +164,56 @@ export default function Collaborate() {
   }
 
   const nbCols = [
-    { key: 'title', header: 'Title', render: (r) => <span className="cell-strong">{r.title}</span> },
+    { key: 'title', header: 'Title', render: (r) => <span className="oui-cell-primary">{r.title}</span> },
     { key: 'created_by', header: 'Author', render: (r) => r.created_by || '—' },
-    { key: 'updated_at', header: 'Updated', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.updated_at)}</span> },
+    { key: 'updated_at', header: 'Updated', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.updated_at)}</span> },
     { key: 'actions', header: '', render: (r) => (
       <span style={{ display: 'inline-flex', gap: 6 }}>
-        <button className="opa-btn" disabled={busy} onClick={() => openNotebook(r.id)}>{t('collab.open')}</button>
-        <button className="opa-btn" disabled={busy} onClick={() => runNotebook(r.id)} title={t('collab.runTql')}><FiPlay size={14} /></button>
+        <button className="oui-btn is-secondary" disabled={busy} onClick={() => openNotebook(r.id)}>{t('collab.open')}</button>
+        <button className="oui-btn is-secondary" disabled={busy} onClick={() => runNotebook(r.id)} title={t('collab.runTql')}><FiPlay size={14} /></button>
       </span>
     ) },
   ]
 
   const pageCols = [
-    { key: 'title', header: 'Title', render: (r) => <span className="cell-strong">{r.title}</span> },
+    { key: 'title', header: 'Title', render: (r) => <span className="oui-cell-primary">{r.title}</span> },
     { key: 'slug', header: 'Slug', render: (r) => (
-      <a className="opa-mono" href={`/status/${r.slug}`} target="_blank" rel="noreferrer">{r.slug}</a>
+      <a className="oui-mono" href={`/status/${r.slug}`} target="_blank" rel="noreferrer">{r.slug}</a>
     ) },
     { key: 'public', header: 'Public', render: (r) => (Number(r.public) ? <StatusPill tone="ok">yes</StatusPill> : <Badge>private</Badge>) },
   ]
 
   const cmtCols = [
     { key: 'anchor_type', header: 'Type', render: (r) => <Badge>{r.anchor_type}</Badge> },
-    { key: 'anchor_id', header: 'Anchor', render: (r) => <span className="opa-mono">{r.anchor_id}</span> },
+    { key: 'anchor_id', header: 'Anchor', render: (r) => <span className="oui-mono">{r.anchor_id}</span> },
     { key: 'body', header: 'Comment', render: (r) => r.body },
     { key: 'author', header: 'Author', render: (r) => r.author || '—' },
-    { key: 'created_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span> },
+    { key: 'created_at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span> },
   ]
 
   const rptCols = [
-    { key: 'name', header: 'Name', render: (r) => <span className="cell-strong">{r.name}</span> },
+    { key: 'name', header: 'Name', render: (r) => <span className="oui-cell-primary">{r.name}</span> },
     { key: 'cadence', header: 'Cadence', render: (r) => <Badge>{r.cadence}</Badge> },
     { key: 'enabled', header: 'On', render: (r) => (Number(r.enabled) ? <StatusPill tone="ok">yes</StatusPill> : <StatusPill tone="warn">no</StatusPill>) },
-    { key: 'last_run_at', header: 'Last run', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_run_at)}</span> },
+    { key: 'last_run_at', header: 'Last run', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_run_at)}</span> },
   ]
 
   const runCols = [
-    { key: 'report_id', header: 'Report', render: (r) => <span className="opa-mono">{r.report_id}</span> },
-    { key: 'summary_json', header: 'Summary', render: (r) => <span className="opa-mono" style={{ fontSize: 11 }}>{String(r.summary_json || '').slice(0, 80)}</span> },
-    { key: 'created_at', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span> },
+    { key: 'report_id', header: 'Report', render: (r) => <span className="oui-mono">{r.report_id}</span> },
+    { key: 'summary_json', header: 'Summary', render: (r) => <span className="oui-mono" style={{ fontSize: 11 }}>{String(r.summary_json || '').slice(0, 80)}</span> },
+    { key: 'created_at', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span> },
   ]
 
   const cells = Array.isArray(viewer?.cells) ? viewer.cells : []
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">{t('collab.title')}</h1>
-          <div className="opa-page-sub">{t('collab.subtitle')}</div>
-        </div>
-      </div>
+    <div className="oui-stack">
+      <PageHeader
+        title={t('collab.title')}
+        description={t('collab.subtitle')}
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label={t('collab.notebooks')} icon={<FiBookOpen size={12} />} value={fmtNum(nbs.length)} status="neutral" />
         <KpiTile label={t('collab.status')} icon={<FiGlobe size={12} />} value={fmtNum(pageRows.length)} status="neutral" />
         <KpiTile label={t('collab.comments')} icon={<FiMessageSquare size={12} />} value={fmtNum(cmtRows.length)} status="neutral" />
@@ -225,7 +224,7 @@ export default function Collaborate() {
 
       {msg && (
         <Panel title="Result">
-          <pre className="opa-mono" style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(msg, null, 2)}</pre>
+          <pre className="oui-mono" style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(msg, null, 2)}</pre>
         </Panel>
       )}
 
@@ -233,34 +232,37 @@ export default function Collaborate() {
         <>
           <Panel title="New notebook">
             <div style={{ display: 'flex', gap: 8 }}>
-              <input className="opa-input" style={{ flex: 1 }} value={nbTitle} onChange={(e) => setNbTitle(e.target.value)} />
-              <button className="opa-btn" disabled={busy} onClick={createNotebook}><FiPlus size={14} /> Create</button>
+              <input className="oui-input" style={{ flex: 1 }} value={nbTitle} onChange={(e) => setNbTitle(e.target.value)} />
+              <button className="oui-btn is-secondary" disabled={busy} onClick={createNotebook}><FiPlus size={14} /> Create</button>
             </div>
           </Panel>
           <Panel title={t('collab.notebooks')} icon={<FiBookOpen />} flush loading={notebooks.loading} error={notebooks.error}
             empty={!notebooks.loading && nbs.length === 0} emptyText="No notebooks yet">
-            <DataTable columns={nbCols} rows={nbs} rowKey={(r) => r.id} maxHeight={360} />
+            <DataTable
+          loading={notebooks.loading}
+          error={notebooks.error}
+          onRetry={notebooks.reload} columns={nbCols} rows={nbs} rowKey={(r) => r.id} maxHeight={360} />
           </Panel>
           {viewer && (
             <Panel title={`${viewer.title || viewer.id}`}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <button className="opa-btn" disabled={busy} onClick={() => runNotebook(viewer.id)}>
+                <button className="oui-btn is-secondary" disabled={busy} onClick={() => runNotebook(viewer.id)}>
                   <FiPlay size={14} /> {t('collab.runTql')}
                 </button>
-                <button className="opa-btn" onClick={() => { setViewer(null); setExecOut(null) }}>Close</button>
+                <button className="oui-btn is-secondary" onClick={() => { setViewer(null); setExecOut(null) }}>Close</button>
               </div>
               {cells.map((c, i) => (
-                <div key={i} style={{ marginBottom: 12, padding: 10, border: '1px solid var(--opa-border, #2a3348)', borderRadius: 6 }}>
+                <div key={i} style={{ marginBottom: 12, padding: 10, border: '1px solid var(--border-default, #2a3348)', borderRadius: 6 }}>
                   <Badge>{c.type || 'cell'}</Badge>
                   {c.type === 'tql' ? (
-                    <pre className="opa-mono" style={{ margin: '8px 0 0', fontSize: 12 }}>{c.query || c.q || ''}</pre>
+                    <pre className="oui-mono" style={{ margin: '8px 0 0', fontSize: 12 }}>{c.query || c.q || ''}</pre>
                   ) : (
                     <pre style={{ margin: '8px 0 0', fontSize: 12, whiteSpace: 'pre-wrap' }}>{c.body || JSON.stringify(c, null, 2)}</pre>
                   )}
                 </div>
               ))}
               {execOut && (
-                <pre className="opa-mono" style={{ marginTop: 12, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(execOut, null, 2)}</pre>
+                <pre className="oui-mono" style={{ marginTop: 12, fontSize: 12, whiteSpace: 'pre-wrap' }}>{JSON.stringify(execOut, null, 2)}</pre>
               )}
             </Panel>
           )}
@@ -271,14 +273,17 @@ export default function Collaborate() {
         <>
           <Panel title="New status page">
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <input className="opa-input" placeholder="slug" value={pageSlug} onChange={(e) => setPageSlug(e.target.value)} />
-              <input className="opa-input" placeholder="title" style={{ flex: 1 }} value={pageTitle} onChange={(e) => setPageTitle(e.target.value)} />
-              <button className="opa-btn" disabled={busy} onClick={createPage}><FiPlus size={14} /> Create</button>
+              <input className="oui-input" placeholder="slug" value={pageSlug} onChange={(e) => setPageSlug(e.target.value)} />
+              <input className="oui-input" placeholder="title" style={{ flex: 1 }} value={pageTitle} onChange={(e) => setPageTitle(e.target.value)} />
+              <button className="oui-btn is-secondary" disabled={busy} onClick={createPage}><FiPlus size={14} /> Create</button>
             </div>
           </Panel>
           <Panel title="Pages" icon={<FiGlobe />} flush loading={pages.loading} error={pages.error}
             empty={!pages.loading && pageRows.length === 0} emptyText="No status pages">
-            <DataTable columns={pageCols} rows={pageRows} rowKey={(r) => r.id} maxHeight={360} />
+            <DataTable
+          loading={pages.loading}
+          error={pages.error}
+          onRetry={pages.reload} columns={pageCols} rows={pageRows} rowKey={(r) => r.id} maxHeight={360} />
           </Panel>
         </>
       )}
@@ -287,20 +292,23 @@ export default function Collaborate() {
         <>
           <Panel title="Add comment">
             <div style={{ display: 'grid', gap: 8 }}>
-              <input className="opa-input" placeholder="anchor_type" value={comment.anchor_type}
+              <input className="oui-input" placeholder="anchor_type" value={comment.anchor_type}
                 onChange={(e) => setComment({ ...comment, anchor_type: e.target.value })} />
-              <input className="opa-input" placeholder="anchor_id" value={comment.anchor_id}
+              <input className="oui-input" placeholder="anchor_id" value={comment.anchor_id}
                 onChange={(e) => setComment({ ...comment, anchor_id: e.target.value })} />
-              <input className="opa-input" placeholder="deep_link" value={comment.deep_link}
+              <input className="oui-input" placeholder="deep_link" value={comment.deep_link}
                 onChange={(e) => setComment({ ...comment, deep_link: e.target.value })} />
-              <textarea className="opa-input" rows={3} placeholder="comment" value={comment.body}
+              <textarea className="oui-input" rows={3} placeholder="comment" value={comment.body}
                 onChange={(e) => setComment({ ...comment, body: e.target.value })} />
-              <button className="opa-btn" disabled={busy || !comment.anchor_id || !comment.body} onClick={postComment}>Post</button>
+              <button className="oui-btn is-secondary" disabled={busy || !comment.anchor_id || !comment.body} onClick={postComment}>Post</button>
             </div>
           </Panel>
           <Panel title="Threads" icon={<FiMessageSquare />} flush loading={comments.loading} error={comments.error}
             empty={!comments.loading && cmtRows.length === 0} emptyText="No comments">
-            <DataTable columns={cmtCols} rows={cmtRows} rowKey={(r) => r.id} maxHeight={360} />
+            <DataTable
+          loading={comments.loading}
+          error={comments.error}
+          onRetry={comments.reload} columns={cmtCols} rows={cmtRows} rowKey={(r) => r.id} maxHeight={360} />
           </Panel>
         </>
       )}
@@ -309,15 +317,17 @@ export default function Collaborate() {
         <>
           <Panel title="Scheduled reports">
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <input className="opa-input" style={{ flex: 1 }} value={reportName} onChange={(e) => setReportName(e.target.value)} />
-              <button className="opa-btn" disabled={busy} onClick={createReport}><FiPlus size={14} /> Create</button>
-              <button className="opa-btn" disabled={busy} onClick={runNow}>Run now</button>
+              <input className="oui-input" style={{ flex: 1 }} value={reportName} onChange={(e) => setReportName(e.target.value)} />
+              <button className="oui-btn is-secondary" disabled={busy} onClick={createReport}><FiPlus size={14} /> Create</button>
+              <button className="oui-btn is-secondary" disabled={busy} onClick={runNow}>Run now</button>
             </div>
             <DataTable columns={rptCols} rows={rptRows} rowKey={(r) => r.id} maxHeight={240} />
           </Panel>
           <Panel title="Runs" icon={<FiFileText />} flush loading={runs.loading}
             empty={!runs.loading && runRows.length === 0} emptyText="No report runs yet">
-            <DataTable columns={runCols} rows={runRows} rowKey={(r) => r.id} maxHeight={280} />
+            <DataTable
+          loading={runs.loading}
+          onRetry={runs.reload} columns={runCols} rows={runRows} rowKey={(r) => r.id} maxHeight={280} />
           </Panel>
         </>
       )}

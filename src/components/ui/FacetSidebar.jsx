@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import { FiAlertCircle, FiFilter } from 'react-icons/fi'
-import { Badge } from './index'
+import { Badge, Button } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -80,56 +80,51 @@ export default function FacetSidebar({
   }
 
   return (
-    <div style={{ minWidth: 200, maxWidth: 260 }} data-testid="facet-sidebar">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }} className="opa-muted">
-        <FiFilter size={12} /> Facets
+    <div className="opa-facets" data-testid="facet-sidebar">
+      <div className="oui-row oui-text-muted opa-facets-head">
+        <FiFilter size={14} aria-hidden="true" /> Facets
       </div>
       {loadError ? (
-        <div className="opa-muted" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-            <FiAlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>Facets temporarily unavailable. Try again.</span>
-          </div>
-          <button type="button" className="opa-btn ghost" style={{ fontSize: 12, alignSelf: 'flex-start' }} onClick={retry}>
-            Retry
-          </button>
+        <div className="opa-facets-error oui-text-muted oui-text-sm">
+          <span className="oui-row">
+            <FiAlertCircle size={14} aria-hidden="true" />
+            <span>Facets are temporarily unavailable.</span>
+          </span>
+          <Button size="sm" variant="secondary" onClick={retry}>Retry</Button>
         </div>
       ) : (
         <>
           {fields.map((field) => (
-            <div key={field} style={{ marginBottom: 14 }}>
-              <div className="opa-mono" style={{ fontSize: 11, marginBottom: 6 }}>{field}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div key={field} className="opa-facet-group">
+              <div className="oui-mono opa-facet-field">{field}</div>
+              <div className="opa-facet-values">
                 {(facets[field] || []).slice(0, 12).map((row) => {
                   const val = row.value || row.Value || ''
                   const count = row.count || row.Count || 0
                   const on = (include[field] || []).includes(val)
                   const off = (exclude[field] || []).includes(val)
                   return (
-                    <div key={val} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        className="opa-btn ghost"
-                        style={{
-                          flex: 1, display: 'flex', justifyContent: 'space-between', fontSize: 12,
-                          opacity: off ? 0.4 : 1,
-                          outline: on ? '1px solid var(--accent)' : undefined,
-                        }}
-                        onClick={() => toggle(field, val, 'include')}
-                        onContextMenu={(e) => { e.preventDefault(); toggle(field, val, 'exclude') }}
-                        title="Click include · right-click exclude"
-                      >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{val || '—'}</span>
-                        <Badge>{count}</Badge>
-                      </button>
-                    </div>
+                    <Button
+                      key={val}
+                      size="sm"
+                      variant="ghost"
+                      block
+                      className={`opa-facet-chip${on ? ' is-included' : ''}${off ? ' is-excluded' : ''}`}
+                      aria-pressed={on}
+                      onClick={() => toggle(field, val, 'include')}
+                      onContextMenu={(e) => { e.preventDefault(); toggle(field, val, 'exclude') }}
+                      title={`${val || 'empty'} — click to include, right-click to exclude`}
+                    >
+                      <span className="opa-facet-chip-label">{val || '—'}</span>
+                      <Badge tone={off ? 'neutral' : 'accent'}>{count}</Badge>
+                    </Button>
                   )
                 })}
               </div>
             </div>
           ))}
           {(Object.keys(include).length > 0 || Object.keys(exclude).length > 0) && (
-            <div className="opa-muted" style={{ fontSize: 11, wordBreak: 'break-all' }}>
+            <div className="oui-text-muted oui-mono opa-facet-dsl">
               {toFilterDSL()}
             </div>
           )}

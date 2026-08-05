@@ -8,10 +8,10 @@
   min-width: 0;
 }
 
-.logs-search .opa-input {
+.logs-search .oui-input {
   width: 100%;
   padding-left: 30px;
-  font-size: var(--fs-12);
+  font-size: var(--text-xs);
 }
 
 .logs-search-icon {
@@ -23,7 +23,7 @@
 
 .logs-time {
   white-space: nowrap;
-  font-size: var(--fs-12);
+  font-size: var(--text-xs);
 }
 
 /* Long log lines stay on one row; the expanded panel shows the full text. */
@@ -38,7 +38,7 @@
 .logs-facets {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
+  gap: var(--space-2);
 }
 
 .logs-chip {
@@ -47,10 +47,10 @@
   gap: 6px;
   padding: 3px 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-full, 999px);
   background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: var(--fs-11);
+  font-size: var(--text-2xs);
   cursor: pointer;
 }
 
@@ -67,18 +67,18 @@
 .logs-detail {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--space-2);
 }
 
 .logs-detail-head {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  font-size: var(--fs-12);
+  gap: var(--space-3);
+  font-size: var(--text-xs);
 }
 
 .logs-detail-label {
-  font-size: var(--fs-11);
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -86,13 +86,13 @@
 
 .logs-pre {
   margin: 0;
-  padding: var(--sp-3);
+  padding: var(--space-3);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm, 4px);
   color: var(--text-primary);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--fs-12);
+  font-size: var(--text-xs);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

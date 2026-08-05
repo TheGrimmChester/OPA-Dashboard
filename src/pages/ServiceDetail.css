@@ -9,7 +9,7 @@
 .opa-xfer-row {
   display: flex;
   align-items: center;
-  gap: var(--sp-2, 6px);
+  gap: var(--space-2, 6px);
   justify-content: flex-end;
 }
 .opa-xfer-track {
@@ -30,7 +30,7 @@
 .opa-xfer-val {
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   min-width: 58px;
   text-align: right;
 }

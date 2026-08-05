@@ -1,30 +1,27 @@
+/* Collapsible JSON tree for span dumps.
+
+   The two toolbar controls are the kit's Button now, so `.json-control-btn` is
+   gone. The twisty stays a local control on purpose: it is a 16px affordance
+   inside a 20px mono row, and the kit's smallest button is 32px by design —
+   dropping one in would set the row height from the chevron up.
+
+   The value colours were four literal hexes borrowed from a code editor's dark
+   theme, so they were fixed regardless of the active theme and three of them fell
+   under 3:1 on the light surface. They now read the theme-resolved categorical
+   slots, which are specified for both surfaces. */
+
 .json-tree-wrapper {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .json-tree-controls {
   display: flex;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) 0;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.json-control-btn {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  transition: all 0.2s;
-}
-
-.json-control-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .json-tree-content {
@@ -32,16 +29,15 @@
 }
 
 .json-node {
-  margin-left: 0;
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-lh);
 }
 
 .json-node-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--space-1);
   user-select: none;
 }
 
@@ -49,22 +45,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  transition: all 0.2s;
   width: 16px;
   height: 16px;
   flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
 }
 
 .json-expand-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
-  border-radius: var(--radius-xs);
+  background: var(--surface-3);
+}
+
+.json-expand-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 .json-spacer {
@@ -74,57 +74,55 @@
 
 .json-bracket {
   color: var(--text-secondary);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--weight-semibold);
 }
 
 .json-count {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs);
-  font-style: italic;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .json-node-children {
-  margin-left: calc(var(--spacing-md) + 4px);
-  margin-top: var(--spacing-xs);
-  border-left: 1px solid var(--border-light);
-  padding-left: var(--spacing-sm);
+  margin-left: var(--space-5);
+  margin-top: var(--space-1);
+  border-left: 1px solid var(--border-subtle);
+  padding-left: var(--space-2);
 }
 
 .json-array-item,
 .json-object-item {
   display: flex;
   align-items: flex-start;
-  gap: var(--spacing-xs);
-  margin-bottom: var(--spacing-xs);
-  min-height: 20px;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
 }
 
 .json-key {
-  color: var(--color-primary);
-  font-weight: var(--font-weight-medium);
+  color: var(--accent);
+  font-weight: var(--weight-medium);
   flex-shrink: 0;
   min-width: fit-content;
 }
 
+/* Four value kinds, four fixed slots. Not a ramp and never cycled: a fifth kind
+   would need a second channel, not a fifth hue. */
 .json-string {
-  color: #98c379;
+  color: var(--chart-6);
 }
 
 .json-number {
-  color: #d19a66;
+  color: var(--chart-2);
 }
 
 .json-boolean {
-  color: #c678dd;
+  color: var(--chart-7);
 }
 
-.json-null {
-  color: #5c6370;
-  font-style: italic;
-}
-
+/* Absent, not a value: the type ramp says so without spending a hue on it. */
+.json-null,
 .json-undefined {
-  color: #5c6370;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -133,6 +131,5 @@
 }
 
 .json-node-footer {
-  margin-top: var(--spacing-xs);
+  margin-top: var(--space-1);
 }
-

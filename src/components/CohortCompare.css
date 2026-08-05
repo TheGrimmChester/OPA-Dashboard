@@ -2,26 +2,26 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: var(--fs-12);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 .cc-bars {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--space-2);
 }
 .cc-bar-row {
   display: grid;
   grid-template-columns: 120px 1fr 1fr;
   align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-2) 0;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
   border-bottom: 1px solid var(--border-subtle);
 }
 .cc-bar-row:last-child { border-bottom: none; }
 .cc-bar-label {
-  font-size: var(--fs-13);
+  font-size: var(--text-sm);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -30,10 +30,10 @@
 .cc-bar-cell {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--space-2);
 }
 .cc-bar-tag {
-  font-size: var(--fs-11);
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: .04em;
   width: 26px;
@@ -41,12 +41,12 @@
 }
 .cc-bar-cell .opa-inlinebar { flex: 1; }
 .cc-bar-val {
-  font-size: var(--fs-12);
+  font-size: var(--text-xs);
   width: 64px;
   text-align: right;
   flex: 0 0 auto;
 }
 
 @media (max-width: 720px) {
-  .cc-bar-row { grid-template-columns: 1fr; gap: var(--sp-1); }
+  .cc-bar-row { grid-template-columns: 1fr; gap: var(--space-1); }
 }

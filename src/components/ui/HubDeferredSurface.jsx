@@ -1,36 +1,34 @@
 import React from 'react'
 import { FiClock } from 'react-icons/fi'
+import { PageHeader, Stack, Card, EmptyState } from '@open-family/ui'
 import { hubDeferredCopy } from '../../utils/hubDeferred'
-import { EmptyState } from './States'
-import Panel from './Panel'
 
 /**
- * Honest empty state for ownership.md deferred scaffolds.
- * Keeps nav reachable without spamming hub 404s.
+ * The honest empty state for a surface that is deliberately not available yet.
+ *
+ * This is not a failure and not an empty result — it is a page that exists in the
+ * navigation so the structure is discoverable, and says plainly that its data is
+ * not wired up. Keeping it reachable is better than a rail item that 404s.
+ *
+ * The copy comes from `hubDeferredCopy`, which is the single list of which
+ * surfaces are deferred; a page passes its `id` and gets the right wording.
  */
 export default function HubDeferredSurface({ id, title, subtitle, embedded = false }) {
   const copy = hubDeferredCopy(id)
   if (!copy) return null
 
   const body = (
-    <Panel expandable={false}>
-      <EmptyState icon={<FiClock />} title={copy.title} hint={copy.hint} />
-    </Panel>
+    <Card>
+      <EmptyState inline icon={<FiClock />} title={copy.title} description={copy.hint} />
+    </Card>
   )
 
   if (embedded) return body
 
   return (
-    <div className="opa-stack">
-      {(title || subtitle) && (
-        <div className="opa-page-head">
-          <div>
-            {title && <h1 className="opa-page-title">{title}</h1>}
-            {subtitle && <div className="opa-page-sub">{subtitle}</div>}
-          </div>
-        </div>
-      )}
+    <Stack gap="sections">
+      {title || subtitle ? <PageHeader title={title} description={subtitle} /> : null}
       {body}
-    </div>
+    </Stack>
   )
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { FiAlertTriangle, FiChevronRight, FiInfo } from 'react-icons/fi'
-import { EmptyState, SegmentedControl } from './ui'
+import { Button, EmptyState, Segmented, Select } from '@open-family/ui'
 import { fmtBytes, fmtMs, fmtNum, fmtPct } from '../theme/format'
 import { fmtMetric, middleEllipsis } from './profile/HotSpots'
 import { METRIC_LABELS } from './profile/ProfileToolbar'
@@ -68,6 +68,8 @@ const NOISE_FLOORS = [
   { value: 5, label: '5%' },
 ]
 
+const METRIC_OPTIONS = METRIC_KEYS.map((m) => ({ value: m, label: METRIC_LABELS[m] }))
+
 /* ---- paint -----------------------------------------------------------------
    op index: -2 merged run, -1 unclassified, 0..4 = opTypes.TYPE_ORDER.
    Hues come from opTypes.typeFill, so the icicle, the hot-spots table and the
@@ -88,7 +90,7 @@ function tintOf(hue) {
 // Merged runs are deliberately hue-less: they are an aggregate, not an operation.
 // Unclassified frames use --surface-3 rather than opTypes' NEUTRAL_VAR, which is
 // tuned for swatches and is indistinguishable from the sunken plot area here.
-const OP_HUES = ['var(--border-strong)', 'var(--neutral)', ...TYPE_ORDER.map(typeFill)]
+const OP_HUES = ['var(--border-strong)', 'var(--text-muted)', ...TYPE_ORDER.map(typeFill)]
 const PAINT = OP_HUES.map((hue, k) => Object.freeze({
   fill: k === 0 ? 'var(--surface-3)' : tintOf(hue),
   stroke: hue,
@@ -677,7 +679,7 @@ function TipRow({ k, v }) {
   return (
     <div className="fg-tip-row">
       <span className="fg-tip-k">{k}</span>
-      <span className="fg-tip-v opa-mono opa-tnum">{v}</span>
+      <span className="fg-tip-v oui-mono oui-num">{v}</span>
     </div>
   )
 }
@@ -943,8 +945,9 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
   if (tree.n === 0) {
     return (
       <EmptyState
+        inline
         title="No call stack to draw"
-        hint="This trace carries no profiler frames — enable the OPA profiler to record one."
+        description="This trace carries no profiler frames, so there is no shape to render. Enabling the OPA profiler on the service records one."
       />
     )
   }
@@ -1034,9 +1037,9 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
           {otherMetrics.length > 0 && (
             <div className="opa-prof-notice-actions">
               {otherMetrics.map((k) => (
-                <button key={k} type="button" className="opa-prof-mini" onClick={() => setMetric(k)}>
+                <Button key={k} size="sm" onClick={() => setMetric(k)}>
                   Show {METRIC_LABELS[k]}
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -1062,9 +1065,11 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
         {!controlled && (
           <label className="opa-prof-field">
             Metric
-            <select className="opa-select" value={metric} onChange={(e) => setMetric(e.target.value)}>
-              {METRIC_KEYS.map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
-            </select>
+            <Select
+              value={metric}
+              options={METRIC_OPTIONS}
+              onChange={(e) => setMetric(e.target.value)}
+            />
           </label>
         )}
         {!structural && (
@@ -1073,7 +1078,12 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
             title={`Hide frames worth less than this share of the ${metricLabel.toLowerCase()} in view. A parent stays whenever any descendant passes.`}
           >
             <span className="opa-prof-field">Floor</span>
-            <SegmentedControl options={NOISE_FLOORS} value={minPct} onChange={setMinPct} />
+            <Segmented
+              aria-label="Noise floor"
+              items={NOISE_FLOORS}
+              value={minPct}
+              onChange={setMinPct}
+            />
           </div>
         )}
 
@@ -1114,7 +1124,7 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
               {typeLabel(TYPE_ORDER[op])}
             </span>
           ))}
-          <span className="opa-muted opa-tnum fg-count">
+          <span className="oui-text-muted oui-num fg-count">
             {fmtNum(layout.drawn)} frames · {layout.rowCount}
             {deeper ? ` of ${fmtNum(tree.maxDepth + 1)}` : ''} levels
           </span>
@@ -1140,8 +1150,9 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
         <div className="fg-canvas" ref={scrollRef}>
           {layout.frames.length === 0 ? (
             <EmptyState
+              inline
               title="Nothing passes the floor"
-              hint={`No frame reaches ${minPct}% of the ${metricLabel.toLowerCase()} in view. Lower the floor to see the rest.`}
+              description={`No frame reaches ${minPct}% of the ${metricLabel.toLowerCase()} in view. This is the filter, not the trace — lowering the floor shows the rest.`}
             />
           ) : (
             <svg
@@ -1208,7 +1219,7 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
               <span className="opa-prof-type fg-tip-type" style={{ color: OP_HUES[tipOp + 2] }}>
                 {typeLabel(TYPE_ORDER[tipOp])}
               </span>
-              <span className="opa-mono">{middleEllipsis(tipHead, 40)}</span>
+              <span className="oui-mono">{middleEllipsis(tipHead, 40)}</span>
             </div>
           )}
           {tipRows.map(([k, v]) => <TipRow key={k} k={k} v={v} />)}
@@ -1216,7 +1227,7 @@ function FlameGraph({ callStack, width = 800, height = 600, metric: metricProp, 
         </div>
       )}
 
-      <div className="fg-sr" aria-live="polite">{srText}</div>
+      <div className="oui-visually-hidden" aria-live="polite">{srText}</div>
     </div>
   )
 }

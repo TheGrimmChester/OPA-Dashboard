@@ -47,19 +47,19 @@ export default function OnboardingBanner() {
     }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Waiting for your first trace</div>
-        <div className="opa-muted" style={{ fontSize: 13, marginBottom: 8 }}>
+        <div className="oui-text-muted" style={{ fontSize: 13, marginBottom: 8 }}>
           Instrument an app and point it at this agent. Live verification lands on Service once spans arrive.
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           {Object.keys(SNIPPETS).map((k) => (
-            <button key={k} type="button" className="opa-btn ghost" style={{ fontSize: 12 }} onClick={() => setLang(k)}>{k}</button>
+            <button key={k} type="button" className="oui-btn is-ghost" style={{ fontSize: 12 }} onClick={() => setLang(k)}>{k}</button>
           ))}
         </div>
-        <pre className="opa-mono" style={{ fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{SNIPPETS[lang]}</pre>
+        <pre className="oui-mono" style={{ fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{SNIPPETS[lang]}</pre>
       </div>
       <button
         type="button"
-        className="opa-btn ghost"
+        className="oui-btn is-ghost"
         aria-label="Dismiss onboarding"
         onClick={() => {
           try { localStorage.setItem(STORAGE_KEY, '1') } catch { /* ignore */ }

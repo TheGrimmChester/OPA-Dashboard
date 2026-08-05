@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { FiSearch, FiSun, FiRefreshCw, FiCornerDownLeft, FiServer, FiActivity, FiHardDrive, FiMonitor } from 'react-icons/fi'
-import { NAV_GROUPS } from './SideRail'
+import { applyTheme } from '@open-family/ui'
+import { NAV_SECTIONS, OVERVIEW_ITEM } from '../../nav'
 import { useTimeRange } from '../../contexts/TimeRangeContext'
 import { useI18n } from '../../contexts/I18nContext'
-import { applyTheme } from './ThemeToggle'
 import './CommandPalette.css'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -28,9 +28,12 @@ function fuzzy(text, q) {
   return true
 }
 
+// Writes through the kit's storage key and broadcasts, so the top bar's toggle
+// and this action can never end up disagreeing about the current theme.
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark'
-  applyTheme(current === 'light' ? 'dark' : 'light')
+  const resolved = document.documentElement.getAttribute('data-theme')
+    || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  applyTheme(resolved === 'light' ? 'dark' : 'light', 'opa_theme')
 }
 
 const IS_MAC = /mac|iphone|ipad|ipod/i.test(
@@ -41,8 +44,16 @@ const KIND_ICON = {
   service: FiServer, host: FiHardDrive, trace: FiActivity, session: FiMonitor, release: FiActivity,
 }
 
-export default function CommandPalette() {
-  const [open, setOpen] = useState(false)
+/**
+ * The command menu. Controlled by the shell so the top bar's search trigger and
+ * the keyboard shortcut open the same thing — the palette used to own its state
+ * privately, which left the trigger with nothing to call.
+ */
+export default function CommandPalette({ open, onOpenChange }) {
+  const setOpen = useMemo(
+    () => (next) => onOpenChange(typeof next === 'function' ? next(open) : next),
+    [onOpenChange, open]
+  )
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const [entities, setEntities] = useState([])
@@ -53,17 +64,21 @@ export default function CommandPalette() {
   const listRef = useRef(null)
 
   const allSections = useMemo(() => {
-    const routeSections = NAV_GROUPS.map((g) => ({
-      label: t(g.labelKey),
-      items: g.items.map((it) => ({
-        kind: 'route',
-        id: `route:${it.to}`,
-        to: it.to,
-        label: t(it.labelKey),
-        icon: it.icon,
-        hint: it.to,
+    const toEntry = (it) => ({
+      kind: 'route',
+      id: `route:${it.to}`,
+      to: it.to,
+      label: t(it.labelKey),
+      icon: it.icon,
+      hint: it.to,
+    })
+    const routeSections = [
+      { label: t('nav.overview'), items: [toEntry(OVERVIEW_ITEM)] },
+      ...NAV_SECTIONS.map((g) => ({
+        label: t(g.labelKey),
+        items: g.items.map(toEntry),
       })),
-    }))
+    ]
     const actions = {
       label: 'Actions',
       items: [
@@ -127,7 +142,7 @@ export default function CommandPalette() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [setOpen])
 
   useEffect(() => {
     if (!open) return
@@ -223,7 +238,7 @@ export default function CommandPalette() {
                     >
                       {Icon ? <Icon className="opa-cmdk-row-icon" aria-hidden="true" /> : <span className="opa-cmdk-row-icon" />}
                       <span className="opa-cmdk-row-label">{item.label}</span>
-                      {item.hint && <span className="opa-cmdk-row-hint opa-mono">{item.hint}</span>}
+                      {item.hint && <span className="opa-cmdk-row-hint oui-mono">{item.hint}</span>}
                       {active && <FiCornerDownLeft className="opa-cmdk-row-enter" aria-hidden="true" />}
                     </div>
                   )

@@ -3,8 +3,9 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { FiGitBranch, FiArrowLeft, FiActivity, FiClock, FiAlertTriangle, FiHardDrive, FiExternalLink } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill } from '../components/ui'
-import { fmtMs, fmtBytes, fmtNum, fmtPct, fmtAgo, latencyStatus, errorRateStatus, tierColor } from '../theme/format'
+import { fmtMs, fmtBytes, fmtNum, fmtPct, fmtAgo, latencyStatus, errorRateStatus, tierColor, statusColor } from '../theme/format'
 import './SqlQueryDetail.css'
+import { PageHeader } from '@open-family/ui'
 
 export default function HttpEndpointDetail() {
   const { endpoint: rawEndpoint } = useParams()
@@ -50,7 +51,7 @@ export default function HttpEndpointDetail() {
     { key: 'service', header: 'Service', render: (r) => r.service || '—', sortValue: (r) => r.service },
     {
       key: 'duration_ms', header: 'Duration', num: true,
-      render: (r) => <span style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span>,
+      render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span>,
     },
     {
       key: 'status', header: 'Status', align: 'center',
@@ -62,7 +63,7 @@ export default function HttpEndpointDetail() {
     },
     {
       key: 'created_at', header: 'When', num: true,
-      render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span>,
+      render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span>,
       sortValue: (r) => Date.parse(r.created_at) || 0,
     },
   ]
@@ -70,18 +71,14 @@ export default function HttpEndpointDetail() {
   const bandwidth = agg ? (agg.total_bytes_sent || 0) + (agg.total_bytes_received || 0) : 0
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div style={{ minWidth: 0 }}>
-          <h1 className="opa-page-title opa-mono" style={{ wordBreak: 'break-word' }}>
-            {method && <StatusPill tone="neutral">{method}</StatusPill>}{' '}
-            {endpoint || '—'}
-          </h1>
-          <div className="opa-page-sub">HTTP endpoint{agg?.service ? ` · ${agg.service}` : ''}</div>
-        </div>
-        <div className="opa-entity-meta opa-row" style={{ gap: 'var(--sp-3)' }}>
+    <div className="oui-stack">
+      <PageHeader
+        title={<>{method && <StatusPill tone="neutral">{method}</StatusPill>}{' '}
+            {endpoint || '—'}</>}
+        description={<>HTTP endpoint{agg?.service ? ` · ${agg.service}` : ''}</>}
+        actions={<><div className="opa-entity-meta oui-row" style={{ gap: 'var(--space-3)' }}>
           <button
-            className="opa-btn"
+            className="oui-btn is-secondary"
             onClick={() => navigate('/traces?' + new URLSearchParams({ filter }).toString())}
             title="Open every matching trace in the Trace Explorer"
           >
@@ -90,19 +87,19 @@ export default function HttpEndpointDetail() {
           <Link to="/http" className="opa-sqlq-back">
             <FiArrowLeft size={12} /> back to External HTTP
           </Link>
-        </div>
-      </div>
+        </div></>}
+      />
 
       {/* Aggregate KPIs (from the list row) — accurate rollups over the range. */}
       {agg && (
-        <div className="opa-grid cols-4">
+        <div className="oui-grid is-4">
           <KpiTile label="Calls" icon={<FiActivity size={12} />} value={fmtNum(agg.call_count)} unit="calls" status="neutral" />
           <KpiTile label="Avg latency" icon={<FiClock size={12} />} value={fmtMs(agg.avg_duration)} status={latencyStatus(agg.avg_duration)}
-            footer={agg.max_duration != null && <span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>max {fmtMs(agg.max_duration)}</span>} />
+            footer={agg.max_duration != null && <span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>max {fmtMs(agg.max_duration)}</span>} />
           <KpiTile label="Error rate" icon={<FiAlertTriangle size={12} />} value={fmtPct(agg.error_rate || 0)} status={errorRateStatus(agg.error_rate || 0)}
-            footer={agg.error_count != null && <span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{fmtNum(agg.error_count)} errors</span>} />
+            footer={agg.error_count != null && <span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtNum(agg.error_count)} errors</span>} />
           <KpiTile label="Bandwidth" icon={<FiHardDrive size={12} />} value={fmtBytes(bandwidth)} status="neutral"
-            footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>
+            footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>
               <span style={{ color: tierColor('http') }}>↑{fmtBytes(agg.total_bytes_sent)}</span> · <span style={{ color: tierColor('app') }}>↓{fmtBytes(agg.total_bytes_received)}</span>
             </span>} />
         </div>
@@ -115,10 +112,13 @@ export default function HttpEndpointDetail() {
         empty={!t.loading && traces.length === 0}
         emptyText="No sample traces recorded for this endpoint"
         actions={traces.length > 0 && (
-          <span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>showing {traces.length} most recent</span>
+          <span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>showing {traces.length} most recent</span>
         )}
       >
         <DataTable
+          loading={t.loading}
+          error={t.error}
+          onRetry={t.reload}
           columns={traceColumns}
           rows={traces}
           rowKey={(r) => r.trace_id}

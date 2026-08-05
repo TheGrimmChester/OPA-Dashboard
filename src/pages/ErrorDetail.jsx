@@ -1,12 +1,11 @@
 import React from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { useParams, Link } from 'react-router-dom'
 import {
   FiAlertTriangle, FiHash, FiClock, FiActivity, FiList, FiCode, FiChevronLeft, FiGitBranch,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import {
-  Panel, KpiTile, TimeSeriesChart, EntityHeader, StatusPill, EmptyState, EntityChip,
-} from '../components/ui'
+import { Panel, KpiTile, EntityHeader, StatusPill, EmptyState, EntityChip } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { logsHref, serviceHref, traceHref, tracesHref } from '../utils/entityLinks'
 
@@ -32,7 +31,7 @@ export default function ErrorDetail() {
   const hasRelated = related.length > 0
 
   return (
-    <div className="opa-stack">
+    <div className="oui-stack">
       <EntityHeader
         title={id || '—'}
         subtitle={message}
@@ -45,19 +44,19 @@ export default function ErrorDetail() {
           </>
         }
         meta={
-          <span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>
+          <span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>
             {fmtNum(count)} occurrence{count === 1 ? '' : 's'}
           </span>
         }
         actions={
-          <div className="opa-row" style={{ gap: 8 }}>
-            <Link className="opa-btn ghost" to={tracesHref({ service: service || undefined, status: 'error' })}>
+          <div className="oui-row" style={{ gap: 8 }}>
+            <Link className="oui-btn is-ghost" to={tracesHref({ service: service || undefined, status: 'error' })}>
               Error traces
             </Link>
             {service && (
-              <Link className="opa-btn ghost" to={logsHref({ service, level: 'ERROR' })}>Logs</Link>
+              <Link className="oui-btn is-ghost" to={logsHref({ service, level: 'ERROR' })}>Logs</Link>
             )}
-            <Link to="/errors" className="opa-row" style={{ gap: 'var(--sp-1)', fontSize: 'var(--fs-12)', color: 'var(--text-secondary)' }}>
+            <Link to="/errors" className="oui-row" style={{ gap: 'var(--space-1)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
               <FiChevronLeft size={13} /> Errors
             </Link>
           </div>
@@ -65,7 +64,7 @@ export default function ErrorDetail() {
       />
 
       {/* KPIs */}
-      <div className="opa-grid cols-3">
+      <div className="oui-grid is-3">
         <KpiTile
           label="Occurrences"
           icon={<FiHash size={12} />}
@@ -78,14 +77,14 @@ export default function ErrorDetail() {
           icon={<FiClock size={12} />}
           value={fmtAgo(e.first_seen)}
           status="neutral"
-          footer={<span className="opa-muted opa-mono" style={{ fontSize: 'var(--fs-11)' }}>{e.first_seen || '—'}</span>}
+          footer={<span className="oui-text-muted oui-mono" style={{ fontSize: 'var(--text-2xs)' }}>{e.first_seen || '—'}</span>}
         />
         <KpiTile
           label="Last seen"
           icon={<FiAlertTriangle size={12} />}
           value={fmtAgo(e.last_seen)}
           status={count > 0 ? 'warn' : 'neutral'}
-          footer={<span className="opa-muted opa-mono" style={{ fontSize: 'var(--fs-11)' }}>{e.last_seen || '—'}</span>}
+          footer={<span className="oui-text-muted oui-mono" style={{ fontSize: 'var(--text-2xs)' }}>{e.last_seen || '—'}</span>}
         />
       </div>
 
@@ -94,7 +93,7 @@ export default function ErrorDetail() {
         {hasTrends ? (
           <TimeSeriesChart
             data={trends}
-            series={[{ key: 'count', name: 'Occurrences', color: 'var(--error)', type: 'bar' }]}
+            series={[{ key: 'count', name: 'Occurrences', color: 'var(--critical-text)', type: 'bar' }]}
             valueFmt={(v) => fmtNum(v)}
             yFmt={(v) => fmtNum(v)}
             height={220}
@@ -107,17 +106,17 @@ export default function ErrorDetail() {
       {/* Stack trace */}
       <Panel title="Stack trace" icon={<FiCode />}
         loading={q.loading} error={q.error}
-        actions={hasStack ? <span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>{stack.length} frame{stack.length === 1 ? '' : 's'}</span> : null}>
+        actions={hasStack ? <span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{stack.length} frame{stack.length === 1 ? '' : 's'}</span> : null}>
         {hasStack ? (
-          <pre className="opa-mono" style={{
-            margin: 0, padding: 'var(--sp-3)', overflow: 'auto',
-            fontSize: 'var(--fs-12)', lineHeight: 1.6, color: 'var(--text-secondary)',
+          <pre className="oui-mono" style={{
+            margin: 0, padding: 'var(--space-3)', overflow: 'auto',
+            fontSize: 'var(--text-xs)', lineHeight: 1.6, color: 'var(--text-secondary)',
             background: 'var(--surface-2)', borderRadius: 6, maxHeight: 460,
             whiteSpace: 'pre', tabSize: 2,
           }}>
             {stack.map((line, i) => (
-              <div key={i} style={{ display: 'flex', gap: 'var(--sp-3)' }}>
-                <span className="opa-muted opa-tnum" style={{ minWidth: 30, textAlign: 'right', userSelect: 'none', opacity: 0.6 }}>{i}</span>
+              <div key={i} style={{ display: 'flex', gap: 'var(--space-3)' }}>
+                <span className="oui-text-muted oui-num" style={{ minWidth: 30, textAlign: 'right', userSelect: 'none', opacity: 0.6 }}>{i}</span>
                 <span style={{ color: 'var(--text-primary)' }}>{String(line)}</span>
               </div>
             ))}
@@ -130,21 +129,21 @@ export default function ErrorDetail() {
       {/* Related traces */}
       <Panel title="Related traces" icon={<FiGitBranch />} flush
         loading={q.loading} error={q.error}
-        actions={hasRelated ? <span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>{related.length} trace{related.length === 1 ? '' : 's'}</span> : null}>
+        actions={hasRelated ? <span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{related.length} trace{related.length === 1 ? '' : 's'}</span> : null}>
         {hasRelated ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {related.map((t, i) => {
               const tid = t?.trace_id || ''
               return (
                 <li key={tid || i} style={{
-                  display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
-                  padding: 'var(--sp-2) var(--sp-3)', borderBottom: '1px solid var(--border-subtle)',
+                  display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+                  padding: 'var(--space-2) var(--space-3)', borderBottom: '1px solid var(--border-subtle)',
                 }}>
-                  <FiList size={13} className="opa-muted" />
+                  <FiList size={13} className="oui-text-muted" />
                   {tid ? (
                     <EntityChip to={traceHref(tid)} title={tid}>{tid}</EntityChip>
                   ) : (
-                    <span className="opa-muted opa-mono">—</span>
+                    <span className="oui-text-muted oui-mono">—</span>
                   )}
                 </li>
               )

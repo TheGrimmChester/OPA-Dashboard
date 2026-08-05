@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react'
 import {
   FiAlertTriangle, FiCornerDownRight, FiCornerLeftUp, FiCrosshair, FiInfo, FiSearch, FiX,
 } from 'react-icons/fi'
-import { EmptyState, SegmentedControl } from './ui'
+import { Button, EmptyState, Input, Segmented, Select } from '@open-family/ui'
 import { fmtNum, fmtPct } from '../theme/format'
 import { DIFF_LABELS, METRICS, neighbours, shortestEntryPath } from '../utils/callGraphModel'
 import { TYPE_ORDER, typeFill, typeLabel } from '../utils/opTypes'
@@ -56,10 +56,12 @@ const PICKER_MODES = [
   { value: 'out', label: 'Callees' },
 ]
 
+const METRIC_OPTIONS = METRICS.map((m) => ({ value: m, label: METRIC_LABELS[m] }))
+
 // symDiff codes are DIFF_CODES order: no-change, improvement, degradation, new.
 // Tones match ProfileComparison's legend (ok / error / neutral) so the compare
 // view's legend describes something that is actually drawn.
-const DIFF_TONE = ['var(--neutral)', 'var(--ok)', 'var(--error)', 'var(--info)']
+const DIFF_TONE = ['var(--text-muted)', 'var(--good-text)', 'var(--critical-text)', 'var(--accent)']
 
 const PICKER_ROWS = 200
 const CRUMB_CHARS = 22
@@ -77,7 +79,7 @@ const MIN_CANVAS = 200 // layoutEgo's tightest depth-1 drawing is 190px
 
 // typeFill's neutral is a surface colour — invisible on a panel-coloured box.
 function tone(op) {
-  return op >= 0 ? typeFill(TYPE_ORDER[op]) : 'var(--neutral)'
+  return op >= 0 ? typeFill(TYPE_ORDER[op]) : 'var(--text-muted)'
 }
 
 // Namespace-stripped tail: the informative part of a PHP symbol in a breadcrumb.
@@ -386,16 +388,18 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
         >
           <FiCrosshair size={12} aria-hidden="true" />
           <span className="opa-cg-focusname">{middleEllipsis(focusName, 44)}</span>
-          <span className="opa-muted opa-tnum">#{ranked.rankOf[focus] + 1}</span>
+          <span className="oui-text-muted oui-num">#{ranked.rankOf[focus] + 1}</span>
         </button>
         {/* Hidden when the page drives the metric from the shared toolbar, so
             the panel never shows two metric controls sitting side by side. */}
         {!metricControlled && (
           <label className="opa-prof-field opa-cg-metric">
             Cost
-            <select className="opa-select" value={metric} onChange={(e) => onMetricChange(e.target.value)}>
-              {METRICS.map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
-            </select>
+            <Select
+              value={metric}
+              options={METRIC_OPTIONS}
+              onChange={(e) => onMetricChange(e.target.value)}
+            />
           </label>
         )}
         <div
@@ -404,10 +408,15 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
             ? 'Two hops needs a taller panel'
             : 'How many call hops to draw around the focus'}
         >
-          <SegmentedControl options={DEPTHS} value={layout.depth} onChange={setDepthChoice} />
+          <Segmented
+            aria-label="Call hops to draw"
+            items={DEPTHS}
+            value={layout.depth}
+            onChange={setDepthChoice}
+          />
         </div>
         {history.length > 0 && (
-          <button type="button" className="opa-btn ghost opa-cg-back" onClick={back}>Back</button>
+          <Button variant="ghost" size="sm" className="opa-cg-back" onClick={back}>Back</Button>
         )}
       </div>
 
@@ -421,9 +430,9 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
           {withData.length > 0 && (
             <div className="opa-prof-notice-actions">
               {withData.map((m) => (
-                <button key={m} type="button" className="opa-prof-mini" onClick={() => onMetricChange(m)}>
+                <Button key={m} size="sm" onClick={() => onMetricChange(m)}>
                   Size by {METRIC_LABELS[m]}
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -547,7 +556,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
       <div className="opa-cg-legend">
         {typesInView.map((t) => (
           <span key={t} className="opa-cg-key">
-            <i style={{ background: t === 'other' ? 'var(--neutral)' : typeFill(t) }} />
+            <i style={{ background: t === 'other' ? 'var(--text-muted)' : typeFill(t) }} />
             {t === 'other' ? 'Other' : typeLabel(t)}
           </span>
         ))}
@@ -562,7 +571,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
         )}
         {undrawnEdges > 0 && (
           <span
-            className="opa-cg-key opa-muted"
+            className="opa-cg-key oui-text-muted"
             title="Calls between two functions that are both drawn here. They are not shown because routing them across a band would run the line through other boxes."
           >
             +{fmtNum(undrawnEdges)} call{undrawnEdges === 1 ? '' : 's'} between shown functions not drawn
@@ -581,9 +590,8 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
         <div className="opa-cg-picker" role="dialog" aria-label="Choose the focus function">
           <div className="opa-cg-picker-bar">
             <span className="opa-cg-picker-search">
-              <FiSearch aria-hidden="true" />
-              <input
-                className="opa-input"
+              <Input
+                icon={<FiSearch />}
                 type="search"
                 value={query}
                 placeholder="Filter functions..."
@@ -591,10 +599,20 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
                 onChange={(e) => setQuery(e.target.value)}
               />
             </span>
-            <SegmentedControl options={PICKER_MODES} value={picker} onChange={openPicker} />
-            <button type="button" className="opa-cg-close" aria-label="Close the function list" onClick={() => setPicker(null)}>
-              <FiX size={14} />
-            </button>
+            <Segmented
+              aria-label="Function list scope"
+              items={PICKER_MODES}
+              value={picker}
+              onChange={openPicker}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="opa-cg-close"
+              icon={<FiX />}
+              aria-label="Close the function list"
+              onClick={() => setPicker(null)}
+            />
           </div>
           <div className="opa-cg-picker-list">
             {pickRows.length === 0 ? (
@@ -621,7 +639,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
                     ? (noData ? `${fmtNum(graph.eCount[r.e])}×` : fmtMetric(metric, graph.eW[metric][r.e]))
                     : (noData ? '—' : fmtMetric(metric, selfM[r.sym]))}
                 </span>
-                <span className="opa-cg-pnum opa-muted">{fmtNum(graph.callCount[r.sym])}</span>
+                <span className="opa-cg-pnum oui-text-muted">{fmtNum(graph.callCount[r.sym])}</span>
               </button>
             ))}
           </div>
@@ -631,7 +649,7 @@ function EgoGraph({ model, metric, onMetricChange, metricControlled, width, heig
               : picker === 'in'
                 ? <><FiCornerLeftUp aria-hidden="true" />Callers, by the cost that flows through the call site</>
                 : <><FiCornerDownRight aria-hidden="true" />Callees, by the cost that flows through the call site</>}
-            <span className="opa-muted">
+            <span className="oui-text-muted">
               {pickRows.length < pickerTotal
                 ? `${fmtNum(pickRows.length)} of ${fmtNum(pickerTotal)} shown`
                 : `${fmtNum(pickRows.length)} shown`}
@@ -672,14 +690,22 @@ export default function CallGraph({
   if (!model.ready) {
     return (
       <div className="opa-cg is-blank" style={{ width: W }}>
-        <EmptyState title="No call stack" hint="This trace carries no call stack to build a graph from." />
+        <EmptyState
+          inline
+          title="No call stack"
+          description="This trace carries no call stack, so there is no caller/callee structure to draw. The OPA profiler records one when it is enabled for the service."
+        />
       </div>
     )
   }
   if (model.graph.S === 0) {
     return (
       <div className="opa-cg is-blank" style={{ width: W }}>
-        <EmptyState title="No function survived aggregation" hint="Every call was filtered out before grouping." />
+        <EmptyState
+          inline
+          title="No function survived aggregation"
+          description="Every call was filtered out before grouping. Lowering the significance threshold or grouping by method rather than class usually recovers them."
+        />
       </div>
     )
   }

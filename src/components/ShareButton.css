@@ -1,27 +1,10 @@
-.share-button {
-  background-color: var(--color-primary-blue);
-  color: var(--text-inverse);
-  border: none;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  transition: all var(--transition-base);
-  font-weight: var(--font-weight-medium);
-}
+/* The kit's Button owns the shape, the height, the hover and the focus ring. The
+   previous rule painted the button with --chart-1, a categorical chart hue, which
+   is reserved for series and is not an interface accent.
 
-.share-button:hover {
-  background-color: var(--color-primary-blue);
-  opacity: 0.9;
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+   All that is left is the "copied" confirmation tone; the tick glyph and the
+   changed label say the same thing, so colour is never the only signal. */
+.opa-share.is-copied {
+  color: var(--good-text);
+  border-color: var(--good-border);
 }
-
-.share-button.copied {
-  background-color: var(--color-success);
-}
-
-.share-button:active {
-  transform: scale(0.98);
-}
-

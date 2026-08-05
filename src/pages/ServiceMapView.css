@@ -57,7 +57,7 @@
   background: color-mix(in srgb, var(--surface-2) 88%, transparent);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   color: var(--text-secondary);
 }
 .smap-legend .lg {
@@ -121,7 +121,7 @@
 .smap-drawer-head .titles { flex: 1 1 auto; min-width: 0; }
 .smap-drawer-head h3 {
   margin: 0;
-  font-size: var(--fs-15, 15px);
+  font-size: var(--text-base, 15px);
   color: var(--text-primary);
   font-weight: 600;
   word-break: break-all;
@@ -129,7 +129,7 @@
 }
 .smap-drawer-head .sub {
   margin-top: 3px;
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
   color: var(--text-muted);
 }
 .smap-drawer-close {
@@ -154,7 +154,7 @@
 }
 .smap-section { margin-bottom: 18px; }
 .smap-section-title {
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   text-transform: uppercase;
   letter-spacing: .06em;
   color: var(--text-muted);
@@ -176,19 +176,19 @@
 }
 .smap-metric.wide { grid-column: 1 / -1; }
 .smap-metric .m-label {
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   color: var(--text-muted);
   margin-bottom: 3px;
 }
 .smap-metric .m-value {
-  font-size: var(--fs-15, 15px);
+  font-size: var(--text-base, 15px);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 .smap-metric .m-sub {
   margin-top: 3px;
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -199,7 +199,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
   padding: 5px 0;
   border-bottom: 1px dashed var(--border-subtle);
 }
@@ -218,7 +218,7 @@
 .smap-io-row .io-cap {
   width: 34px;
   flex: 0 0 auto;
-  font-size: var(--fs-11, 11px);
+  font-size: var(--text-2xs, 11px);
   color: var(--text-muted);
 }
 .smap-io-track {
@@ -233,7 +233,7 @@
   width: 78px;
   flex: 0 0 auto;
   text-align: right;
-  font-size: var(--fs-12, 12px);
+  font-size: var(--text-xs, 12px);
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }

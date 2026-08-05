@@ -1,7 +1,6 @@
 import React from 'react'
-import { FiActivity, FiClock, FiCpu, FiDatabase, FiHardDrive, FiLayers } from 'react-icons/fi'
-import { KpiTile } from '../ui'
-import { fmtBytes, fmtMs, fmtNum, fmtPct, latencyStatus } from '../../theme/format'
+import { Badge, StatRow, StatTile } from '@open-family/ui'
+import { fmtBytes, fmtMs, fmtNum, fmtPct } from '../../theme/format'
 import { METRICS } from '../../utils/callGraphModel'
 import { EMPTY_TOTALS } from './useProfileModel'
 import './profile.css'
@@ -28,16 +27,13 @@ export default function ProfileSummary({ totals, metric = 'duration' }) {
     {
       id: 'wall',
       label: 'Wall time',
-      icon: <FiClock />,
       value: t.wall,
       text: fmtMs(t.wall),
-      status: t.wall > 0 ? latencyStatus(t.wall) : 'neutral',
       note: 'self time of every call',
     },
     {
       id: 'cpu',
       label: 'CPU time',
-      icon: <FiCpu />,
       value: t.cpu,
       text: fmtMs(t.cpu),
       note: share(t.cpu, t.wall),
@@ -45,7 +41,6 @@ export default function ProfileSummary({ totals, metric = 'duration' }) {
     {
       id: 'io',
       label: 'I/O wait',
-      icon: <FiHardDrive />,
       value: t.io,
       text: fmtMs(t.io),
       note: share(t.io, t.wall),
@@ -53,7 +48,6 @@ export default function ProfileSummary({ totals, metric = 'duration' }) {
     {
       id: 'memory',
       label: 'Memory',
-      icon: <FiDatabase />,
       value: t.memory,
       text: fmtBytes(t.memory),
       note: 'net delta',
@@ -61,7 +55,6 @@ export default function ProfileSummary({ totals, metric = 'duration' }) {
     showNetwork && {
       id: 'network',
       label: 'Network',
-      icon: <FiActivity />,
       value: t.network,
       text: fmtBytes(t.network),
       note: 'sent + received',
@@ -69,7 +62,6 @@ export default function ProfileSummary({ totals, metric = 'duration' }) {
     {
       id: 'calls',
       label: 'Calls',
-      icon: <FiLayers />,
       value: t.calls,
       text: fmtNum(t.calls),
       // A call count of 0 is a fact about the trace, not a missing measurement.
@@ -79,23 +71,22 @@ export default function ProfileSummary({ totals, metric = 'duration' }) {
   ].filter(Boolean)
 
   return (
-    <div className="opa-grid opa-prof-kpis">
+    // StatRow auto-fits, so five tiles and six tiles both read as one strip.
+    <StatRow>
       {tiles.map((tile) => {
         const measured = tile.factual || tile.value !== 0
         const active = tile.id === activeTile
         return (
-          <KpiTile
+          <StatTile
             key={tile.id}
             label={tile.label}
-            icon={tile.icon}
             value={measured ? tile.text : '—'}
-            status={measured ? (tile.status || 'neutral') : 'neutral'}
-            footer={
+            foot={
               <span className="opa-prof-foot-row">
-                {active && <span className="opa-prof-active">ranking</span>}
+                {active && <Badge tone="accent" round>ranking</Badge>}
                 {!measured
                   ? <span className="opa-prof-dim">not recorded{active && t.structureMode ? ' · ranked by calls' : ''}</span>
-                  : tile.note && <span className="opa-muted">{tile.note}</span>}
+                  : tile.note && <span className="oui-text-muted">{tile.note}</span>}
                 {tile.id === 'calls' && t.truncated && (
                   <span className="opa-prof-warn">capped · {fmtNum(t.scanned)} scanned</span>
                 )}
@@ -104,6 +95,6 @@ export default function ProfileSummary({ totals, metric = 'duration' }) {
           />
         )
       })}
-    </div>
+    </StatRow>
   )
 }

@@ -4,6 +4,7 @@ import { FiTerminal, FiActivity, FiClock, FiAlertTriangle } from 'react-icons/fi
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, EmptyState, StatusPill, InlineBar } from '../components/ui'
 import { fmtNum, fmtMs, fmtPct } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 // Commands — CLI / worker / cron transactions. Kept separate from HTTP endpoints
 // because they are a different population (agent popCommand / is_cli). The
@@ -25,8 +26,8 @@ export default function Commands() {
       header: 'Command',
       mono: true,
       render: (r) => (
-        <div className="opa-row" style={{ gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-          <span className="cell-strong opa-mono">{r.name || '—'}</span>
+        <div className="oui-row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <span className="oui-cell-primary oui-mono">{r.name || '—'}</span>
           {(r.sample_ratio ?? 1) < 0.999 && (
             <StatusPill tone="warn">
               {fmtPct((r.sample_ratio || 0) * 100)} kept · {fmtNum(r.suppressed || 0)} suppressed
@@ -36,7 +37,7 @@ export default function Commands() {
       ),
       sortValue: (r) => r.name || '',
     },
-    { key: 'service', header: 'Service', render: (r) => <span className="opa-mono">{r.service}</span> },
+    { key: 'service', header: 'Service', render: (r) => <span className="oui-mono">{r.service}</span> },
     {
       key: 'requests',
       header: 'Requests',
@@ -65,7 +66,7 @@ export default function Commands() {
       header: 'Errors',
       num: true,
       render: (r) => (
-        <span style={{ color: r.error_rate > 5 ? 'var(--error)' : undefined }}>
+        <span style={{ color: r.error_rate > 5 ? 'var(--critical-text)' : undefined }}>
           {fmtPct(r.error_rate || 0)}
         </span>
       ),
@@ -73,17 +74,13 @@ export default function Commands() {
   ]
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Commands</h1>
-          <div className="opa-page-sub">
-            CLI, workers and cron — named transactions, not HTTP endpoints
-          </div>
-        </div>
-      </div>
+    <div className="oui-stack">
+      <PageHeader
+        title="Commands"
+        description="CLI, workers and cron — named transactions, not HTTP endpoints"
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Commands" icon={<FiTerminal size={12} />} value={fmtNum(rows.length)} status="neutral" />
         <KpiTile label="Requests" icon={<FiActivity size={12} />} value={fmtNum(totalRequests)} status="neutral" />
         <KpiTile
@@ -93,7 +90,7 @@ export default function Commands() {
           status={totalSuppressed > 0 ? 'warn' : 'neutral'}
           footer={
             totalSuppressed > 0
-              ? <span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>detail dropped, count kept via sample_weight</span>
+              ? <span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>detail dropped, count kept via sample_weight</span>
               : null
           }
         />
@@ -116,6 +113,9 @@ export default function Commands() {
             )
           : (
             <DataTable
+          loading={q.loading}
+          error={q.error}
+          onRetry={q.reload}
               columns={columns}
               rows={rows}
               rowKey={(r, i) => `${r.service}|${r.name}|${i}`}

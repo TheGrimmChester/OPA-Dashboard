@@ -7,8 +7,9 @@ import {
 } from '../components/ui'
 import FacetSidebar from '../components/ui/FacetSidebar'
 import ExportButton from '../components/ExportButton'
-import { fmtMs, fmtNum, fmtAgo, latencyStatus } from '../theme/format'
+import { fmtMs, fmtNum, fmtAgo, latencyStatus, statusColor } from '../theme/format'
 import './TraceExplorer.css'
+import { PageHeader } from '@open-family/ui'
 
 function facetDSL(facets) {
   const parts = []
@@ -171,18 +172,18 @@ export default function TraceExplorer() {
   const columns = [
     {
       key: 'trace_id', header: 'Trace', width: 130,
-      render: (r) => <span className="opa-mono cell-strong">{String(r.trace_id || '').slice(0, 16)}</span>,
+      render: (r) => <span className="oui-mono oui-cell-primary">{String(r.trace_id || '').slice(0, 16)}</span>,
       sortValue: (r) => r.trace_id,
     },
-    { key: 'service', header: 'Service', render: (r) => <span className="opa-mono">{r.service || '—'}</span>, sortValue: (r) => r.service },
+    { key: 'service', header: 'Service', render: (r) => <span className="oui-mono">{r.service || '—'}</span>, sortValue: (r) => r.service },
     {
       key: 'language', header: 'Runtime',
-      render: (r) => (r.language ? <LanguageBadge language={r.language} version={r.language_version} /> : <span className="opa-muted">—</span>),
+      render: (r) => (r.language ? <LanguageBadge language={r.language} version={r.language_version} /> : <span className="oui-text-muted">—</span>),
       sortValue: (r) => r.language,
     },
     {
       key: 'duration_ms', header: 'Duration', num: true,
-      render: (r) => <span style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span>,
+      render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span>,
     },
     { key: 'span_count', header: 'Spans', num: true, render: (r) => fmtNum(r.span_count) },
     {
@@ -196,7 +197,7 @@ export default function TraceExplorer() {
     },
     {
       key: 'created_at', header: 'When', num: true,
-      render: (r) => <span className="opa-muted">{fmtAgo(r.created_at)}</span>,
+      render: (r) => <span className="oui-text-muted">{fmtAgo(r.created_at)}</span>,
       sortValue: (r) => Date.parse(r.created_at) || 0,
     },
   ]
@@ -207,17 +208,13 @@ export default function TraceExplorer() {
   const hasNext = offset + LIMIT < total
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Trace Explorer</h1>
-          <div className="opa-page-sub">
-            Distributed traces{total ? ` · ${fmtNum(total)} matching` : ''} · sorted by slowest
-          </div>
-        </div>
-        <div className="opa-row">
+    <div className="oui-stack">
+      <PageHeader
+        title="Trace Explorer"
+        description={<>Distributed traces{total ? ` · ${fmtNum(total)} matching` : ''} · sorted by slowest</>}
+        actions={<><div className="oui-row">
           <select
-            className="opa-select opa-mono" style={{ maxWidth: 260 }}
+            className="oui-select oui-mono" style={{ maxWidth: 260 }}
             value={service} onChange={(e) => setParam('service', e.target.value)}
             title={service || 'All services'} aria-label="Service filter"
           >
@@ -226,14 +223,14 @@ export default function TraceExplorer() {
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-          <select className="opa-select" value={status} onChange={(e) => setParam('status', e.target.value)} aria-label="Status filter">
+          <select className="oui-select" value={status} onChange={(e) => setParam('status', e.target.value)} aria-label="Status filter">
             <option value="">All statuses</option>
             <option value="ok">OK</option>
             <option value="error">Error</option>
           </select>
           <ExportButton filters={{ service, status, filter: combinedFilter }} label="Export" />
-        </div>
-      </div>
+        </div></>}
+      />
 
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
         <FacetSidebar
@@ -241,14 +238,14 @@ export default function TraceExplorer() {
           onChange={(next) => { setFacets(next); setOffset(0) }}
           fields={['service', 'language', 'framework', 'status', 'db_system']}
         />
-        <div className="opa-stack" style={{ flex: 1, minWidth: 0 }}>
+        <div className="oui-stack" style={{ flex: 1, minWidth: 0 }}>
           {/* Query bar — raw DSL filter. Facets AND into the same request. */}
-          <div className="opa-row" style={{ gap: 'var(--sp-2)', alignItems: 'center' }}>
+          <div className="oui-row" style={{ gap: 'var(--space-2)', alignItems: 'center' }}>
             <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
               <FiSearch size={13} style={{ position: 'absolute', left: 10, color: 'var(--text-muted)', pointerEvents: 'none' }} />
               <input
-                className="opa-input opa-mono"
-                style={{ width: '100%', paddingLeft: 30, fontSize: 'var(--fs-12)' }}
+                className="oui-input oui-mono"
+                style={{ width: '100%', paddingLeft: 30, fontSize: 'var(--text-xs)' }}
                 value={filterDraft}
                 onChange={(e) => setFilterDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') commitFilter() }}
@@ -259,7 +256,7 @@ export default function TraceExplorer() {
               />
             </div>
             {hasFilters && (
-              <button className="opa-btn ghost" onClick={() => { clearFilters(); setFacets({ include: {}, exclude: {} }) }} title="Clear all filters">
+              <button className="oui-btn is-ghost" onClick={() => { clearFilters(); setFacets({ include: {}, exclude: {} }) }} title="Clear all filters">
                 <FiX size={13} /> Clear
               </button>
             )}
@@ -271,8 +268,8 @@ export default function TraceExplorer() {
             empty={!q.loading && durations.length === 0}
             emptyText="No traces in range"
             actions={hist.p95 != null && (
-              <span className="opa-muted opa-mono" style={{ fontSize: 'var(--fs-12)' }}>
-                <span style={{ color: 'var(--p95)' }}>p95 {fmtMs(hist.p95)}</span> · {fmtNum(durations.length)} traces
+              <span className="oui-text-muted oui-mono" style={{ fontSize: 'var(--text-xs)' }}>
+                <span style={{ color: 'var(--chart-2)' }}>p95 {fmtMs(hist.p95)}</span> · {fmtNum(durations.length)} traces
               </span>
             )}
           >
@@ -283,7 +280,7 @@ export default function TraceExplorer() {
                   <div
                     key={i}
                     className="tx-hist-bar"
-                    style={{ height: `${(b.count / maxCount) * 100}%`, background: `var(--${latencyStatus(mid)})` }}
+                    style={{ height: `${(b.count / maxCount) * 100}%`, background: statusColor(latencyStatus(mid)) }}
                     title={`${fmtMs(b.from)}–${fmtMs(b.to)} · ${b.count} trace${b.count === 1 ? '' : 's'}`}
                   />
                 )
@@ -307,17 +304,17 @@ export default function TraceExplorer() {
             empty={!q.loading && traces.length === 0}
             emptyText={loadRunEmptyHint}
             actions={(
-              <div className="opa-row" style={{ fontSize: 'var(--fs-12)' }}>
-                <span className="opa-muted opa-tnum">
+              <div className="oui-row" style={{ fontSize: 'var(--text-xs)' }}>
+                <span className="oui-text-muted oui-num">
                   {total ? `${pageStart}–${pageEnd} of ${fmtNum(total)}` : '0 traces'}
                 </span>
                 <button
-                  className="opa-btn" disabled={!hasPrev}
+                  className="oui-btn is-secondary" disabled={!hasPrev}
                   onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
                   title="Previous page"
                 ><FiChevronLeft size={13} /></button>
                 <button
-                  className="opa-btn" disabled={!hasNext}
+                  className="oui-btn is-secondary" disabled={!hasNext}
                   onClick={() => setOffset((o) => o + LIMIT)}
                   title="Next page"
                 ><FiChevronRight size={13} /></button>
@@ -325,6 +322,9 @@ export default function TraceExplorer() {
             )}
           >
             <DataTable
+          loading={q.loading}
+          error={q.error}
+          onRetry={q.reload}
               columns={columns}
               rows={traces}
               rowKey={(r) => r.trace_id}

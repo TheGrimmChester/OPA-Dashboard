@@ -1,21 +1,8 @@
-.ExportButton {
-  display: flex;
-  gap: var(--spacing-xs);
-  align-items: center;
-}
+/* Intentionally empty.
 
-.format-select {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.export-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
+   ExportButton.jsx never imported this file, and the three classes it declared
+   (.ExportButton, .format-select, .export-btn) appeared in no markup anywhere in
+   the dashboard — they were dead before the migration. The control is now the
+   kit's Row + Select + Button, which style themselves, so there is nothing for a
+   product-level rule to add. The file is kept only so an outside import does not
+   break; it can be deleted once nothing references the path. */

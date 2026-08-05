@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FiLayers, FiZap, FiTrendingDown } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, DataTable, DeltaIndicator, InlineBar } from './ui'
-import { fmtMs, fmtBytes, fmtNum, fmtPct, latencyStatus } from '../theme/format'
+import { fmtMs, fmtBytes, fmtNum, fmtPct, latencyStatus, statusColor } from '../theme/format'
 import './CohortCompare.css'
 
 // Split a transaction's entry spans by a dimension and compare aggregate speed —
@@ -80,15 +80,15 @@ export default function CohortCompare() {
   }
 
   const columns = useMemo(() => [
-    { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="cell-strong">{r.label}</span> },
+    { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="oui-cell-primary">{r.label}</span> },
     ...groups.map((g, gi) => ({
       key: `g${gi}`,
       num: true,
       sortable: false,
       header: (
         <span>
-          {g.value || '—'} <span className="opa-muted" style={{ fontWeight: 'var(--fw-regular)' }}>n={fmtNum(g.count)}</span>
-          {gi === 0 && groups.length > 1 && <span className="opa-badge" style={{ marginLeft: 6 }}>baseline</span>}
+          {g.value || '—'} <span className="oui-text-muted" style={{ fontWeight: 'var(--weight-regular)' }}>n={fmtNum(g.count)}</span>
+          {gi === 0 && groups.length > 1 && <span className="oui-badge" style={{ marginLeft: 6 }}>baseline</span>}
           {g.value && (
             <span
               role="link"
@@ -96,7 +96,7 @@ export default function CohortCompare() {
               title={`View traces for ${g.value}`}
               onClick={(e) => { e.stopPropagation(); drillToTraces(g.value) }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); drillToTraces(g.value) } }}
-              style={{ marginLeft: 8, color: 'var(--accent)', cursor: 'pointer', fontWeight: 'var(--fw-regular)', whiteSpace: 'nowrap' }}
+              style={{ marginLeft: 8, color: 'var(--accent)', cursor: 'pointer', fontWeight: 'var(--weight-regular)', whiteSpace: 'nowrap' }}
             >
               traces →
             </span>
@@ -104,7 +104,7 @@ export default function CohortCompare() {
         </span>
       ),
       render: (r) => (
-        <span className="opa-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
+        <span className="oui-mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
           {r.fmt(g[r.key] ?? 0)}
           {gi > 0 && r.delta !== false && (
             <DeltaIndicator current={g[r.key] ?? 0} previous={baseline?.[r.key] ?? 0} invert={r.invert} />
@@ -119,26 +119,26 @@ export default function CohortCompare() {
   return (
     <>
       <Panel title="Cohort" icon={<FiLayers size={14} />}>
-        <div className="opa-row" style={{ gap: 'var(--sp-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="oui-row" style={{ gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label className="cc-field">Split by
-            <select className="opa-select" value={dimension} onChange={(e) => setDimension(e.target.value)}>
+            <select className="oui-select" value={dimension} onChange={(e) => setDimension(e.target.value)}>
               {DIMENSIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
             </select>
           </label>
           <label className="cc-field">Service
-            <select className="opa-select" value={service} onChange={(e) => { setService(e.target.value); setName('') }}>
+            <select className="oui-select" value={service} onChange={(e) => { setService(e.target.value); setName('') }}>
               <option value="">All services</option>
               {services.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </label>
           <label className="cc-field">Transaction
-            <select className="opa-select" value={name} onChange={(e) => setName(e.target.value)}>
+            <select className="oui-select" value={name} onChange={(e) => setName(e.target.value)}>
               <option value="">All transactions</option>
               {names.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
         </div>
-        <div className="opa-muted" style={{ fontSize: 'var(--fs-12)', marginTop: 'var(--sp-2)' }}>
+        <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
           Comparing entry-span speed across <strong>{dimLabel}</strong>
           {name ? <> for <strong>{name}</strong></> : ''}
           {service ? <> in <strong>{service}</strong></> : ''}.
@@ -147,14 +147,14 @@ export default function CohortCompare() {
 
       {headline && (
         <Panel>
-          <div className="opa-row" style={{ gap: 'var(--sp-3)', alignItems: 'center' }}>
-            <FiZap size={18} style={{ color: 'var(--ok)' }} />
+          <div className="oui-row" style={{ gap: 'var(--space-3)', alignItems: 'center' }}>
+            <FiZap size={18} style={{ color: 'var(--good-text)' }} />
             <div>
-              <div style={{ fontSize: 'var(--fs-16)', fontWeight: 'var(--fw-semibold)' }}>
-                <span style={{ color: 'var(--ok)' }}>{headline.fast.value}</span> is {fmtPct(headline.pct, 0)} faster than{' '}
-                <span style={{ color: 'var(--warn)' }}>{headline.slow.value}</span> at p95
+              <div style={{ fontSize: 'var(--text-md)', fontWeight: 'var(--weight-semibold)' }}>
+                <span style={{ color: 'var(--good-text)' }}>{headline.fast.value}</span> is {fmtPct(headline.pct, 0)} faster than{' '}
+                <span style={{ color: 'var(--warn-text)' }}>{headline.slow.value}</span> at p95
               </div>
-              <div className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>
+              <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>
                 p95 {fmtMs(headline.fast.p95_duration_ms)} vs {fmtMs(headline.slow.p95_duration_ms)} · {dimLabel}
               </div>
             </div>
@@ -176,23 +176,26 @@ export default function CohortCompare() {
         <div className="cc-bars">
           {groups.map((g, gi) => (
             <div key={gi} className="cc-bar-row">
-              <div className="cc-bar-label opa-mono">{g.value || '—'}</div>
+              <div className="cc-bar-label oui-mono">{g.value || '—'}</div>
               <div className="cc-bar-cell">
-                <span className="opa-muted cc-bar-tag">avg</span>
-                <InlineBar value={g.avg_duration_ms || 0} max={maxAvg} color="var(--tier-app)" />
-                <span className="opa-mono cc-bar-val" style={{ color: `var(--${latencyStatus(g.avg_duration_ms)})` }}>{fmtMs(g.avg_duration_ms)}</span>
+                <span className="oui-text-muted cc-bar-tag">avg</span>
+                <InlineBar value={g.avg_duration_ms || 0} max={maxAvg} color="var(--chart-1)" />
+                <span className="oui-mono cc-bar-val" style={{ color: statusColor(latencyStatus(g.avg_duration_ms)) }}>{fmtMs(g.avg_duration_ms)}</span>
               </div>
               <div className="cc-bar-cell">
-                <span className="opa-muted cc-bar-tag">p95</span>
-                <InlineBar value={g.p95_duration_ms || 0} max={maxP95} color="var(--p95)" />
-                <span className="opa-mono cc-bar-val" style={{ color: `var(--${latencyStatus(g.p95_duration_ms)})` }}>{fmtMs(g.p95_duration_ms)}</span>
+                <span className="oui-text-muted cc-bar-tag">p95</span>
+                <InlineBar value={g.p95_duration_ms || 0} max={maxP95} color="var(--chart-2)" />
+                <span className="oui-mono cc-bar-val" style={{ color: statusColor(latencyStatus(g.p95_duration_ms)) }}>{fmtMs(g.p95_duration_ms)}</span>
               </div>
             </div>
           ))}
         </div>
 
-        <div style={{ marginTop: 'var(--sp-4)' }}>
-          <DataTable columns={columns} rows={METRICS} rowKey={(r) => r.key} />
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <DataTable
+          loading={q.loading}
+          error={q.error}
+          onRetry={q.reload} columns={columns} rows={METRICS} rowKey={(r) => r.key} />
         </div>
       </Panel>
     </>

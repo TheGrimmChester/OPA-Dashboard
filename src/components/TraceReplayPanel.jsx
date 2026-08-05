@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   FiPlay, FiPause, FiDownload, FiExternalLink, FiFilm, FiActivity, FiZap, FiRadio, FiList,
+  FiRefreshCw,
 } from 'react-icons/fi'
+import { Badge, Banner, Button, EmptyState, Skeleton } from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
-import { Badge, StatusPill, EmptyState } from './ui'
 import { fmtMs } from '../theme/format'
 import { spanIdsStartedBy } from '../utils/traceReplay'
 import './TraceReplayPanel.css'
@@ -97,13 +98,32 @@ export default function TraceReplayPanel({
     <div className="trp" data-testid="trace-replay-panel">
       <div className="trp-head">
         <strong>Trace replay</strong>
-        <span className="opa-muted" style={{ fontSize: 11 }}>
+        <span className="oui-text-muted oui-text-sm">
           {replay.data?.honesty || 'Modes appear when correlated data exists'}
         </span>
       </div>
 
-      {replay.loading && <div className="opa-muted">Loading replay modes…</div>}
-      {replay.error && <div style={{ color: 'var(--error)' }}>{String(replay.error)}</div>}
+      {/* Loading and failed are different things, and neither is "no modes". */}
+      {replay.loading && (
+        <div className="trp-modes" aria-busy="true">
+          <Skeleton width={140} height={34} radius="var(--radius-sm)" />
+          <Skeleton width={140} height={34} radius="var(--radius-sm)" />
+          <Skeleton width={140} height={34} radius="var(--radius-sm)" />
+        </div>
+      )}
+      {replay.error && (
+        <Banner
+          tone="critical"
+          title="Replay modes could not be loaded"
+          actions={(
+            <Button size="sm" variant="ghost" icon={<FiRefreshCw />} onClick={replay.reload}>
+              Retry
+            </Button>
+          )}
+        >
+          {String(replay.error)}
+        </Banner>
+      )}
 
       {!replay.loading && modes.length > 0 && (
         <div className="trp-modes" role="list">
@@ -125,9 +145,10 @@ export default function TraceReplayPanel({
               >
                 <Icon size={14} />
                 <span className="trp-mode-label">{m.label}</span>
+                {/* The word carries the state; the dot and hue only reinforce it. */}
                 {m.available
-                  ? <StatusPill tone="ok">ready</StatusPill>
-                  : <StatusPill tone="neutral">n/a</StatusPill>}
+                  ? <Badge tone="good" dot>ready</Badge>
+                  : <Badge tone="neutral">not available</Badge>}
               </button>
             )
           })}
@@ -135,7 +156,7 @@ export default function TraceReplayPanel({
       )}
 
       {modes.filter((m) => !m.available).length > 0 && activeMode == null && (
-        <div className="trp-empty-hint opa-muted">
+        <div className="trp-empty-hint oui-text-muted">
           Unavailable modes stay listed with reasons — e.g. no RUM session, load run, or HTTP spans.
         </div>
       )}
@@ -143,15 +164,14 @@ export default function TraceReplayPanel({
       {activeMode === 'waterfall' && (waterfallMode?.available !== false) && (
         <div className="trp-waterfall" data-testid="trace-replay-waterfall">
           <div className="trp-scrub">
-            <button
-              type="button"
-              className="opa-btn ghost"
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={playing ? <FiPause /> : <FiPlay />}
               onClick={() => setPlaying((p) => !p)}
               title={playing ? 'Pause' : 'Play'}
               aria-label={playing ? 'Pause waterfall replay' : 'Play waterfall replay'}
-            >
-              {playing ? <FiPause /> : <FiPlay />}
-            </button>
+            />
             <input
               type="range"
               min={0}
@@ -162,12 +182,12 @@ export default function TraceReplayPanel({
               aria-label="Waterfall playhead"
               style={{ flex: 1 }}
             />
-            <span className="opa-mono opa-muted" style={{ fontSize: 11, minWidth: 88 }}>
+            <span className="oui-mono oui-num oui-text-muted trp-clock">
               {fmtMs(playhead)} / {fmtMs(totalMs)}
             </span>
             <Badge>{startedIds.length} spans</Badge>
           </div>
-          <p className="opa-muted" style={{ fontSize: 11, margin: '6px 0 0' }}>
+          <p className="oui-text-muted oui-text-sm trp-note">
             Waterfall playback highlights spans that have started by the playhead. This is not a browser session recording.
           </p>
         </div>
@@ -177,21 +197,22 @@ export default function TraceReplayPanel({
         <div className="trp-linkout">
           {modes.find((m) => m.id === 'rum_session')?.available ? (
             <>
-              <p className="opa-muted" style={{ fontSize: 12 }}>
+              <p className="oui-text-muted oui-text-sm trp-note">
                 Open the masked RUM event-log player for session{' '}
-                <code className="opa-mono">{modes.find((m) => m.id === 'rum_session')?.meta?.session_id}</code>.
+                <code className="oui-mono">{modes.find((m) => m.id === 'rum_session')?.meta?.session_id}</code>.
                 {modes.find((m) => m.id === 'rum_session')?.meta?.chunk_count === 0 && (
                   <> No replay chunks stored yet — session timeline may still be useful.</>
                 )}
               </p>
-              <Link className="opa-btn ghost" to={modes.find((m) => m.id === 'rum_session').href}>
+              <Link className="oui-btn is-ghost" to={modes.find((m) => m.id === 'rum_session').href}>
                 <FiExternalLink size={12} /> Open RUM session replay
               </Link>
             </>
           ) : (
             <EmptyState
+              inline
               title="No RUM session on this trace"
-              hint="Needs ajax.trace_id correlation from opa-rum-js or tags.session_id on spans."
+              description="Correlation needs either an ajax.trace_id from opa-rum-js or a session_id tag on one of the spans. Neither is present here."
             />
           )}
         </div>
@@ -201,15 +222,19 @@ export default function TraceReplayPanel({
         <div className="trp-linkout">
           {modes.find((m) => m.id === 'perf_lab')?.available ? (
             <>
-              <p className="opa-muted" style={{ fontSize: 12 }}>
-                Linked load run <code className="opa-mono">{modes.find((m) => m.id === 'perf_lab')?.meta?.load_run_id}</code>
+              <p className="oui-text-muted oui-text-sm trp-note">
+                Linked load run <code className="oui-mono">{modes.find((m) => m.id === 'perf_lab')?.meta?.load_run_id}</code>
               </p>
-              <Link className="opa-btn ghost" to={modes.find((m) => m.id === 'perf_lab').href}>
+              <Link className="oui-btn is-ghost" to={modes.find((m) => m.id === 'perf_lab').href}>
                 <FiExternalLink size={12} /> Open Perf Lab results
               </Link>
             </>
           ) : (
-            <EmptyState title="No Perf Lab run" hint="Span tags must carry load_run_id from a Perf Lab dispatch." />
+            <EmptyState
+              inline
+              title="No Perf Lab run"
+              description="A span tag has to carry the load_run_id of a Perf Lab dispatch for the two to be linked. No span on this trace does."
+            />
           )}
         </div>
       )}
@@ -218,19 +243,23 @@ export default function TraceReplayPanel({
         <div className="trp-linkout">
           {modes.find((m) => m.id === 'synthetics')?.available ? (
             <>
-              <p className="opa-muted" style={{ fontSize: 12 }}>
+              <p className="oui-text-muted oui-text-sm trp-note">
                 Synthetic check{' '}
-                <code className="opa-mono">
+                <code className="oui-mono">
                   {modes.find((m) => m.id === 'synthetics')?.meta?.check_name
                     || modes.find((m) => m.id === 'synthetics')?.meta?.check_id}
                 </code>
               </p>
-              <Link className="opa-btn ghost" to={modes.find((m) => m.id === 'synthetics').href}>
+              <Link className="oui-btn is-ghost" to={modes.find((m) => m.id === 'synthetics').href}>
                 <FiExternalLink size={12} /> Open synthetics
               </Link>
             </>
           ) : (
-            <EmptyState title="No synthetic check" hint="No synthetic_results.trace_id match for this trace." />
+            <EmptyState
+              inline
+              title="No synthetic check"
+              description="Nothing in synthetic_results carries this trace id, so this trace did not come from a synthetic run."
+            />
           )}
         </div>
       )}
@@ -238,43 +267,47 @@ export default function TraceReplayPanel({
       {(activeMode === 'har_export' || activeMode === 'step_list') && (
         <div className="trp-linkout">
           {steps.length === 0 && !modes.find((m) => m.id === activeMode)?.available ? (
-            <EmptyState title="No HTTP steps" hint="This trace has no span.http client calls to export." />
+            <EmptyState
+              inline
+              title="No HTTP steps"
+              description="This trace records no span.http client calls, so there is no request sequence to export."
+            />
           ) : (
             <>
               <div className="trp-actions">
                 {modes.find((m) => m.id === 'har_export')?.available && (
-                  <button
-                    type="button"
-                    className="opa-btn ghost"
+                  <Button
+                    size="sm"
+                    icon={<FiDownload />}
                     onClick={() => download(
                       `/api/traces/${encodeURIComponent(traceId)}/replay/har`,
                       `opa-trace-${traceId}.har`,
                     ).catch((e) => console.error(e))}
                   >
-                    <FiDownload size={12} /> Download HAR
-                  </button>
+                    Download HAR
+                  </Button>
                 )}
                 {modes.find((m) => m.id === 'step_list')?.available && (
-                  <button
-                    type="button"
-                    className="opa-btn ghost"
+                  <Button
+                    size="sm"
+                    icon={<FiDownload />}
                     onClick={() => download(
                       `/api/traces/${encodeURIComponent(traceId)}/replay/steps`,
                       `opa-trace-${traceId}-steps.json`,
                     ).catch((e) => console.error(e))}
                   >
-                    <FiDownload size={12} /> Download steps JSON
-                  </button>
+                    Download steps JSON
+                  </Button>
                 )}
               </div>
               {steps.length > 0 && (
                 <div className="trp-steps" data-testid="trace-replay-steps">
                   {steps.map((s, i) => (
-                    <div key={`${s.span_id}-${i}`} className="trp-step opa-mono">
-                      <span className="opa-muted">{i + 1}.</span>
+                    <div key={`${s.span_id}-${i}`} className="trp-step oui-mono">
+                      <span className="oui-text-muted">{i + 1}.</span>
                       <Badge>{s.method || 'GET'}</Badge>
                       <span className="trp-step-url" title={s.url}>{s.url || '—'}</span>
-                      <span className="opa-muted">{s.status_code || '—'}</span>
+                      <span className="oui-text-muted">{s.status_code || '—'}</span>
                       <span>{fmtMs(s.duration_ms)}</span>
                     </div>
                   ))}

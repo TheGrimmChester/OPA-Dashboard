@@ -23,6 +23,7 @@ import {
 import TraceWaterfall from '../components/TraceWaterfall'
 import TraceReplayPanel from '../components/TraceReplayPanel'
 import './TraceDetail.css'
+import { PageHeader } from '@open-family/ui'
 
 const TIERS = ['app', 'db', 'redis', 'http']
 const TIER_LABEL = { app: 'App / PHP', db: 'Database', redis: 'Redis', http: 'HTTP' }
@@ -260,31 +261,31 @@ export default function TraceDetail() {
       <span className="td-sql" title={r.query}>{r.query || '—'}</span>
     ), sortValue: (r) => r.query },
     { key: 'query_type', header: 'Type', render: (r) => <Badge>{r.query_type || r.type || '—'}</Badge>, sortValue: (r) => r.query_type },
-    { key: 'db_system', header: 'System', render: (r) => <span className="opa-muted">{r.db_system || '—'}</span> },
-    { key: 'duration_ms', header: 'Duration', num: true, render: (r) => <span style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span> },
+    { key: 'db_system', header: 'System', render: (r) => <span className="oui-text-muted">{r.db_system || '—'}</span> },
+    { key: 'duration_ms', header: 'Duration', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span> },
     { key: 'rows_affected', header: 'Rows', num: true, render: (r) => (r.rows_affected == null || r.rows_affected < 0 ? '—' : fmtNum(r.rows_affected)) },
     { key: 'io', header: 'Out / In', num: true, sortValue: (r) => (r.bytes_out || 0) + (r.bytes_in || 0), render: (r) => (
-      <span className="opa-mono"><span style={{ color: 'var(--tier-app)' }}>↑{fmtBytes(r.bytes_out)}</span> <span className="opa-muted">/</span> <span style={{ color: 'var(--tier-db)' }}>↓{fmtBytes(r.bytes_in)}</span></span>
+      <span className="oui-mono"><span style={{ color: 'var(--chart-1)' }}>↑{fmtBytes(r.bytes_out)}</span> <span className="oui-text-muted">/</span> <span style={{ color: 'var(--chart-2)' }}>↓{fmtBytes(r.bytes_in)}</span></span>
     ) },
   ]
 
   const redisCols = [
-    { key: 'command', header: 'Command', render: (r) => <span className="opa-mono cell-strong" style={{ color: 'var(--tier-redis)' }}>{r.command || '—'}</span> },
-    { key: 'key', header: 'Key', render: (r) => <span className="opa-mono opa-muted" title={r.key}>{r.key || '—'}</span> },
+    { key: 'command', header: 'Command', render: (r) => <span className="oui-mono oui-cell-primary" style={{ color: 'var(--chart-3)' }}>{r.command || '—'}</span> },
+    { key: 'key', header: 'Key', render: (r) => <span className="oui-mono oui-text-muted" title={r.key}>{r.key || '—'}</span> },
     { key: 'hit', header: 'Hit', render: (r) => (r.hit == null ? '—' : <StatusPill tone={r.hit ? 'ok' : 'warn'}>{r.hit ? 'HIT' : 'MISS'}</StatusPill>) },
-    { key: 'duration_ms', header: 'Duration', num: true, render: (r) => <span style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span> },
+    { key: 'duration_ms', header: 'Duration', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span> },
     { key: 'io', header: 'Out / In', num: true, sortValue: (r) => (r.bytes_out || 0) + (r.bytes_in || 0), render: (r) => (
-      <span className="opa-mono"><span style={{ color: 'var(--tier-app)' }}>↑{fmtBytes(r.bytes_out)}</span> <span className="opa-muted">/</span> <span style={{ color: 'var(--tier-db)' }}>↓{fmtBytes(r.bytes_in)}</span></span>
+      <span className="oui-mono"><span style={{ color: 'var(--chart-1)' }}>↑{fmtBytes(r.bytes_out)}</span> <span className="oui-text-muted">/</span> <span style={{ color: 'var(--chart-2)' }}>↓{fmtBytes(r.bytes_in)}</span></span>
     ) },
   ]
 
   const httpCols = [
     { key: 'method', header: 'Method', render: (r) => <Badge>{r.method || '—'}</Badge> },
-    { key: 'url', header: 'URL', render: (r) => <span className="opa-mono td-sql" title={r.url}>{r.url || r.uri || '—'}</span>, sortValue: (r) => r.url || r.uri },
+    { key: 'url', header: 'URL', render: (r) => <span className="oui-mono td-sql" title={r.url}>{r.url || r.uri || '—'}</span>, sortValue: (r) => r.url || r.uri },
     { key: 'status_code', header: 'Status', num: true, render: (r) => <span style={{ color: statusColor(r.status_code) }}>{r.status_code ?? '—'}</span> },
-    { key: 'duration_ms', header: 'Duration', num: true, render: (r) => <span style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span> },
+    { key: 'duration_ms', header: 'Duration', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span> },
     { key: 'io', header: 'Req / Resp', num: true, sortValue: (r) => (r.request_size || 0) + (r.response_size || 0), render: (r) => (
-      <span className="opa-mono"><span style={{ color: 'var(--tier-app)' }}>↑{fmtBytes(r.request_size ?? r.bytes_sent)}</span> <span className="opa-muted">/</span> <span style={{ color: 'var(--tier-http)' }}>↓{fmtBytes(r.response_size ?? r.bytes_received)}</span></span>
+      <span className="oui-mono"><span style={{ color: 'var(--chart-1)' }}>↑{fmtBytes(r.request_size ?? r.bytes_sent)}</span> <span className="oui-text-muted">/</span> <span style={{ color: 'var(--chart-4)' }}>↓{fmtBytes(r.response_size ?? r.bytes_received)}</span></span>
     ) },
   ]
 
@@ -292,16 +293,11 @@ export default function TraceDetail() {
   const empty = !loading && !trace.error && rows.length === 0
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div>
-          <button className="td-drawer-close" style={{ float: 'left', marginRight: 10 }} onClick={() => navigate(-1)} title="Back" aria-label="Back">
-            <FiChevronLeft size={15} />
-          </button>
-          <h1 className="opa-page-title">Trace</h1>
-          <div className="opa-page-sub">Distributed trace forensics</div>
-        </div>
-      </div>
+    <div className="oui-stack">
+      <PageHeader
+        title="Trace"
+        description="Distributed trace forensics"
+      />
 
       <EntityHeader
         title={traceId}
@@ -316,7 +312,7 @@ export default function TraceDetail() {
                 title={multiService ? `Service in this distributed trace: ${svc}` : `Service ${svc}`}
                 mono={false}
               >
-                <span className="opa-dot" style={{ background: multiService ? serviceColor[svc] : 'var(--tier-app)', width: 7, height: 7 }} />
+                <span className="opa-dot" style={{ background: multiService ? serviceColor[svc] : 'var(--chart-1)', width: 7, height: 7 }} />
                 {svc}
               </EntityChip>
             ))}
@@ -326,38 +322,38 @@ export default function TraceDetail() {
           </>
         }
         meta={
-          <div className="opa-row" style={{ gap: 'var(--sp-5, 22px)' }}>
-            <div className="td-metastat"><span className="k">Duration</span><span className="v" style={{ color: `var(--${latencyStatus(totalMs)})` }}>{fmtMs(totalMs)}</span></div>
+          <div className="oui-row" style={{ gap: 'var(--space-6, 22px)' }}>
+            <div className="td-metastat"><span className="k">Duration</span><span className="v" style={{ color: statusColor(latencyStatus(totalMs)) }}>{fmtMs(totalMs)}</span></div>
             <div className="td-metastat"><span className="k">CPU</span><span className="v">{fmtMs(totalCpu)}</span></div>
             <div className="td-metastat"><span className="k">Egress</span><span className="v">{fmtBytes(net.bytes_out)}</span></div>
             <div className="td-metastat"><span className="k">Ingress</span><span className="v">{fmtBytes(net.bytes_in)}</span></div>
           </div>
         }
         actions={(
-          <div className="opa-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <div className="oui-row" style={{ gap: 8, flexWrap: 'wrap' }}>
             {opService && (
-              <Link className="opa-btn ghost" to={buildTracesHref({ service: opService })}>Related traces</Link>
+              <Link className="oui-btn is-ghost" to={buildTracesHref({ service: opService })}>Related traces</Link>
             )}
             {rootResource && (
-              <Link className="opa-btn ghost" to={buildTracesHref({ filter: `name:"${String(rootResource).replace(/(["\\])/g, '\\$1')}"`, service: opService || undefined })}>
+              <Link className="oui-btn is-ghost" to={buildTracesHref({ filter: `name:"${String(rootResource).replace(/(["\\])/g, '\\$1')}"`, service: opService || undefined })}>
                 Same resource
               </Link>
             )}
             {anyError && (
-              <Link className="opa-btn ghost" to={buildTracesHref({ service: opService || undefined, status: 'error' })}>Error traces</Link>
+              <Link className="oui-btn is-ghost" to={buildTracesHref({ service: opService || undefined, status: 'error' })}>Error traces</Link>
             )}
-            <Link className="opa-btn ghost" to={logsHref({ service: opService || undefined, q: traceId })}>Logs</Link>
+            <Link className="oui-btn is-ghost" to={logsHref({ service: opService || undefined, q: traceId })}>Logs</Link>
             {correlations.find((c) => c.kind === 'session') && (
-              <Link className="opa-btn ghost" to={rumSessionHref(correlations.find((c) => c.kind === 'session').value)}>RUM session</Link>
+              <Link className="oui-btn is-ghost" to={rumSessionHref(correlations.find((c) => c.kind === 'session').value)}>RUM session</Link>
             )}
-            <Link className="opa-btn ghost" to={compareTracesHref(traceId, '')}>Compare</Link>
+            <Link className="oui-btn is-ghost" to={compareTracesHref(traceId, '')}>Compare</Link>
           </div>
         )}
       />
 
       {/* Waterfall — virtualized + collapse noise so 10k-span traces stay usable */}
       <Panel title="Trace waterfall" icon={<FiGitBranch />} loading={loading} error={trace.error} empty={empty}
-        actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>click a span for detail · use Trace replay below</span>}>
+        actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>click a span for detail · use Trace replay below</span>}>
         <TraceWaterfall
           rows={rows}
           totalMs={totalMs}
@@ -412,10 +408,10 @@ export default function TraceDetail() {
               totals={totals}
               right={
                 <div
-                  className="opa-row td-prof-floor"
+                  className="oui-row td-prof-floor"
                   title="Hide functions contributing less than this share of the ranked metric. Hot spots reports how many are hidden."
                 >
-                  <span className="opa-muted">Threshold</span>
+                  <span className="oui-text-muted">Threshold</span>
                   <SegmentedControl options={NOISE_FLOORS} value={minPct} onChange={setMinPct} />
                 </div>
               }
@@ -437,7 +433,6 @@ export default function TraceDetail() {
                 onMetricChange={setMetric}
                 selectedKey={focusKey}
                 onSelectSymbol={(key) => setFocusKey((k) => (k === key ? null : key))}
-                maxHeight={listH}
               />
             ) : (
               <div className="td-prof-graph">
@@ -475,7 +470,7 @@ export default function TraceDetail() {
       </Panel>
 
       {/* Breakdown + Network I/O */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Response-time breakdown" icon={<FiClock />} loading={loading} error={trace.error} empty={empty}>
           {stackedBar(
             TIERS.map((t) => ({ key: t, value: breakdown[t], color: tierColor(t), label: TIER_LABEL[t], display: fmtMs(breakdown[t]) })),
@@ -487,21 +482,21 @@ export default function TraceDetail() {
                 <span className="tb-swatch" style={{ background: tierColor(t) }} />
                 {TIER_LABEL[t]}
                 <span className="tb-legend-val">{fmtMs(breakdown[t])}</span>
-                <span className="opa-muted">({Math.round((breakdown[t] / breakdownTotal) * 100)}%)</span>
+                <span className="oui-text-muted">({Math.round((breakdown[t] / breakdownTotal) * 100)}%)</span>
               </div>
             ))}
           </div>
         </Panel>
 
         <Panel title="Network I/O by tier" icon={<FiActivity />} loading={loading} error={trace.error} empty={empty}
-          actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>bytes moved on the wire</span>}>
+          actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>bytes moved on the wire</span>}>
           <div className="dt-row">
-            <div className="dt-dir"><FiArrowUp size={13} style={{ color: 'var(--tier-http)' }} /> Egress</div>
+            <div className="dt-dir"><FiArrowUp size={13} style={{ color: 'var(--chart-4)' }} /> Egress</div>
             {stackedBar(dtParts(net.out_by_type), netTotal)}
             <div className="dt-total">{fmtBytes(net.bytes_out)}</div>
           </div>
           <div className="dt-row">
-            <div className="dt-dir"><FiArrowDown size={13} style={{ color: 'var(--tier-db)' }} /> Ingress</div>
+            <div className="dt-dir"><FiArrowDown size={13} style={{ color: 'var(--chart-2)' }} /> Ingress</div>
             {stackedBar(dtParts(net.in_by_type), netTotal)}
             <div className="dt-total">{fmtBytes(net.bytes_in)}</div>
           </div>
@@ -521,7 +516,9 @@ export default function TraceDetail() {
       <Panel title="SQL queries" icon={<FiDatabase />} flush loading={loading} error={trace.error}
         empty={!loading && allSql.length === 0} emptyText="No SQL in this trace"
         actions={<Badge>{fmtNum(allSql.length)} queries</Badge>}>
-        <DataTable columns={sqlCols} rows={allSql} rowKey={(r, i) => i}
+        <DataTable
+          loading={loading}
+          error={trace.error} columns={sqlCols} rows={allSql} rowKey={(r, i) => i}
           onRowClick={(r) => {
             const fp = r.query_fingerprint || r.fingerprint
             if (fp) { navigate(`/sql/${encodeURIComponent(fp)}`); return }
@@ -531,18 +528,22 @@ export default function TraceDetail() {
           initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
       </Panel>
 
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Redis" icon={<FiServer />} flush loading={loading} error={trace.error}
           empty={!loading && allRedis.length === 0} emptyText="No Redis ops"
           actions={<Badge>{fmtNum(allRedis.length)} ops</Badge>}>
-          <DataTable columns={redisCols} rows={allRedis} rowKey={(r, i) => i}
+          <DataTable
+          loading={loading}
+          error={trace.error} columns={redisCols} rows={allRedis} rowKey={(r, i) => i}
             onRowClick={(r) => { if (r.command) goTraces(`redis.command:"${r.command}"`) }}
             initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
         </Panel>
         <Panel title="HTTP calls" icon={<FiGlobe />} flush loading={loading} error={trace.error}
           empty={!loading && allHttp.length === 0} emptyText="No outbound HTTP"
           actions={<Badge>{fmtNum(allHttp.length)} calls</Badge>}>
-          <DataTable columns={httpCols} rows={allHttp} rowKey={(r, i) => i}
+          <DataTable
+          loading={loading}
+          error={trace.error} columns={httpCols} rows={allHttp} rowKey={(r, i) => i}
             onRowClick={(r) => { const u = r.url || r.uri; if (u) goTraces(`http.url:"${u}"`) }}
             initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
         </Panel>
@@ -553,15 +554,18 @@ export default function TraceDetail() {
         empty={!logsQ.loading && logs.length === 0} emptyText="No logs for this trace"
         actions={<Badge>{fmtNum(logsQ.data?.count ?? logs.length)} entries</Badge>}>
         <DataTable
+          loading={logsQ.loading}
+          error={logsQ.error}
+          onRetry={logsQ.reload}
           columns={[
             { key: 'level', header: 'Level', width: 84, render: (r) => <StatusPill tone={toneForLevel(r.level)}>{String(r.level || '—').toUpperCase()}</StatusPill> },
-            { key: 'message', header: 'Message', render: (r) => <span className="opa-mono" style={{ fontSize: 'var(--fs-12)' }}>{r.message || '—'}</span> },
+            { key: 'message', header: 'Message', render: (r) => <span className="oui-mono" style={{ fontSize: 'var(--text-xs)' }}>{r.message || '—'}</span> },
             { key: 'service', header: 'Service', render: (r) => (
               r.service
                 ? <EntityChip to={serviceHref(r.service)} title={`Service ${r.service}`}>{r.service}</EntityChip>
-                : <span className="opa-muted">—</span>
+                : <span className="oui-text-muted">—</span>
             ) },
-            { key: 'timestamp', header: 'When', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.timestamp)}</span>, sortValue: (r) => Date.parse(r.timestamp) || 0 },
+            { key: 'timestamp', header: 'When', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.timestamp)}</span>, sortValue: (r) => Date.parse(r.timestamp) || 0 },
           ]}
           rows={logs} rowKey={(r, i) => r.id || i}
           initialSort={{ key: 'timestamp', dir: 'desc' }} maxHeight={340}
@@ -611,7 +615,7 @@ function DumpCard({ d, spanName }) {
     <div className="td-dump">
       <div className="td-dump-head">
         <FiCode size={12} />
-        {loc && <span className="opa-mono td-dump-loc">{loc}</span>}
+        {loc && <span className="oui-mono td-dump-loc">{loc}</span>}
         {spanName && <Badge>{spanName}</Badge>}
       </div>
       <DumpBody d={d} />
@@ -656,7 +660,7 @@ function DrillLink({ to, title, children, mono = true, style }) {
   return (
     <button
       type="button"
-      className={`td-drill ${mono ? 'opa-mono' : ''}`}
+      className={`td-drill ${mono ? 'oui-mono' : ''}`}
       title={title}
       style={style}
       onClick={(e) => { e.stopPropagation(); navigate(to) }}
@@ -711,18 +715,18 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
       <div className="td-drawer" role="dialog" aria-label="Span detail">
         <div className="td-drawer-head">
           <div style={{ minWidth: 0 }}>
-            <div className="opa-row" style={{ gap: 8 }}>
+            <div className="oui-row" style={{ gap: 8 }}>
               <span className="tw-tierdot" style={{ background: tierColor(tier) }} />
               {/* The operation name → every trace that ran this operation. */}
               <DrillLink
                 to={tracesHref(`name:"${span.name}"`, span.service)}
                 title={`All traces running "${span.name}"`}
-                style={{ fontSize: 'var(--fs-15)', fontWeight: 'var(--fw-semibold)' }}
+                style={{ fontSize: 'var(--text-base)', fontWeight: 'var(--weight-semibold)' }}
               >
                 {span.name}
               </DrillLink>
             </div>
-            <div className="opa-row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            <div className="oui-row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               <DrillLink
                 to={tracesHref(`status:"${span.status || 'ok'}"`, span.service)}
                 title={`All ${span.status || 'ok'} traces for this service`}
@@ -736,7 +740,7 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
                 </DrillLink>
               )}
               {urlPath && (
-                <DrillLink to={tracesHref(`url_path:"${urlPath}"`)} title={`All traces hitting ${urlPath}`} style={{ fontSize: 'var(--fs-11)' }}>
+                <DrillLink to={tracesHref(`url_path:"${urlPath}"`)} title={`All traces hitting ${urlPath}`} style={{ fontSize: 'var(--text-2xs)' }}>
                   {urlPath}
                 </DrillLink>
               )}
@@ -744,7 +748,7 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
               <EntityChipRow items={attrChips.filter((c) => c.kind === 'load_run' || c.kind === 'session' || c.kind === 'check' || c.kind === 'error')} />
             </div>
           </div>
-          <div className="opa-row" style={{ gap: 4, alignItems: 'flex-start' }}>
+          <div className="oui-row" style={{ gap: 4, alignItems: 'flex-start' }}>
             <button
               className="td-drawer-close" onClick={() => prev && onSelect(prev)} disabled={!prev}
               title={prev ? `Previous span: ${prev.name} (←)` : 'First span'} aria-label="Previous span"
@@ -762,32 +766,32 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
           {(parent || children.length > 0 || siblings.length > 0) && (
             <div>
               <div className="td-drawer-sub">
-                In this trace <span className="opa-muted" style={{ fontWeight: 'normal' }}>· span {index + 1} of {rows.length}</span>
+                In this trace <span className="oui-text-muted" style={{ fontWeight: 'normal' }}>· span {index + 1} of {rows.length}</span>
               </div>
               <div className="td-relations">
                 {parent && (
                   <button type="button" className="td-relchip" onClick={() => onSelect(parent)} title={`Parent: ${parent.name}`}>
-                    <FiArrowUp size={11} /> <span className="opa-mono">{parent.name}</span>
+                    <FiArrowUp size={11} /> <span className="oui-mono">{parent.name}</span>
                   </button>
                 )}
                 {children.map((c) => (
                   <button type="button" key={c.span_id} className="td-relchip" onClick={() => onSelect(c)} title={`Child: ${c.name}`}>
-                    <FiArrowDown size={11} /> <span className="opa-mono">{c.name}</span>
-                    <span className="opa-muted">{fmtMs(c.duration_ms)}</span>
+                    <FiArrowDown size={11} /> <span className="oui-mono">{c.name}</span>
+                    <span className="oui-text-muted">{fmtMs(c.duration_ms)}</span>
                   </button>
                 ))}
                 {siblings.slice(0, 8).map((sib) => (
                   <button type="button" key={sib.span_id} className="td-relchip is-sibling" onClick={() => onSelect(sib)} title={`Sibling: ${sib.name}`}>
-                    <span className="opa-mono">{sib.name}</span>
-                    <span className="opa-muted">{fmtMs(sib.duration_ms)}</span>
+                    <span className="oui-mono">{sib.name}</span>
+                    <span className="oui-text-muted">{fmtMs(sib.duration_ms)}</span>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="opa-grid cols-3" style={{ gap: 12 }}>
-            <div className="td-metastat"><span className="k">Duration</span><span className="v" style={{ color: `var(--${latencyStatus(span.duration_ms)})` }}>{fmtMs(span.duration_ms)}</span></div>
+          <div className="oui-grid is-3" style={{ gap: 12 }}>
+            <div className="td-metastat"><span className="k">Duration</span><span className="v" style={{ color: statusColor(latencyStatus(span.duration_ms)) }}>{fmtMs(span.duration_ms)}</span></div>
             <div className="td-metastat"><span className="k">CPU</span><span className="v">{fmtMs(span.cpu_ms)}</span></div>
             <div className="td-metastat"><span className="k">Start</span><span className="v">+{fmtMs((span.start_ts || 0) - traceStart)}</span></div>
           </div>
@@ -795,9 +799,9 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
           {net && (net.bytes_in != null || net.bytes_out != null) && (
             <div>
               <div className="td-drawer-sub">Network</div>
-              <div className="opa-row" style={{ gap: 20 }}>
-                <span className="opa-mono"><FiArrowUp size={12} /> {fmtBytes(net.bytes_out)}</span>
-                <span className="opa-mono"><FiArrowDown size={12} /> {fmtBytes(net.bytes_in)}</span>
+              <div className="oui-row" style={{ gap: 20 }}>
+                <span className="oui-mono"><FiArrowUp size={12} /> {fmtBytes(net.bytes_out)}</span>
+                <span className="oui-mono"><FiArrowDown size={12} /> {fmtBytes(net.bytes_in)}</span>
               </div>
             </div>
           )}
@@ -813,13 +817,13 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
                     || k.endsWith('load_run_id') || k.endsWith('session_id')
                   return (
                     <div key={k} className="td-tagrow">
-                      <span className="opa-muted opa-mono">{k}</span>
+                      <span className="oui-text-muted oui-mono">{k}</span>
                       {known || link?.to ? (
                         <EntityChip to={link?.to || tracesHref(`tags.${k}:"${String(v).replace(/(["\\])/g, '\\$1')}"`)} title={`${k}=${v}`}>
                           {String(v)}
                         </EntityChip>
                       ) : (
-                        <span className="opa-mono">{String(v)}</span>
+                        <span className="oui-mono">{String(v)}</span>
                       )}
                     </div>
                   )
@@ -840,13 +844,13 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
                       ? `/sql/${encodeURIComponent(q.query_fingerprint || q.fingerprint)}`
                       : tracesHref(sqlDrillFilter(q) || '')}
                     title="Open this query's detail (all traces running it)"
-                    style={{ fontSize: 'var(--fs-12)', color: 'var(--text-primary)', wordBreak: 'break-word', textAlign: 'left' }}
+                    style={{ fontSize: 'var(--text-xs)', color: 'var(--text-primary)', wordBreak: 'break-word', textAlign: 'left' }}
                   >
                     {q.query}
                   </DrillLink>
-                  <div className="opa-row opa-muted" style={{ gap: 14, marginTop: 4, fontSize: 'var(--fs-11)' }}>
+                  <div className="oui-row oui-text-muted" style={{ gap: 14, marginTop: 4, fontSize: 'var(--text-2xs)' }}>
                     <span>{q.query_type || q.type}</span>
-                    <span style={{ color: `var(--${latencyStatus(q.duration_ms)})` }}>{fmtMs(q.duration_ms)}</span>
+                    <span style={{ color: statusColor(latencyStatus(q.duration_ms)) }}>{fmtMs(q.duration_ms)}</span>
                     <span>{q.rows_affected != null && q.rows_affected >= 0 ? `${fmtNum(q.rows_affected)} rows` : ''}</span>
                     <span>↑{fmtBytes(q.bytes_out)} ↓{fmtBytes(q.bytes_in)}</span>
                   </div>
@@ -859,16 +863,16 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
             <div>
               <div className="td-drawer-sub">Redis ({redis.length})</div>
               {redis.map((r, i) => (
-                <div key={i} className="opa-row" style={{ justifyContent: 'space-between', gap: 10, marginBottom: 6, fontSize: 'var(--fs-12)' }}>
+                <div key={i} className="oui-row" style={{ justifyContent: 'space-between', gap: 10, marginBottom: 6, fontSize: 'var(--text-xs)' }}>
                   <DrillLink
                     to={tracesHref(r.key ? `redis.command:"${r.command}" AND redis.key:"${r.key}"` : `redis.command:"${r.command}"`)}
                     title={`All traces issuing ${r.command}${r.key ? ' on ' + r.key : ''}`}
                   >
-                    <span style={{ color: 'var(--tier-redis)' }}>{r.command}</span> <span className="opa-muted">{r.key}</span>
+                    <span style={{ color: 'var(--chart-3)' }}>{r.command}</span> <span className="oui-text-muted">{r.key}</span>
                   </DrillLink>
-                  <span className="opa-row" style={{ gap: 10 }}>
+                  <span className="oui-row" style={{ gap: 10 }}>
                     {r.hit != null && <StatusPill tone={r.hit ? 'ok' : 'warn'}>{r.hit ? 'HIT' : 'MISS'}</StatusPill>}
-                    <span className="opa-mono" style={{ color: `var(--${latencyStatus(r.duration_ms)})` }}>{fmtMs(r.duration_ms)}</span>
+                    <span className="oui-mono" style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span>
                   </span>
                 </div>
               ))}
@@ -879,8 +883,8 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
             <div>
               <div className="td-drawer-sub">HTTP ({http.length})</div>
               {http.map((h, i) => (
-                <div key={i} style={{ marginBottom: 8, fontSize: 'var(--fs-12)' }}>
-                  <div className="opa-mono" style={{ wordBreak: 'break-all' }}>
+                <div key={i} style={{ marginBottom: 8, fontSize: 'var(--text-xs)' }}>
+                  <div className="oui-mono" style={{ wordBreak: 'break-all' }}>
                     <Badge>{h.method}</Badge> <span style={{ color: statusColor(h.status_code) }}>{h.status_code}</span>{' '}
                     {/* The call → its endpoint page (aggregate + sample traces). */}
                     <DrillLink
@@ -891,8 +895,8 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
                       {h.url || h.uri}
                     </DrillLink>
                   </div>
-                  <div className="opa-row opa-muted" style={{ gap: 14, marginTop: 3, fontSize: 'var(--fs-11)' }}>
-                    <span style={{ color: `var(--${latencyStatus(h.duration_ms)})` }}>{fmtMs(h.duration_ms)}</span>
+                  <div className="oui-row oui-text-muted" style={{ gap: 14, marginTop: 3, fontSize: 'var(--text-2xs)' }}>
+                    <span style={{ color: statusColor(latencyStatus(h.duration_ms)) }}>{fmtMs(h.duration_ms)}</span>
                     <span>↑{fmtBytes(h.request_size ?? h.bytes_sent)} ↓{fmtBytes(h.response_size ?? h.bytes_received)}</span>
                   </div>
                 </div>
@@ -910,7 +914,7 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
           )}
 
           {sql.length === 0 && redis.length === 0 && http.length === 0 && dumps.length === 0 && (
-            <div className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>No operations recorded on this span.</div>
+            <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>No operations recorded on this span.</div>
           )}
         </div>
       </div>

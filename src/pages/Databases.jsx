@@ -5,7 +5,8 @@ import { useApi } from '../hooks/useApi'
 import {
   Panel, KpiTile, DataTable, InlineBar, Badge, StatusPill,
 } from '../components/ui'
-import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus } from '../theme/format'
+import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus, statusColor } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 const TABS = [
   { value: 'instances', label: 'Instances', icon: <FiServer size={13} /> },
@@ -70,108 +71,109 @@ export default function Databases() {
 
   const sqlColumns = [
     { key: 'fingerprint', header: 'Query', render: (r) => (
-      <span className="cell-strong opa-mono" title={r.fingerprint} style={{ display: 'block', maxWidth: 460, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--tier-db)' }}>{r.fingerprint || '—'}</span>
+      <span className="oui-cell-primary oui-mono" title={r.fingerprint} style={{ display: 'block', maxWidth: 460, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--chart-2)' }}>{r.fingerprint || '—'}</span>
     ), sortValue: (r) => r.fingerprint || '' },
     { key: 'execution_count', header: 'Calls', num: true, render: (r) => (
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={r.execution_count || 0} max={maxSqlExec} label={fmtNum(r.execution_count || 0)} color="var(--tier-db)" width={100} /></div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={r.execution_count || 0} max={maxSqlExec} label={fmtNum(r.execution_count || 0)} color="var(--chart-2)" width={100} /></div>
     ), sortValue: (r) => r.execution_count || 0 },
-    { key: 'avg_duration', header: 'Avg', num: true, render: (r) => <span style={{ color: `var(--${latencyStatus(r.avg_duration)})` }}>{fmtMs(r.avg_duration)}</span> },
-    { key: 'p95_duration', header: 'p95', num: true, render: (r) => <span style={{ color: `var(--${latencyStatus(r.p95_duration)})` }}>{fmtMs(r.p95_duration)}</span> },
-    { key: 'p99_duration', header: 'p99', num: true, render: (r) => <span style={{ color: `var(--${latencyStatus(r.p99_duration)})` }}>{fmtMs(r.p99_duration)}</span> },
+    { key: 'avg_duration', header: 'Avg', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.avg_duration)) }}>{fmtMs(r.avg_duration)}</span> },
+    { key: 'p95_duration', header: 'p95', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.p95_duration)) }}>{fmtMs(r.p95_duration)}</span> },
+    { key: 'p99_duration', header: 'p99', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.p99_duration)) }}>{fmtMs(r.p99_duration)}</span> },
     { key: 'max_duration', header: 'Max', num: true, render: (r) => fmtMs(r.max_duration) },
-    { key: 'last_created_at', header: 'Last seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_created_at)}</span>, sortValue: (r) => Date.parse(r.last_created_at) || 0 },
+    { key: 'last_created_at', header: 'Last seen', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_created_at)}</span>, sortValue: (r) => Date.parse(r.last_created_at) || 0 },
   ]
 
   const redisColumns = [
     { key: 'command', header: 'Command', render: (r) => <Badge>{String(r.command || '—').toUpperCase()}</Badge>, sortValue: (r) => r.command || '' },
     { key: 'key', header: 'Key', render: (r) => (
-      <span className="opa-mono" title={r.key} style={{ display: 'block', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--tier-redis)' }}>{r.key || '—'}</span>
+      <span className="oui-mono" title={r.key} style={{ display: 'block', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--chart-3)' }}>{r.key || '—'}</span>
     ), sortValue: (r) => r.key || '' },
     { key: 'execution_count', header: 'Calls', num: true, render: (r) => (
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={r.execution_count || 0} max={maxRedisExec} label={fmtNum(r.execution_count || 0)} color="var(--tier-redis)" width={100} /></div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><InlineBar value={r.execution_count || 0} max={maxRedisExec} label={fmtNum(r.execution_count || 0)} color="var(--chart-3)" width={100} /></div>
     ), sortValue: (r) => r.execution_count || 0 },
     { key: 'hit_rate', header: 'Hit %', num: true, render: (r) => {
       const pct = hitRate(r)
-      return pct == null ? <span className="opa-muted">—</span> : <span style={{ color: `var(--${hitStatus(pct)})` }}>{fmtPct(pct)}</span>
+      return pct == null ? <span className="oui-text-muted">—</span> : <span style={{ color: statusColor(hitStatus(pct)) }}>{fmtPct(pct)}</span>
     }, sortValue: (r) => hitRate(r) ?? -1 },
     { key: 'avg_duration', header: 'Avg', num: true, render: (r) => fmtMs(r.avg_duration) },
     {
       key: 'server', header: 'Server', render: (r) => {
         const server = [r.host, r.port].filter(Boolean).join(':')
-        return <span className="opa-mono opa-muted" title={server}>{server || '—'}</span>
+        return <span className="oui-mono oui-text-muted" title={server}>{server || '—'}</span>
       }, sortValue: (r) => [r.host, r.port].filter(Boolean).join(':'),
     },
-    { key: 'last_created_at', header: 'Last seen', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.last_created_at)}</span>, sortValue: (r) => Date.parse(r.last_created_at) || 0 },
+    { key: 'last_created_at', header: 'Last seen', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_created_at)}</span>, sortValue: (r) => Date.parse(r.last_created_at) || 0 },
   ]
 
   const instanceColumns = [
-    { key: 'id', header: 'Instance', render: (r) => <span className="cell-strong opa-mono">{r.id}</span> },
+    { key: 'id', header: 'Instance', render: (r) => <span className="oui-cell-primary oui-mono">{r.id}</span> },
     { key: 'engine', header: 'Engine', render: (r) => <Badge>{r.engine || '—'}</Badge> },
     { key: 'sat', header: 'Conn sat %', num: true, render: (r) => {
       const v = metricNum(r.metrics, 'connection_saturation_pct')
-      if (v == null) return <span className="opa-muted">—</span>
+      if (v == null) return <span className="oui-text-muted">—</span>
       const tone = v >= 80 ? 'error' : v >= 60 ? 'warn' : 'ok'
       return <StatusPill tone={tone}>{fmtPct(v)}</StatusPill>
     }, sortValue: (r) => metricNum(r.metrics, 'connection_saturation_pct') ?? -1 },
     { key: 'hit', header: 'Buffer/cache hit', num: true, render: (r) => {
       const v = metricNum(r.metrics, 'buffer_hit_ratio_pct') ?? metricNum(r.metrics, 'cache_hit_ratio_pct')
-      return v == null ? <span className="opa-muted">—</span> : fmtPct(v)
+      return v == null ? <span className="oui-text-muted">—</span> : fmtPct(v)
     } },
     { key: 'locks', header: 'Lock waits', num: true, render: (r) => fmtNum(metricNum(r.metrics, 'lock_waits') || 0) },
     { key: 'lag', header: 'Repl lag', num: true, render: (r) => {
       const v = metricNum(r.metrics, 'replication_lag_seconds')
-      return v == null ? <span className="opa-muted">—</span> : `${fmtNum(v)}s`
+      return v == null ? <span className="oui-text-muted">—</span> : `${fmtNum(v)}s`
     } },
-    { key: 'scraped_at', header: 'Scraped', num: true, render: (r) => <span className="opa-muted">{fmtAgo(r.scraped_at)}</span> },
+    { key: 'scraped_at', header: 'Scraped', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.scraped_at)}</span> },
   ]
 
   const stmtColumns = [
     { key: 'query_preview', header: 'Statement', render: (r) => (
-      <span className="opa-mono" title={r.query_preview} style={{ display: 'block', maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.query_preview || r.opa_fingerprint || '—'}</span>
+      <span className="oui-mono" title={r.query_preview} style={{ display: 'block', maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.query_preview || r.opa_fingerprint || '—'}</span>
     ) },
-    { key: 'instance_id', header: 'Instance', render: (r) => <span className="opa-mono opa-muted">{r.instance_id}</span> },
+    { key: 'instance_id', header: 'Instance', render: (r) => <span className="oui-mono oui-text-muted">{r.instance_id}</span> },
     { key: 'calls', header: 'Calls', num: true, render: (r) => fmtNum(r.calls) },
     { key: 'total_time_ms', header: 'Total time', num: true, render: (r) => (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <InlineBar value={Number(r.total_time_ms) || 0} max={maxStmtTime} label={fmtMs(r.total_time_ms)} color="var(--tier-db)" width={100} />
+        <InlineBar value={Number(r.total_time_ms) || 0} max={maxStmtTime} label={fmtMs(r.total_time_ms)} color="var(--chart-2)" width={100} />
       </div>
     ), sortValue: (r) => Number(r.total_time_ms) || 0 },
     { key: 'avg_time_ms', header: 'Avg', num: true, render: (r) => fmtMs(r.avg_time_ms) },
-    { key: 'full_scan', header: 'Scan', render: (r) => (Number(r.full_scan) ? <StatusPill tone="warn">full</StatusPill> : <span className="opa-muted">—</span>) },
-    { key: 'matched', header: 'App join', render: (r) => (r.opa_fingerprint ? <Badge>fp</Badge> : <span className="opa-muted">—</span>) },
+    { key: 'full_scan', header: 'Scan', render: (r) => (Number(r.full_scan) ? <StatusPill tone="warn">full</StatusPill> : <span className="oui-text-muted">—</span>) },
+    { key: 'matched', header: 'App join', render: (r) => (r.opa_fingerprint ? <Badge>fp</Badge> : <span className="oui-text-muted">—</span>) },
   ]
 
   const unusedColumns = [
-    { key: 'instance_id', header: 'Instance', render: (r) => <span className="opa-mono">{r.instance_id}</span> },
+    { key: 'instance_id', header: 'Instance', render: (r) => <span className="oui-mono">{r.instance_id}</span> },
     { key: 'schema_name', header: 'Schema', render: (r) => r.schema_name },
-    { key: 'table_name', header: 'Table', render: (r) => <span className="opa-mono">{r.table_name}</span> },
-    { key: 'index_name', header: 'Index', render: (r) => <span className="opa-mono">{r.index_name}</span> },
+    { key: 'table_name', header: 'Table', render: (r) => <span className="oui-mono">{r.table_name}</span> },
+    { key: 'index_name', header: 'Index', render: (r) => <span className="oui-mono">{r.index_name}</span> },
   ]
 
   return (
-    <div className="opa-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Databases</h1>
-          <div className="opa-page-sub">Instance health · statement digests joined to app fingerprints · cache</div>
-        </div>
-        <div className="opa-row">
+    <div className="oui-stack">
+      <PageHeader
+        title="Databases"
+        description="Instance health · statement digests joined to app fingerprints · cache"
+        actions={<><div className="oui-row">
           <Tabs tabs={TABS} value={tab} onChange={setTab} />
-        </div>
-      </div>
+        </div></>}
+      />
 
       {tab === 'instances' && (
         <>
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             <KpiTile label="Instances" icon={<FiServer size={12} />} value={fmtNum(inst.length)} status="neutral" />
             <KpiTile label="Fingerprint match" icon={<FiTarget size={12} />} value={fmtPct(matchRate.data?.match_rate_pct || 0)} status="neutral"
-              footer={<span className="opa-muted" style={{ fontSize: 11 }}>{fmtNum(matchRate.data?.matched || 0)} / {fmtNum(matchRate.data?.total || 0)}</span>} />
+              footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>{fmtNum(matchRate.data?.matched || 0)} / {fmtNum(matchRate.data?.total || 0)}</span>} />
             <KpiTile label="Unused indexes" icon={<FiAlertTriangle size={12} />} value={fmtNum(unusedIdx.length)} status={unusedIdx.length ? 'warn' : 'neutral'} />
           </div>
           <Panel title="Instance health" icon={<FiServer />} flush loading={instances.loading} error={instances.error}
             empty={!instances.loading && inst.length === 0}
             emptyText="No DB monitors configured — set OPA_DB_MONITOR_CONFIG (see docs/db-monitoring.md)">
-            <DataTable columns={instanceColumns} rows={inst} rowKey={(r) => r.id} maxHeight={420} />
+            <DataTable
+          loading={instances.loading}
+          error={instances.error}
+          onRetry={instances.reload} columns={instanceColumns} rows={inst} rowKey={(r) => r.id} maxHeight={420} />
           </Panel>
           {unusedIdx.length > 0 && (
             <Panel title="Unused indexes" icon={<FiAlertTriangle />} flush>
@@ -183,7 +185,7 @@ export default function Databases() {
 
       {tab === 'statements' && (
         <>
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             <KpiTile label="Top statements" icon={<FiZap size={12} />} value={fmtNum(stmts.length)} status="neutral" />
             <KpiTile label="Fingerprint match" icon={<FiTarget size={12} />} value={fmtPct(matchRate.data?.match_rate_pct || 0)} status="neutral" />
             <KpiTile label="Full scans" icon={<FiAlertTriangle size={12} />} value={fmtNum(stmts.filter((s) => Number(s.full_scan)).length)} status="warn" />
@@ -192,8 +194,11 @@ export default function Databases() {
             loading={statements.loading} error={statements.error}
             empty={!statements.loading && stmts.length === 0}
             emptyText="No statement digests yet — enable statements:true on a MySQL/Postgres target"
-            actions={<span className="opa-muted" style={{ fontSize: 12 }}>click a row to open traces with the OPA fingerprint</span>}>
+            actions={<span className="oui-text-muted" style={{ fontSize: 12 }}>click a row to open traces with the OPA fingerprint</span>}>
             <DataTable
+          loading={statements.loading}
+          error={statements.error}
+          onRetry={statements.reload}
               columns={stmtColumns}
               rows={stmts}
               rowKey={(r, i) => `${r.native_digest}:${i}`}
@@ -210,7 +215,7 @@ export default function Databases() {
 
       {tab === 'sql' && (
         <>
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             <KpiTile label="Unique queries" icon={<FiLayers size={12} />} value={fmtNum(sqlTotal)} unit="fingerprints" status="neutral" />
             <KpiTile label="Total executions" icon={<FiActivity size={12} />} value={fmtNum(sqlExecs)} unit="calls" status="neutral" />
             <KpiTile label="Slowest p95" icon={<FiZap size={12} />} value={fmtMs(slowestP95)} status={latencyStatus(slowestP95)} />
@@ -218,8 +223,11 @@ export default function Databases() {
           <Panel title="Queries by fingerprint (app-side)" icon={<FiDatabase />} flush
             loading={sql.loading} error={sql.error} empty={!sql.loading && queries.length === 0}
             emptyText="No SQL queries captured yet"
-            actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>{fmtNum(queries.length)} shown · sortable</span>}>
+            actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{fmtNum(queries.length)} shown · sortable</span>}>
             <DataTable
+          loading={sql.loading}
+          error={sql.error}
+          onRetry={sql.reload}
               onRowClick={(r) => r?.fingerprint && navigate(`/sql/${encodeURIComponent(r.fingerprint)}`)}
               columns={sqlColumns} rows={queries}
               rowKey={(r) => r.fingerprint}
@@ -232,17 +240,20 @@ export default function Databases() {
 
       {tab === 'redis' && (
         <>
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             <KpiTile label="Operations" icon={<FiLayers size={12} />} value={fmtNum(ops.length)} unit="commands" status="neutral" />
             <KpiTile label="Total executions" icon={<FiActivity size={12} />} value={fmtNum(redisExecs)} unit="calls" status="neutral" />
             <KpiTile label="Overall hit rate" icon={<FiTarget size={12} />} value={overallHit == null ? '—' : fmtPct(overallHit)} status={hitStatus(overallHit)}
-              footer={<span className="opa-muted" style={{ fontSize: 'var(--fs-11)' }}>{fmtNum(totHits)} hits · {fmtNum(totMiss)} miss</span>} />
+              footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtNum(totHits)} hits · {fmtNum(totMiss)} miss</span>} />
           </div>
           <Panel title="Cache operations" icon={<FiHardDrive />} flush
             loading={redis.loading} error={redis.error} empty={!redis.loading && ops.length === 0}
             emptyText="No Redis operations captured yet"
-            actions={<span className="opa-muted" style={{ fontSize: 'var(--fs-12)' }}>{fmtNum(ops.length)} shown · sortable</span>}>
+            actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{fmtNum(ops.length)} shown · sortable</span>}>
             <DataTable
+          loading={redis.loading}
+          error={redis.error}
+          onRetry={redis.reload}
               onRowClick={(r) => {
                 if (!r?.command) return
                 const filter = r.key

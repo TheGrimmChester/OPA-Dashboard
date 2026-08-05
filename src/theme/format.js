@@ -68,25 +68,25 @@ export function fmtAgo(ts) {
 // Health / status -> css var color.
 export function statusColor(status) {
   const s = String(status || '').toLowerCase()
-  if (s === 'error' || s === '0' || s === 'down' || s === 'critical' || s === 'unhealthy') return 'var(--error)'
-  if (s === 'warn' || s === 'warning' || s === 'degraded' || s === 'needs-improvement') return 'var(--warn)'
-  if (s === 'ok' || s === 'healthy' || s === 'success' || s === 'good' || s === '1' || s === '200') return 'var(--ok)'
-  return 'var(--neutral)'
+  if (s === 'error' || s === '0' || s === 'down' || s === 'critical' || s === 'unhealthy') return 'var(--critical-text)'
+  if (s === 'warn' || s === 'warning' || s === 'degraded' || s === 'needs-improvement') return 'var(--warn-text)'
+  if (s === 'ok' || s === 'healthy' || s === 'success' || s === 'good' || s === '1' || s === '200') return 'var(--good-text)'
+  return 'var(--text-muted)'
 }
 
 // Fixed semantic breakdown palette by operation tier.
 export function tierColor(tier) {
   const t = String(tier || '').toLowerCase()
-  if (t.includes('db') || t.includes('sql') || t.includes('mysql') || t.includes('postgres')) return 'var(--tier-db)'
-  if (t.includes('redis')) return 'var(--tier-redis)'
-  if (t.includes('http') || t.includes('external') || t.includes('curl')) return 'var(--tier-http)'
-  if (t.includes('cache') || t.includes('apcu')) return 'var(--tier-cache)'
-  return 'var(--tier-app)'
+  if (t.includes('db') || t.includes('sql') || t.includes('mysql') || t.includes('postgres')) return 'var(--chart-2)'
+  if (t.includes('redis')) return 'var(--chart-3)'
+  if (t.includes('http') || t.includes('external') || t.includes('curl')) return 'var(--chart-4)'
+  if (t.includes('cache') || t.includes('apcu')) return 'var(--chart-5)'
+  return 'var(--chart-1)'
 }
 
 export const SERIES = [
-  'var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)',
-  'var(--series-5)', 'var(--series-6)', 'var(--series-7)', 'var(--series-8)',
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)',
+  'var(--chart-5)', 'var(--chart-6)', 'var(--chart-7)', 'var(--chart-8)',
 ]
 
 // Classify a latency (ms) against loose APM thresholds for coloring.
