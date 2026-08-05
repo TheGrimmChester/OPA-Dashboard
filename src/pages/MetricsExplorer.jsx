@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { useSearchParams } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
@@ -6,9 +7,7 @@ import {
   FiActivity, FiTrendingUp, FiTrendingDown, FiHash,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import {
-  Panel, TimeSeriesChart, SegmentedControl, StatusPill, EmptyState, Badge, KpiTile,
-} from '../components/ui'
+import { Panel, SegmentedControl, StatusPill, EmptyState, Badge, KpiTile } from '../components/ui'
 import { fmtNum, fmtBytes, fmtMs, fmtPct, SERIES } from '../theme/format'
 import './MetricsExplorer.css'
 import { PageHeader } from '@open-family/ui'

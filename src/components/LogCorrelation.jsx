@@ -120,10 +120,16 @@ function LogCorrelation({ traceId, spanId = null }) {
         />
       </div>
 
-      {/* Three states, and they look different. The previous version had one: an
+      {/* Four states, and they look different. The previous version had one: an
           in-flight request and a failed one both printed "No logs found for this
           trace", which is a claim about the trace neither of them can make. */}
-      {loading ? (
+      {!traceId ? (
+        <EmptyState
+          inline
+          title="No trace selected"
+          description="Log correlation is keyed on a trace id, and none was passed to this panel."
+        />
+      ) : loading ? (
         <div className="logs-loading" aria-busy="true">
           <Skeleton height={44} />
           <Skeleton height={44} />

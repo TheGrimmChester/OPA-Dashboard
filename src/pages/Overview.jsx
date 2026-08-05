@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { useNavigate } from 'react-router-dom'
 import { FiAlertCircle, FiArrowRight, FiRefreshCw } from 'react-icons/fi'
 import {
@@ -6,7 +7,7 @@ import {
   EmptyState, Meter,
 } from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
-import { TimeSeriesChart } from '../components/ui'
+
 import {
   fmtMs, fmtNum, fmtPct, latencyStatus, errorRateStatus, statusColor,
 } from '../theme/format'

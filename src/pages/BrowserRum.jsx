@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   FiGlobe, FiClock, FiAlertTriangle, FiEye, FiZap, FiActivity, FiLayers, FiInfo,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import { Panel, KpiTile, TimeSeriesChart, StatusPill, EmptyState, DataTable, Badge, InlineBar, SegmentedControl, EntityChip } from '../components/ui'
+import { Panel, KpiTile, StatusPill, EmptyState, DataTable, Badge, InlineBar, SegmentedControl, EntityChip } from '../components/ui'
 import { fmtMs, fmtNum, fmtBytes, fmtAgo, fmtPct, latencyStatus, errorRateStatus, tierColor, statusColor } from '../theme/format'
 import { rumSessionHref, sessionTracesHref, traceHref, tracesHref } from '../utils/entityLinks'
 import SessionReplayPlayer from '../components/SessionReplayPlayer'

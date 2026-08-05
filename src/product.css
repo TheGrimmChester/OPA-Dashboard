@@ -29,6 +29,43 @@
   padding-top: var(--space-4);
 }
 
+/* ── Top bar at narrow widths ─────────────────────────────────────────────
+   Below the drawer breakpoint the scope switcher overlaps the search trigger.
+
+   Measured cause: `.oui-topbar-left` is a flex item with `min-width: 0`, so it
+   shrinks — at 820px it lands on 107px. But the `.oui-menu-anchor` the switcher
+   is wrapped in keeps the default `min-width: auto`, so it cannot shrink below its
+   content and renders 215px wide, overflowing its own parent and painting across
+   the search box that follows it. The switcher's own `min-width: 0` never gets a
+   chance to apply.
+
+   So the anchor needs `min-width: 0` and the two switcher labels need to be
+   allowed to truncate. This is a defect in the shared TopBar rather than anything
+   specific to this product, so it is a stopgap here and is being raised upstream
+   rather than fixed by forking the component. Remove this block once the kit
+   ships the fix. */
+@media (max-width: 900px) {
+  .oui-topbar-left,
+  .oui-topbar-left .oui-menu-anchor,
+  .oui-topbar .oui-switcher,
+  .oui-topbar .oui-switcher-body {
+    min-width: 0;
+  }
+
+  .oui-topbar .oui-switcher-org,
+  .oui-topbar .oui-switcher-project,
+  .oui-topbar .oui-search-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .oui-topbar .oui-search {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
 /* ── Panel expansion ──────────────────────────────────────────────────────
    A card can take the whole viewport. The dense blocks here — waterfalls,
    flame graphs, call graphs, wide tables — are limited by their grid cell, and

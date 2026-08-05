@@ -1,12 +1,11 @@
 import React from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { useParams, Link } from 'react-router-dom'
 import {
   FiAlertTriangle, FiHash, FiClock, FiActivity, FiList, FiCode, FiChevronLeft, FiGitBranch,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import {
-  Panel, KpiTile, TimeSeriesChart, EntityHeader, StatusPill, EmptyState, EntityChip,
-} from '../components/ui'
+import { Panel, KpiTile, EntityHeader, StatusPill, EmptyState, EntityChip } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { logsHref, serviceHref, traceHref, tracesHref } from '../utils/entityLinks'
 

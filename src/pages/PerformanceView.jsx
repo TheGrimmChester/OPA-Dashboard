@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { FiClock, FiActivity, FiAlertTriangle, FiZap, FiDownload, FiUpload, FiGlobe, FiWifi, FiBarChart2 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { useTimeRange } from '../contexts/TimeRangeContext'
-import { Panel, KpiTile, TimeSeriesChart } from '../components/ui'
+import { Panel, KpiTile } from '../components/ui'
 import { fmtMs, fmtBytes, fmtNum, fmtPct, latencyStatus, errorRateStatus } from '../theme/format'
 import { PageHeader } from '@open-family/ui'
 

@@ -1,13 +1,11 @@
 import React from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   FiActivity, FiClock, FiZap, FiAlertTriangle, FiTrendingUp, FiGlobe, FiList,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import {
-  Panel, KpiTile, DataTable, TimeSeriesChart, InlineBar, EntityHeader,
-  Badge, HealthDot, LanguageBadge,
-} from '../components/ui'
+import { Panel, KpiTile, DataTable, InlineBar, EntityHeader, Badge, HealthDot, LanguageBadge } from '../components/ui'
 import RelatedContextRail from '../components/ui/RelatedContextRail'
 import { fmtMs, fmtNum, fmtPct, fmtBytes, tierColor, latencyStatus, errorRateStatus, statusColor } from '../theme/format'
 import { logsHref, tracesHref } from '../utils/entityLinks'

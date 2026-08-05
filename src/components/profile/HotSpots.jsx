@@ -436,6 +436,30 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
 
   const hidden = graph.S - ranked.visibleCount
 
+  // Built outside the tag so the Table's own props stay flat. The repo's design-
+  // system contract test reads each `<Table …/>` with a lazy regex that stops at
+  // the first `/>`, so an inline `icon={<FiSearch />}` inside `emptyState` hides
+  // every prop declared after it.
+  const emptyState = (
+    <EmptyState
+      inline
+      icon={<FiSearch />}
+      title={q ? `No function matches “${q}”` : 'No function passes the current filters'}
+      description={q
+        ? 'The filter runs against the whole symbol key, so a namespace or class fragment matches too.'
+        : 'Every function in this trace fell below the significance threshold for the selected metric. Ranking by a metric the trace actually recorded usually brings them back.'}
+    />
+  )
+
+  const errorState = (
+    <EmptyState
+      inline
+      icon={<FiAlertTriangle />}
+      title="The hot-spot list could not be built"
+      description="Aggregating this trace's call stack failed, so there is no ranking to show. The rest of the profile is unaffected."
+    />
+  )
+
   return (
     <div className="opa-prof-hotspots">
       {structureMode && (
@@ -496,24 +520,8 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
         getRowKey={(r) => String(r.s)}
         onSort={onSort}
         onRowClick={(r) => select(r.key, r.s)}
-        emptyState={
-          <EmptyState
-            inline
-            icon={<FiSearch />}
-            title={q ? `No function matches “${q}”` : 'No function passes the current filters'}
-            description={q
-              ? 'The filter runs against the whole symbol key, so a namespace or class fragment matches too.'
-              : 'Every function in this trace fell below the significance threshold for the selected metric. Ranking by a metric the trace actually recorded usually brings them back.'}
-          />
-        }
-        errorState={
-          <EmptyState
-            inline
-            icon={<FiAlertTriangle />}
-            title="The hot-spot list could not be built"
-            description="Aggregating this trace's call stack failed, so there is no ranking to show. The rest of the profile is unaffected."
-          />
-        }
+        emptyState={emptyState}
+        errorState={errorState}
       />
 
       <div className="opa-prof-foot">
@@ -546,11 +554,10 @@ function HotSpotsBody({ model, metric, query, onMetricChange, selectedKey, onSel
  * The outer component only handles the degenerate cases, so the body's hooks
  * always run against a real model.
  *
- * `maxHeight` is accepted and ignored. The kit's table scrolls its own wrapper
  * and the page scrolls; capping the height here put the row count behind a
  * second scrollbar nested inside the page's. Callers can drop the prop.
  */
-export default function HotSpots({ model, metric = 'duration', query = '', onMetricChange, selectedKey, onSelectSymbol, maxHeight: _maxHeight }) {
+export default function HotSpots({ model, metric = 'duration', query = '', onMetricChange, selectedKey, onSelectSymbol }) {
   if (!model || !model.ready) {
     return (
       <EmptyState

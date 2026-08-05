@@ -433,7 +433,6 @@ export default function TraceDetail() {
                 onMetricChange={setMetric}
                 selectedKey={focusKey}
                 onSelectSymbol={(key) => setFocusKey((k) => (k === key ? null : key))}
-                maxHeight={listH}
               />
             ) : (
               <div className="td-prof-graph">

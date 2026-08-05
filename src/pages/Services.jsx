@@ -1,4 +1,5 @@
 import React from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { useNavigate } from 'react-router-dom'
 import { FiAlertCircle, FiClock, FiRefreshCw } from 'react-icons/fi'
 import {
@@ -7,7 +8,7 @@ import {
 } from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
 import { useTableSort } from '../hooks/useTableSort'
-import { TimeSeriesChart } from '../components/ui'
+
 import { fmtMs, fmtNum, fmtPct, fmtBytes, latencyStatus, errorRateStatus, statusColor } from '../theme/format'
 
 // The old HealthDot was a bare colour dot with a `title` — colour alone, and a

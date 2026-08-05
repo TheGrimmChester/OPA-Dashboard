@@ -1,6 +1,6 @@
 import React from 'react'
 import { FiAlertTriangle, FiSearch, FiX } from 'react-icons/fi'
-import { Badge, Input, Select } from '@open-family/ui'
+import { Badge, Button, Input, Select } from '@open-family/ui'
 import { fmtNum } from '../../theme/format'
 import { METRICS, GROUP_BY } from '../../utils/callGraphModel'
 import { EMPTY_TOTALS } from './useProfileModel'
@@ -73,9 +73,14 @@ export default function ProfileToolbar({
           onChange={(e) => onQueryChange && onQueryChange(e.target.value)}
         />
         {query !== '' && onQueryChange && (
-          <button type="button" className="opa-prof-search-clear" aria-label="Clear filter" onClick={() => onQueryChange('')}>
-            <FiX size={13} />
-          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="opa-prof-search-clear"
+            icon={<FiX />}
+            aria-label="Clear filter"
+            onClick={() => onQueryChange('')}
+          />
         )}
       </div>
 

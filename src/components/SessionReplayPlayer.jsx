@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiPlay, FiPause, FiEyeOff, FiExternalLink } from 'react-icons/fi'
+import { FiPlay, FiPause, FiEyeOff, FiExternalLink, FiRefreshCw } from 'react-icons/fi'
+import {
+  Badge, Banner, Button, EmptyState, Grid, Segmented, Skeleton,
+} from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
-import { Badge, StatusPill } from '../components/ui'
 import { fmtAgo } from '../theme/format'
 
 /**
@@ -10,14 +12,49 @@ import { fmtAgo } from '../theme/format'
  * Renders a masked DOM event log (MutationObserver / click / input / nav / longtask / resource), NOT rrweb pixels.
  */
 const MARKER_TONE = {
-  click: 'ok',
-  input: 'warn',
-  navigation: 'ok',
-  longtask: 'error',
+  click: 'good',
+  input: 'warning',
+  navigation: 'good',
+  longtask: 'critical',
   resource: 'neutral',
   mutation: 'neutral',
   snapshot: 'neutral',
-  ajax: 'ok',
+  ajax: 'good',
+}
+
+// Local spacing/typography, expressed in tokens. This component has no
+// stylesheet of its own, so the few layout rules it needs live here rather than
+// as raw pixel literals inline.
+const S = {
+  root: { padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-default)' },
+  head: {
+    display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+    marginBottom: 'var(--space-3)', flexWrap: 'wrap',
+  },
+  filters: { marginBottom: 'var(--space-3)' },
+  scrub: {
+    display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+    marginBottom: 'var(--space-3)',
+  },
+  clock: { minWidth: 72, fontSize: 'var(--text-xs)' },
+  paneLabel: { fontSize: 'var(--text-xs)', marginBottom: 'var(--space-1)' },
+  pre: {
+    margin: 0, fontSize: 'var(--text-2xs)', whiteSpace: 'pre-wrap',
+    maxHeight: 160, overflow: 'auto',
+  },
+  preInset: {
+    margin: 0, fontSize: 'var(--text-2xs)', whiteSpace: 'pre-wrap',
+    maxHeight: 160, overflow: 'auto',
+    background: 'var(--surface-2)', padding: 'var(--space-2)',
+    borderRadius: 'var(--radius-sm)',
+  },
+  list: { marginTop: 'var(--space-3)', maxHeight: 180, overflow: 'auto', overscrollBehavior: 'contain' },
+  row: {
+    display: 'flex', gap: 'var(--space-2)', alignItems: 'center',
+    padding: '2px 0', cursor: 'pointer', fontSize: 'var(--text-2xs)',
+  },
+  rowOffset: { width: 64, flex: '0 0 auto' },
+  rowLabel: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
 }
 
 function markerLabel(e) {
@@ -137,55 +174,80 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
 
   const chunkCount = (chunks.data?.chunks || []).length || timeline.data?.chunk_count || 0
   const legendTypes = timeline.data?.marker_types || Object.keys(byType)
+  // One strip, one choice — which is what a Segmented is for. The counts stay on
+  // the items so the strip is still the legend it used to be.
+  const filterItems = [
+    { value: 'all', label: `All ${events.length}` },
+    ...legendTypes
+      .filter((t) => byType[t])
+      .map((t) => ({ value: t, label: `${t} ${byType[t]}` })),
+  ]
+
+  const pickEvent = (i) => { setPlaying(false); setIdx(i) }
 
   return (
-    <div className="replay-player" style={{ padding: '12px 16px', borderTop: '1px solid var(--border-default)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-        <strong className="oui-mono">SessionReplayPlayer</strong>
+    <div className="replay-player" style={S.root}>
+      <div style={S.head}>
+        <strong>Session replay</strong>
         <Badge>{events.length} events</Badge>
         <Badge>{chunkCount} chunks</Badge>
         {masked && (
-          <StatusPill tone="warn"><FiEyeOff size={10} /> privacy: masked DOM event log</StatusPill>
+          <Badge tone="warning" icon={<FiEyeOff />}>privacy: masked DOM event log</Badge>
         )}
-        <span className="oui-text-muted" style={{ fontSize: 11 }}>
+        <span className="oui-text-muted oui-text-sm">
           {timeline.data?.honesty || 'masked DOM event log — not rrweb'}
         </span>
       </div>
 
-      {Object.keys(byType).length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          <button type="button" className={`oui-btn is-ghost ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
-            all {events.length}
-          </button>
-          {legendTypes.map((t) => (
-            byType[t] ? (
-              <button
-                key={t}
-                type="button"
-                className={`oui-btn is-ghost ${filter === t ? 'active' : ''}`}
-                onClick={() => setFilter(t)}
-                title={`${byType[t]} ${t} markers`}
-              >
-                <StatusPill tone={MARKER_TONE[t] || 'neutral'}>{t}</StatusPill>
-                <span className="oui-mono" style={{ marginLeft: 4 }}>{byType[t]}</span>
-              </button>
-            ) : null
-          ))}
+      {filterItems.length > 1 && (
+        <div style={S.filters}>
+          <Segmented
+            aria-label="Event type"
+            items={filterItems}
+            value={filter}
+            onChange={setFilter}
+          />
         </div>
       )}
 
-      {timeline.loading && <div className="oui-text-muted">Loading replay timeline…</div>}
-      {timeline.error && <div style={{ color: 'var(--critical-text)' }}>{String(timeline.error)}</div>}
-      {!timeline.loading && events.length === 0 && (
-        <div className="oui-text-muted">No replay chunks for this session. Enable <code>data-replay=&quot;true&quot;</code> on opa-rum-js.</div>
+      {/* Loading, failed and genuinely empty are three different messages. */}
+      {timeline.loading && (
+        <div aria-busy="true">
+          <Skeleton height={34} />
+        </div>
+      )}
+      {timeline.error && (
+        <Banner
+          tone="critical"
+          title="Replay timeline could not be loaded"
+          actions={(
+            <Button size="sm" variant="ghost" icon={<FiRefreshCw />} onClick={timeline.reload}>
+              Retry
+            </Button>
+          )}
+        >
+          {String(timeline.error)}
+        </Banner>
+      )}
+      {!timeline.loading && !timeline.error && events.length === 0 && (
+        <EmptyState
+          inline
+          title="No replay stored for this session"
+          description={'opa-rum-js only ships replay chunks when data-replay="true" is set on the snippet. Nothing was recorded for this session.'}
+        />
       )}
 
       {filtered.length > 0 && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <button type="button" className="oui-btn is-ghost" onClick={() => setPlaying((p) => !p)} title={playing ? 'Pause' : 'Play'}>
-              {playing ? <FiPause /> : <FiPlay />}
-            </button>
+          <div style={S.scrub}>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={playing ? <FiPause /> : <FiPlay />}
+              onClick={() => setPlaying((p) => !p)}
+              title={playing ? 'Pause' : 'Play'}
+              aria-label={playing ? 'Pause the replay' : 'Play the replay'}
+            />
             <input
               type="range"
               min={0}
@@ -195,55 +257,59 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
               style={{ flex: 1 }}
               aria-label="Replay scrubber"
             />
-            <span className="oui-mono oui-text-muted" style={{ fontSize: 11, minWidth: 72 }}>
+            <span className="oui-mono oui-num oui-text-muted" style={S.clock}>
               +{scrubMs}ms / {span}ms
             </span>
           </div>
 
-          <div className="oui-grid is-2" style={{ gap: 12 }}>
+          <Grid columns={2}>
             <div>
-              <div className="oui-text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Current event</div>
-              <pre className="oui-mono" style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto' }}>
+              <div className="oui-text-muted" style={S.paneLabel}>Current event</div>
+              <pre className="oui-mono" style={S.pre}>
                 {JSON.stringify(current, null, 2)}
               </pre>
               {nearestAjax?.trace_id && (
-                <button
-                  type="button"
-                  className="oui-btn is-ghost"
-                  style={{ marginTop: 8 }}
-                  onClick={() => navigate(`/traces/${encodeURIComponent(nearestAjax.trace_id)}`)}
-                >
-                  <FiExternalLink size={12} /> Open trace at scrub time
-                </button>
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <Button
+                    size="sm"
+                    icon={<FiExternalLink />}
+                    onClick={() => navigate(`/traces/${encodeURIComponent(nearestAjax.trace_id)}`)}
+                  >
+                    Open trace at scrub time
+                  </Button>
+                </div>
               )}
             </div>
             <div>
-              <div className="oui-text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Text reconstruction (masked)</div>
-              <pre className="oui-mono" style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto', background: 'var(--surface-2)', padding: 8 }}>
+              <div className="oui-text-muted" style={S.paneLabel}>Text reconstruction (masked)</div>
+              <pre className="oui-mono" style={S.preInset}>
                 {reconstruction || '—'}
               </pre>
             </div>
-          </div>
+          </Grid>
 
-          <div style={{ marginTop: 10, maxHeight: 180, overflow: 'auto' }}>
+          <div style={S.list}>
             {filtered.map((e, i) => (
               <div
                 key={`${e.t}-${e.type}-${i}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => { setPlaying(false); setIdx(i) }}
-                onKeyDown={() => {}}
-                style={{
-                  display: 'flex', gap: 8, padding: '2px 0', cursor: 'pointer',
-                  background: i === idx ? 'var(--surface-2)' : undefined, fontSize: 11,
+                onClick={() => pickEvent(i)}
+                // The previous handler was an empty function, so a keyboard user
+                // could focus a row and never select it.
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault()
+                    pickEvent(i)
+                  }
                 }}
+                aria-pressed={i === idx}
+                style={{ ...S.row, background: i === idx ? 'var(--surface-2)' : undefined }}
                 className="oui-mono"
               >
-                <span className="oui-text-muted" style={{ width: 64 }}>+{(e.t || 0) - t0}ms</span>
-                <StatusPill tone={MARKER_TONE[e.type] || 'neutral'}>{e.type}</StatusPill>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {markerLabel(e)}
-                </span>
+                <span className="oui-text-muted oui-num" style={S.rowOffset}>+{(e.t || 0) - t0}ms</span>
+                <Badge tone={MARKER_TONE[e.type] || 'neutral'}>{e.type}</Badge>
+                <span style={S.rowLabel}>{markerLabel(e)}</span>
                 <span className="oui-text-muted">{e.t ? fmtAgo(new Date(e.t).toISOString()) : ''}</span>
               </div>
             ))}
