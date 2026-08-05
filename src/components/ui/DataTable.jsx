@@ -1,78 +1,100 @@
-import React, { useState, useMemo } from 'react'
-import { FiChevronDown, FiChevronUp } from 'react-icons/fi'
+import React, { useMemo } from 'react'
+import { FiAlertCircle, FiRefreshCw } from 'react-icons/fi'
+import { Table, EmptyState, Button } from '@open-family/ui'
+import { useTableSort } from '../../hooks/useTableSort'
+import { tableStateFrom } from './tableState'
 
-// Dense, sortable table.
-// columns: [{ key, header, num?, sortable?, width?, mono?, render?(row,i), sortValue?(row), align? }]
+/**
+ * The product's table: the family `Table` plus the two things it deliberately
+ * leaves to the caller — client-side sorting, and the mapping from a fetch result
+ * to a table state.
+ *
+ * The state handling is the point. This component used to render the literal
+ * words "No rows" whenever `rows` was empty, which is what an in-flight fetch
+ * looks like before it resolves — so "loading" and "there is genuinely nothing
+ * here" were the same picture. A caller must now say which it is, and the three
+ * states render differently: a skeleton, an empty state that says what is absent,
+ * or an error state with a retry.
+ *
+ * Pass the `useApi()` result straight through:
+ *
+ *     const svc = useApi('/api/services')
+ *     <DataTable loading={svc.loading} error={svc.error} onRetry={svc.reload} … />
+ */
 export default function DataTable({
-  columns = [], rows = [], rowKey, onRowClick, selectedKey, initialSort, emptyText = 'No rows', maxHeight, className = '',
+  columns = [],
+  rows = [],
+  rowKey,
+  onRowClick,
+  selectedKey,
+  initialSort,
+  /** True while the request is in flight. Renders a skeleton, never an empty state. */
+  loading = false,
+  /** Truthy on failure. Renders the error state with a retry. */
+  error = null,
+  /** Reloads only this panel. */
+  onRetry,
+  /** What is absent, and what to do about it. */
+  emptyTitle = 'Nothing to show',
+  emptyText,
+  emptyAction,
+  label,
+  compact = false,
+  className = '',
 }) {
-  const [sort, setSort] = useState(initialSort || null)
+  // The legacy column shape used `num`; the family uses `numeric`. Accept both so
+  // a call site can be converted independently of this component.
+  const normalised = useMemo(
+    () => columns.map(({ num, align, sortable, ...rest }) => ({
+      ...rest,
+      numeric: rest.numeric ?? num ?? align === 'right',
+      ...(sortable === false ? { sortable: false } : {}),
+    })),
+    [columns]
+  )
 
-  const sorted = useMemo(() => {
-    if (!sort) return rows
-    const col = columns.find((c) => c.key === sort.key)
-    if (!col) return rows
-    const val = col.sortValue || ((r) => r[sort.key])
-    const dir = sort.dir === 'asc' ? 1 : -1
-    return [...rows].sort((a, b) => {
-      const av = val(a), bv = val(b)
-      if (av == null) return 1
-      if (bv == null) return -1
-      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
-      return String(av).localeCompare(String(bv)) * dir
-    })
-  }, [rows, sort, columns])
+  const sorted = useTableSort(rows, normalised, initialSort || null)
 
-  const toggleSort = (col) => {
-    if (col.sortable === false) return
-    setSort((s) => {
-      if (!s || s.key !== col.key) return { key: col.key, dir: col.num ? 'desc' : 'asc' }
-      return { key: col.key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
-    })
-  }
+  // The precedence is the whole fix, so it lives in one tested place.
+  const state = tableStateFrom({ loading, error, rowCount: rows.length })
 
   return (
-    <div className="opa-table-wrap" style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}>
-      <table className={`opa-table ${className}`}>
-        <thead>
-          <tr>
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                className={`${c.num ? 'num' : ''} ${c.sortable !== false ? 'sortable' : ''}`}
-                style={c.width ? { width: c.width } : undefined}
-                onClick={() => toggleSort(c)}
-              >
-                {c.header}
-                {sort && sort.key === c.key && (
-                  <span className="sort-ind">{sort.dir === 'asc' ? <FiChevronUp size={11} /> : <FiChevronDown size={11} />}</span>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.length === 0 ? (
-            <tr><td className="opa-table-empty" colSpan={columns.length}>{emptyText}</td></tr>
-          ) : sorted.map((row, i) => {
-            const key = rowKey ? rowKey(row, i) : i
-            const selected = selectedKey != null && String(selectedKey) === String(key)
-            return (
-              <tr
-                key={key}
-                className={[onRowClick ? 'clickable' : '', selected ? 'selected' : ''].filter(Boolean).join(' ')}
-                onClick={onRowClick ? () => onRowClick(row, i) : undefined}
-              >
-                {columns.map((c) => (
-                  <td key={c.key} className={`${c.num ? 'num' : ''} ${c.mono ? 'mono' : ''}`} style={c.align ? { textAlign: c.align } : undefined}>
-                    {c.render ? c.render(row, i) : (row[c.key] ?? '—')}
-                  </td>
-                ))}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <Table
+      aria-label={label}
+      className={className}
+      compact={compact}
+      state={state}
+      columns={sorted.columns}
+      rows={sorted.rows}
+      onSort={sorted.onSort}
+      getRowKey={(row, index) => String(rowKey ? rowKey(row, index) : index)}
+      onRowClick={onRowClick ? (row) => onRowClick(row) : undefined}
+      isRowSelected={
+        selectedKey != null && rowKey
+          ? (row) => String(rowKey(row)) === String(selectedKey)
+          : undefined
+      }
+      emptyState={
+        <EmptyState
+          inline
+          title={emptyTitle}
+          description={emptyText}
+          actions={emptyAction}
+        />
+      }
+      errorState={
+        <EmptyState
+          inline
+          icon={<FiAlertCircle />}
+          title="This table failed to load"
+          description={String(error || 'The request did not complete.')}
+          actions={
+            onRetry
+              ? <Button icon={<FiRefreshCw />} onClick={onRetry}>Retry</Button>
+              : undefined
+          }
+        />
+      }
+    />
   )
 }

@@ -4,6 +4,7 @@ import { FiKey, FiPlus, FiTrash2, FiCopy, FiCheck, FiAlertTriangle, FiGrid, FiFo
 import { Panel, DataTable, Badge, EmptyState } from '../components/ui'
 import { useApi } from '../hooks/useApi'
 import { fmtAgo } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -16,7 +17,7 @@ function CopyButton({ value, label = 'Copy' }) {
     setTimeout(() => setDone(false), 1600)
   }
   return (
-    <button className="opa-btn ghost" onClick={copy} title="Copy to clipboard">
+    <button className="oui-btn is-ghost" onClick={copy} title="Copy to clipboard">
       {done ? <FiCheck size={13} /> : <FiCopy size={13} />} {done ? 'Copied' : label}
     </button>
   )
@@ -35,7 +36,7 @@ function SecretReveal({ title, value, note, onDismiss }) {
         <code>{value}</code>
         <CopyButton value={value} />
       </div>
-      <button className="opa-btn ghost opa-secret-dismiss" onClick={onDismiss}>Dismiss</button>
+      <button className="oui-btn is-ghost opa-secret-dismiss" onClick={onDismiss}>Dismiss</button>
     </div>
   )
 }
@@ -132,7 +133,7 @@ export default function ApiKeys() {
     {
       key: '_actions', header: '', sortable: false, align: 'right', width: 110,
       render: (r) => (
-        <button className="opa-btn ghost" onClick={(e) => { e.stopPropagation(); revokeKey(r) }} title="Revoke">
+        <button className="oui-btn is-ghost" onClick={(e) => { e.stopPropagation(); revokeKey(r) }} title="Revoke">
           <FiTrash2 size={13} /> Revoke
         </button>
       ),
@@ -141,17 +142,15 @@ export default function ApiKeys() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">API Keys &amp; Access</h1>
-          <div className="opa-page-sub">Ingestion credentials, organizations and projects</div>
-        </div>
-      </div>
+      <PageHeader
+        title="API Keys &amp; Access"
+        description="Ingestion credentials, organizations and projects"
+      />
 
       {/* org scope selector */}
       <div className="opa-scope-bar">
         <label className="opa-scope-label">Organization</label>
-        <select className="opa-select" value={activeOrg} onChange={(e) => setOrg(e.target.value)}>
+        <select className="oui-select" value={activeOrg} onChange={(e) => setOrg(e.target.value)}>
           {orgs.length === 0 && <option value="default-org">default-org</option>}
           {orgs.map((o) => <option key={o.org_id} value={o.org_id}>{o.name || o.org_id}</option>)}
         </select>
@@ -173,41 +172,47 @@ export default function ApiKeys() {
           />
         )}
 
-        <form className="opa-inline-form" onSubmit={createKey}>
+        <form className="oui-row" onSubmit={createKey}>
           <input
-            className="opa-input" placeholder="Key name (e.g. prod-ingest)"
+            className="oui-input" placeholder="Key name (e.g. prod-ingest)"
             value={keyForm.name} onChange={(e) => setKeyForm((f) => ({ ...f, name: e.target.value }))}
           />
           <select
-            className="opa-select" value={projectForForm}
+            className="oui-select" value={projectForForm}
             onChange={(e) => setKeyForm((f) => ({ ...f, project_id: e.target.value }))}
           >
             {projects.length === 0 && <option value="">— no projects —</option>}
             {projects.map((p) => <option key={p.project_id} value={p.project_id}>{p.name || p.project_id}</option>)}
           </select>
           <input
-            className="opa-input" type="date" title="Expiry (optional)"
+            className="oui-input" type="date" title="Expiry (optional)"
             value={keyForm.expires_at} onChange={(e) => setKeyForm((f) => ({ ...f, expires_at: e.target.value }))}
           />
-          <button className="opa-btn primary" disabled={keyBusy}><FiPlus size={13} /> {keyBusy ? 'Creating…' : 'Create key'}</button>
+          <button className="oui-btn is-primary" disabled={keyBusy}><FiPlus size={13} /> {keyBusy ? 'Creating…' : 'Create key'}</button>
         </form>
-        {keyErr && <div className="opa-form-err">{String(keyErr)}</div>}
+        {keyErr && <div className="oui-error-text">{String(keyErr)}</div>}
 
         {keys.length === 0
           ? <EmptyState icon={<FiKey />} title="No API keys" hint="Create a key above to start ingesting from this project." />
-          : <DataTable columns={keyColumns} rows={keys} rowKey={(r) => r.key_id} initialSort={{ key: 'created_at', dir: 'desc' }} />}
+          : <DataTable
+          loading={keysQ.loading}
+          error={keysQ.error}
+          onRetry={keysQ.reload} columns={keyColumns} rows={keys} rowKey={(r) => r.key_id} initialSort={{ key: 'created_at', dir: 'desc' }} />}
       </Panel>
 
       <div className="opa-admin-grid">
         <Panel title="Organizations" icon={<FiGrid size={14} />} loading={orgsQ.loading} error={orgsQ.error}>
-          <form className="opa-inline-form" onSubmit={createOrg}>
-            <input className="opa-input" placeholder="New organization name" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
-            <button className="opa-btn primary" disabled={orgBusy}><FiPlus size={13} /> Add</button>
+          <form className="oui-row" onSubmit={createOrg}>
+            <input className="oui-input" placeholder="New organization name" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+            <button className="oui-btn is-primary" disabled={orgBusy}><FiPlus size={13} /> Add</button>
           </form>
           {orgs.length === 0
             ? <EmptyState icon={<FiGrid />} title="No organizations" />
             : (
               <DataTable
+          loading={orgsQ.loading}
+          error={orgsQ.error}
+          onRetry={orgsQ.reload}
                 columns={[
                   { key: 'name', header: 'Name', render: (r) => r.name || r.org_id },
                   { key: 'org_id', header: 'ID', mono: true },
@@ -226,14 +231,17 @@ export default function ApiKeys() {
               onDismiss={() => setNewDsn(null)}
             />
           )}
-          <form className="opa-inline-form" onSubmit={createProject}>
-            <input className="opa-input" placeholder={`New project in ${activeOrg}`} value={projName} onChange={(e) => setProjName(e.target.value)} />
-            <button className="opa-btn primary" disabled={projBusy}><FiPlus size={13} /> Add</button>
+          <form className="oui-row" onSubmit={createProject}>
+            <input className="oui-input" placeholder={`New project in ${activeOrg}`} value={projName} onChange={(e) => setProjName(e.target.value)} />
+            <button className="oui-btn is-primary" disabled={projBusy}><FiPlus size={13} /> Add</button>
           </form>
           {projects.length === 0
             ? <EmptyState icon={<FiFolder />} title="No projects" hint="Projects scope ingestion within an organization." />
             : (
               <DataTable
+          loading={projectsQ.loading}
+          error={projectsQ.error}
+          onRetry={projectsQ.reload}
                 columns={[
                   { key: 'name', header: 'Name', render: (r) => r.name || r.project_id },
                   { key: 'project_id', header: 'ID', mono: true },

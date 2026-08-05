@@ -1,27 +1,47 @@
 import React from 'react'
-import Sparkline from './Sparkline'
-import DeltaIndicator from './DeltaIndicator'
+import { StatTile } from '@open-family/ui'
 
-// Golden-signal tile: big tabular value + micro-label, optional inline sparkline,
-// delta-vs-previous, and a status accent bar. `status` in ok|warn|error|neutral.
-const STATUS_COLOR = { ok: 'var(--good-text)', warn: 'var(--warn-text)', error: 'var(--critical-text)', neutral: 'var(--text-muted)' }
+/**
+ * A single measurement, on the family's stat tile.
+ *
+ * The one substantive change is the delta. This tile used to derive both the arrow
+ * and the colour from `current` vs `previous`, with an `invert` flag that flipped
+ * the *colour* for measures where a rise is bad. The family separates the two,
+ * because they answer different questions: the arrow says which way the number
+ * moved, and the colour says whether that is welcome. A falling error rate is a
+ * down arrow in the good colour — drawing an up arrow because the change was
+ * welcome would misstate the data.
+ *
+ * `status` and `sparkColor` are accepted and ignored. A tile's value is not
+ * coloured by threshold in the family: a status hue always ships with a word
+ * beside it, so thresholds belong on a badge, and the spark follows the accent.
+ */
+export default function KpiTile({
+  label, value, unit, spark, current, previous, invert = false, footer,
+  // Accepted so call sites can be converted independently; deliberately unused.
+  icon: _icon, status: _status, sparkColor: _sparkColor,
+}) {
+  const comparable = current != null && previous != null && previous !== 0 && current !== previous
+  const rising = comparable && current > previous
 
-export default function KpiTile({ label, value, unit, icon, spark, sparkColor, status = 'neutral', current, previous, invert = false, footer }) {
-  const color = STATUS_COLOR[status] || 'var(--text-muted)'
+  const delta = comparable
+    ? {
+      value: `${Math.abs(((current - previous) / previous) * 100).toFixed(1)}%`,
+      direction: rising ? 'up' : 'down',
+      // `invert` marked a measure where a rise is unwelcome — latency, error rate.
+      good: invert ? !rising : rising,
+    }
+    : undefined
+
+  const points = Array.isArray(spark) ? spark.filter((v) => v != null) : null
+
   return (
-    <div className="opa-kpi">
-      <div className="opa-kpi-accent" style={{ background: color }} />
-      <div className="opa-kpi-label">{icon}{label}</div>
-      <div className="opa-kpi-value" style={status !== 'neutral' ? { color } : undefined}>
-        {value}{unit && <span className="unit">{unit}</span>}
-      </div>
-      <div className="opa-kpi-foot">
-        {(current != null && previous != null) && <DeltaIndicator current={current} previous={previous} invert={invert} />}
-        {footer}
-      </div>
-      {spark && spark.length > 1 && (
-        <div className="opa-kpi-spark"><Sparkline data={spark} width={110} height={30} color={sparkColor || color} /></div>
-      )}
-    </div>
+    <StatTile
+      label={label}
+      value={unit ? `${value} ${unit}` : value}
+      delta={delta}
+      spark={points && points.length > 1 ? points : undefined}
+      foot={footer}
+    />
   )
 }

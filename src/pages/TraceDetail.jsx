@@ -23,6 +23,7 @@ import {
 import TraceWaterfall from '../components/TraceWaterfall'
 import TraceReplayPanel from '../components/TraceReplayPanel'
 import './TraceDetail.css'
+import { PageHeader } from '@open-family/ui'
 
 const TIERS = ['app', 'db', 'redis', 'http']
 const TIER_LABEL = { app: 'App / PHP', db: 'Database', redis: 'Redis', http: 'HTTP' }
@@ -269,7 +270,7 @@ export default function TraceDetail() {
   ]
 
   const redisCols = [
-    { key: 'command', header: 'Command', render: (r) => <span className="oui-mono cell-strong" style={{ color: 'var(--chart-3)' }}>{r.command || '—'}</span> },
+    { key: 'command', header: 'Command', render: (r) => <span className="oui-mono oui-cell-primary" style={{ color: 'var(--chart-3)' }}>{r.command || '—'}</span> },
     { key: 'key', header: 'Key', render: (r) => <span className="oui-mono oui-text-muted" title={r.key}>{r.key || '—'}</span> },
     { key: 'hit', header: 'Hit', render: (r) => (r.hit == null ? '—' : <StatusPill tone={r.hit ? 'ok' : 'warn'}>{r.hit ? 'HIT' : 'MISS'}</StatusPill>) },
     { key: 'duration_ms', header: 'Duration', num: true, render: (r) => <span style={{ color: statusColor(latencyStatus(r.duration_ms)) }}>{fmtMs(r.duration_ms)}</span> },
@@ -293,15 +294,10 @@ export default function TraceDetail() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <button className="td-drawer-close" style={{ float: 'left', marginRight: 10 }} onClick={() => navigate(-1)} title="Back" aria-label="Back">
-            <FiChevronLeft size={15} />
-          </button>
-          <h1 className="opa-page-title">Trace</h1>
-          <div className="opa-page-sub">Distributed trace forensics</div>
-        </div>
-      </div>
+      <PageHeader
+        title="Trace"
+        description="Distributed trace forensics"
+      />
 
       <EntityHeader
         title={traceId}
@@ -336,21 +332,21 @@ export default function TraceDetail() {
         actions={(
           <div className="oui-row" style={{ gap: 8, flexWrap: 'wrap' }}>
             {opService && (
-              <Link className="opa-btn ghost" to={buildTracesHref({ service: opService })}>Related traces</Link>
+              <Link className="oui-btn is-ghost" to={buildTracesHref({ service: opService })}>Related traces</Link>
             )}
             {rootResource && (
-              <Link className="opa-btn ghost" to={buildTracesHref({ filter: `name:"${String(rootResource).replace(/(["\\])/g, '\\$1')}"`, service: opService || undefined })}>
+              <Link className="oui-btn is-ghost" to={buildTracesHref({ filter: `name:"${String(rootResource).replace(/(["\\])/g, '\\$1')}"`, service: opService || undefined })}>
                 Same resource
               </Link>
             )}
             {anyError && (
-              <Link className="opa-btn ghost" to={buildTracesHref({ service: opService || undefined, status: 'error' })}>Error traces</Link>
+              <Link className="oui-btn is-ghost" to={buildTracesHref({ service: opService || undefined, status: 'error' })}>Error traces</Link>
             )}
-            <Link className="opa-btn ghost" to={logsHref({ service: opService || undefined, q: traceId })}>Logs</Link>
+            <Link className="oui-btn is-ghost" to={logsHref({ service: opService || undefined, q: traceId })}>Logs</Link>
             {correlations.find((c) => c.kind === 'session') && (
-              <Link className="opa-btn ghost" to={rumSessionHref(correlations.find((c) => c.kind === 'session').value)}>RUM session</Link>
+              <Link className="oui-btn is-ghost" to={rumSessionHref(correlations.find((c) => c.kind === 'session').value)}>RUM session</Link>
             )}
-            <Link className="opa-btn ghost" to={compareTracesHref(traceId, '')}>Compare</Link>
+            <Link className="oui-btn is-ghost" to={compareTracesHref(traceId, '')}>Compare</Link>
           </div>
         )}
       />
@@ -475,7 +471,7 @@ export default function TraceDetail() {
       </Panel>
 
       {/* Breakdown + Network I/O */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Response-time breakdown" icon={<FiClock />} loading={loading} error={trace.error} empty={empty}>
           {stackedBar(
             TIERS.map((t) => ({ key: t, value: breakdown[t], color: tierColor(t), label: TIER_LABEL[t], display: fmtMs(breakdown[t]) })),
@@ -521,7 +517,9 @@ export default function TraceDetail() {
       <Panel title="SQL queries" icon={<FiDatabase />} flush loading={loading} error={trace.error}
         empty={!loading && allSql.length === 0} emptyText="No SQL in this trace"
         actions={<Badge>{fmtNum(allSql.length)} queries</Badge>}>
-        <DataTable columns={sqlCols} rows={allSql} rowKey={(r, i) => i}
+        <DataTable
+          loading={loading}
+          error={trace.error} columns={sqlCols} rows={allSql} rowKey={(r, i) => i}
           onRowClick={(r) => {
             const fp = r.query_fingerprint || r.fingerprint
             if (fp) { navigate(`/sql/${encodeURIComponent(fp)}`); return }
@@ -531,18 +529,22 @@ export default function TraceDetail() {
           initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
       </Panel>
 
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Redis" icon={<FiServer />} flush loading={loading} error={trace.error}
           empty={!loading && allRedis.length === 0} emptyText="No Redis ops"
           actions={<Badge>{fmtNum(allRedis.length)} ops</Badge>}>
-          <DataTable columns={redisCols} rows={allRedis} rowKey={(r, i) => i}
+          <DataTable
+          loading={loading}
+          error={trace.error} columns={redisCols} rows={allRedis} rowKey={(r, i) => i}
             onRowClick={(r) => { if (r.command) goTraces(`redis.command:"${r.command}"`) }}
             initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
         </Panel>
         <Panel title="HTTP calls" icon={<FiGlobe />} flush loading={loading} error={trace.error}
           empty={!loading && allHttp.length === 0} emptyText="No outbound HTTP"
           actions={<Badge>{fmtNum(allHttp.length)} calls</Badge>}>
-          <DataTable columns={httpCols} rows={allHttp} rowKey={(r, i) => i}
+          <DataTable
+          loading={loading}
+          error={trace.error} columns={httpCols} rows={allHttp} rowKey={(r, i) => i}
             onRowClick={(r) => { const u = r.url || r.uri; if (u) goTraces(`http.url:"${u}"`) }}
             initialSort={{ key: 'duration_ms', dir: 'desc' }} maxHeight={340} />
         </Panel>
@@ -553,6 +555,9 @@ export default function TraceDetail() {
         empty={!logsQ.loading && logs.length === 0} emptyText="No logs for this trace"
         actions={<Badge>{fmtNum(logsQ.data?.count ?? logs.length)} entries</Badge>}>
         <DataTable
+          loading={logsQ.loading}
+          error={logsQ.error}
+          onRetry={logsQ.reload}
           columns={[
             { key: 'level', header: 'Level', width: 84, render: (r) => <StatusPill tone={toneForLevel(r.level)}>{String(r.level || '—').toUpperCase()}</StatusPill> },
             { key: 'message', header: 'Message', render: (r) => <span className="oui-mono" style={{ fontSize: 'var(--text-xs)' }}>{r.message || '—'}</span> },
@@ -786,7 +791,7 @@ function SpanDrawer({ span, traceStart, rows = [], index = -1, onSelect, onClose
             </div>
           )}
 
-          <div className="opa-grid cols-3" style={{ gap: 12 }}>
+          <div className="oui-grid is-3" style={{ gap: 12 }}>
             <div className="td-metastat"><span className="k">Duration</span><span className="v" style={{ color: statusColor(latencyStatus(span.duration_ms)) }}>{fmtMs(span.duration_ms)}</span></div>
             <div className="td-metastat"><span className="k">CPU</span><span className="v">{fmtMs(span.cpu_ms)}</span></div>
             <div className="td-metastat"><span className="k">Start</span><span className="v">+{fmtMs((span.start_ts || 0) - traceStart)}</span></div>

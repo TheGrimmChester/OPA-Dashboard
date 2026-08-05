@@ -7,7 +7,7 @@ import {
   FiClock, FiAlertTriangle, FiZoomIn, FiZoomOut, FiMaximize2, FiX, FiGitBranch,
   FiArrowUpRight, FiArrowDownLeft, FiSliders,
 } from 'react-icons/fi'
-import { readCssToken } from '@open-family/ui'
+import { PageHeader, readCssToken } from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -236,7 +236,7 @@ export default function ServiceMapView() {
   // ---- Dependencies table (also the fallback if the graph can't draw) ------
   const maxCalls = Math.max(1, ...edges.map((e) => e?.call_count || 0))
   const depColumns = [
-    { key: 'from', header: 'Source', render: (r) => <span className="cell-strong oui-mono">{r?.from}</span>, sortValue: (r) => r?.from },
+    { key: 'from', header: 'Source', render: (r) => <span className="oui-cell-primary oui-mono">{r?.from}</span>, sortValue: (r) => r?.from },
     { key: 'to', header: 'Target', render: (r) => (
       <span className="oui-row" style={{ gap: 6 }}>
         <span style={{ color: tierColor(r?.dependency_type || r?.scheme) }}>●</span>
@@ -273,24 +273,20 @@ export default function ServiceMapView() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Service Map</h1>
-          <div className="opa-page-sub">
-            {kpis.services} service{kpis.services === 1 ? '' : 's'} · {kpis.deps} external dependenc{kpis.deps === 1 ? 'y' : 'ies'} · {kpis.edges} connection{kpis.edges === 1 ? '' : 's'}
-          </div>
-        </div>
-        <div className="oui-row">
+      <PageHeader
+        title="Service Map"
+        description={<>{kpis.services} service{kpis.services === 1 ? '' : 's'} · {kpis.deps} external dependenc{kpis.deps === 1 ? 'y' : 'ies'} · {kpis.edges} connection{kpis.edges === 1 ? '' : 's'}</>}
+        actions={<><div className="oui-row">
           <SegmentedControl
             options={[{ value: 'force', label: 'Force' }, { value: 'hierarchical', label: 'Hierarchical' }]}
             value={layout}
             onChange={setLayout}
           />
-          <button className="opa-btn" onClick={() => setEditThresh((v) => !v)} title="Edit health thresholds">
+          <button className="oui-btn is-secondary" onClick={() => setEditThresh((v) => !v)} title="Edit health thresholds">
             <FiSliders size={13} /> Thresholds
           </button>
-        </div>
-      </div>
+        </div></>}
+      />
 
       {editThresh && (
         <ThresholdsEditor
@@ -302,7 +298,7 @@ export default function ServiceMapView() {
       )}
 
       {/* Golden-signal KPIs across the topology */}
-      <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+      <div className="oui-grid is-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile label="Services" icon={<FiServer size={12} />} value={fmtNum(kpis.services)} status="neutral"
           footer={<span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>{fmtNum(kpis.deps)} external deps</span>} />
         <KpiTile label="Unhealthy" icon={<FiAlertTriangle size={12} />} value={fmtNum(kpis.unhealthy)}
@@ -339,6 +335,8 @@ export default function ServiceMapView() {
       <Panel title="Dependencies" icon={<FiGitBranch />} flush loading={loading} error={map.error}
         empty={!loading && edges.length === 0} emptyText="No dependency edges.">
         <DataTable
+          loading={loading}
+          error={map.error}
           columns={depColumns} rows={edges} rowKey={(r, i) => `${r?.from}->${r?.to}-${i}`}
           initialSort={{ key: 'call_count', dir: 'desc' }}
           onRowClick={(r) => setSelected({ kind: 'edge', data: r })}
@@ -386,23 +384,23 @@ function ThresholdsEditor({ initial, onSaved, onClose }) {
   const field = (label, key) => (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
       {label}
-      <input className="opa-input" type="number" min="0" value={form[key]} onChange={setNum(key)} style={{ width: 130 }} />
+      <input className="oui-input" type="number" min="0" value={form[key]} onChange={setNum(key)} style={{ width: 130 }} />
     </label>
   )
 
   return (
     <Panel
       title="Health thresholds" icon={<FiSliders size={14} />}
-      actions={<button className="opa-btn ghost" onClick={onClose} title="Close"><FiX size={13} /></button>}
+      actions={<button className="oui-btn is-ghost" onClick={onClose} title="Close"><FiX size={13} /></button>}
     >
       <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         {field('Degraded latency (ms)', 'degraded_latency_ms')}
         {field('Down latency (ms)', 'down_latency_ms')}
         {field('Degraded error rate (%)', 'degraded_error_rate')}
         {field('Down error rate (%)', 'down_error_rate')}
-        <button className="opa-btn primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save thresholds'}</button>
+        <button className="oui-btn is-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save thresholds'}</button>
       </div>
-      {err && <div className="opa-form-err" style={{ marginTop: 'var(--space-2)' }}>{String(err)}</div>}
+      {err && <div className="oui-error-text" style={{ marginTop: 'var(--space-2)' }}>{String(err)}</div>}
       <div className="oui-text-muted" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
         Applied across the topology: an edge is amber past the degraded line and red past the down line.
       </div>
@@ -459,7 +457,7 @@ function EntityDrawer({ selected, thresholds, onClose, navigate }) {
 
           {isNode ? (
             <button
-              className="opa-btn"
+              className="oui-btn is-secondary"
               style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}
               onClick={() => navigate(`/traces?service=${encodeURIComponent(d.service || d.id)}`)}
             >
@@ -586,7 +584,7 @@ function EdgeTraces({ d, navigate }) {
   const traces = q.data?.traces || []
   const viewAll = (
     <button
-      className="opa-btn"
+      className="oui-btn is-secondary"
       style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}
       onClick={() => navigate(`/traces?service=${encodeURIComponent(d.from)}`)}
     >
@@ -611,7 +609,7 @@ function EdgeTraces({ d, navigate }) {
           {traces.slice(0, 12).map((t) => (
             <button
               key={t.trace_id}
-              className="opa-btn ghost"
+              className="oui-btn is-ghost"
               style={{ justifyContent: 'space-between', width: '100%', fontSize: 'var(--text-xs)' }}
               onClick={() => navigate(`/traces/${encodeURIComponent(t.trace_id)}`)}
               title={`Open trace ${t.trace_id}`}

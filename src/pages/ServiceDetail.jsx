@@ -70,7 +70,7 @@ export default function ServiceDetail() {
     { key: 'name', header: 'Endpoint', mono: true, render: (r) => (
       <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
         <HealthDot tone={errorRateStatus(r.count ? ((r.error_count || 0) / r.count) * 100 : 0)} />
-        <span className="cell-strong oui-mono">{r.name || '—'}</span>
+        <span className="oui-cell-primary oui-mono">{r.name || '—'}</span>
       </div>
     ), sortValue: (r) => r.name || '' },
     { key: 'count', header: 'Count', num: true, render: (r) => (
@@ -108,7 +108,7 @@ export default function ServiceDetail() {
     { key: 'url', header: 'URL', mono: true, render: (r) => (
       <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
         <HealthDot tone={errorRateStatus(r.error_rate)} />
-        <span className="cell-strong oui-mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.url || '—'}</span>
+        <span className="oui-cell-primary oui-mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.url || '—'}</span>
       </div>
     ), sortValue: (r) => r.url || '' },
     { key: 'method', header: 'Method', render: (r) => <Badge>{r.method || 'GET'}</Badge>, sortValue: (r) => r.method || '' },
@@ -138,9 +138,9 @@ export default function ServiceDetail() {
         }
         actions={(
           <div className="oui-row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <Link className="opa-btn ghost" to={tracesHref({ service: svc })}>Traces</Link>
-            <Link className="opa-btn ghost" to={tracesHref({ service: svc, status: 'error' })}>Errors</Link>
-            <Link className="opa-btn ghost" to={logsHref({ service: svc })}>Logs</Link>
+            <Link className="oui-btn is-ghost" to={tracesHref({ service: svc })}>Traces</Link>
+            <Link className="oui-btn is-ghost" to={tracesHref({ service: svc, status: 'error' })}>Errors</Link>
+            <Link className="oui-btn is-ghost" to={logsHref({ service: svc })}>Logs</Link>
           </div>
         )}
       />
@@ -148,7 +148,7 @@ export default function ServiceDetail() {
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
         <div className="oui-stack" style={{ flex: 1, minWidth: 0 }}>
       {/* Golden signals */}
-      <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+      <div className="oui-grid is-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile label="Throughput" icon={<FiActivity size={12} />} value={fmtNum(s.total_traces || 0)} unit="traces" status="neutral"
           spark={spark('throughput')} sparkColor="var(--accent)" current={tpCur} previous={tpPrev} />
         <KpiTile label="Avg response" icon={<FiClock size={12} />} value={fmtMs(s.avg_duration)} status={latencyStatus(s.avg_duration)} />
@@ -162,7 +162,7 @@ export default function ServiceDetail() {
       </div>
 
       {/* Charts */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={!perf.loading && metrics.length === 0}>
           <TimeSeriesChart brushZoom data={metrics} series={[
             { key: 'p50', name: 'p50', color: 'var(--chart-1)', type: 'line' },
@@ -182,6 +182,9 @@ export default function ServiceDetail() {
       <Panel title="Top endpoints" icon={<FiList />} flush loading={stats.loading} error={stats.error}
         empty={!stats.loading && endpoints.length === 0} emptyText="No endpoint data for this service">
         <DataTable
+          loading={stats.loading}
+          error={stats.error}
+          onRetry={stats.reload}
           columns={epColumns} rows={endpoints} rowKey={(r, i) => r.name || i}
           initialSort={{ key: 'count', dir: 'desc' }}
           onRowClick={(r) => {
@@ -202,6 +205,9 @@ export default function ServiceDetail() {
         empty={!http.loading && httpCalls.length === 0} emptyText="No outbound HTTP calls recorded"
         actions={<span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>{fmtNum(totalCalls)} call{totalCalls === 1 ? '' : 's'}</span>}>
         <DataTable
+          loading={http.loading}
+          error={http.error}
+          onRetry={http.reload}
           columns={httpColumns} rows={httpCalls} rowKey={(r, i) => `${r.method || ''}-${r.url || i}`}
           initialSort={{ key: 'call_count', dir: 'desc' }}
           onRowClick={(r) => navigate(tracesHref({ filter: `http.url:"${r.url}"` }))}

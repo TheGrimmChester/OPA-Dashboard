@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { FiCopy, FiCheck } from 'react-icons/fi'
+import { Button } from '@open-family/ui'
 import './CopyToClipboard.css'
 
 function CopyToClipboard({ text, label, className = '' }) {
@@ -29,17 +30,23 @@ function CopyToClipboard({ text, label, className = '' }) {
     }
   }
 
+  // The glyph changes as well as the colour, so the confirmation never rests on
+  // hue alone. Without a label there is no visible text to name the control.
+  const name = copied ? 'Copied to clipboard' : 'Copy to clipboard'
+
   return (
-    <button 
-      className={`btn btn-ghost copy-to-clipboard ${className} ${copied ? 'copied' : ''}`}
+    <Button
+      variant="ghost"
+      size="sm"
+      className={`opa-copy${copied ? ' is-copied' : ''}${className ? ` ${className}` : ''}`}
+      icon={copied ? <FiCheck /> : <FiCopy />}
       onClick={handleCopy}
-      title={copied ? 'Copied!' : 'Copy to clipboard'}
+      title={name}
+      aria-label={label ? undefined : name}
     >
-      {copied ? <FiCheck className="copy-icon" /> : <FiCopy className="copy-icon" />}
-      {label && <span>{label}</span>}
-    </button>
+      {label}
+    </Button>
   )
 }
 
 export default CopyToClipboard
-

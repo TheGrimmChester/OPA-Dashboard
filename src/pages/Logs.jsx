@@ -10,6 +10,7 @@ import {
 import { fmtNum, fmtAgo } from '../theme/format'
 import { serviceHref, traceHref } from '../utils/entityLinks'
 import './Logs.css'
+import { PageHeader } from '@open-family/ui'
 
 const LIMIT = 100
 
@@ -128,16 +129,12 @@ export default function Logs() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Logs</h1>
-          <div className="opa-page-sub">
-            Application logs{rows.length ? ` · ${fmtNum(rows.length)} shown` : ''}
-            {' '}· correlated to traces
-          </div>
-        </div>
-        <div className="oui-row">
-          <select className="opa-select" value={service} onChange={(e) => setParam('service', e.target.value)} aria-label="Service filter">
+      <PageHeader
+        title="Logs"
+        description={<>Application logs{rows.length ? ` · ${fmtNum(rows.length)} shown` : ''}
+            {' '}· correlated to traces</>}
+        actions={<><div className="oui-row">
+          <select className="oui-select" value={service} onChange={(e) => setParam('service', e.target.value)} aria-label="Service filter">
             <option value="">All services</option>
             {services.map((s) => <option key={s.service} value={s.service}>{s.service}</option>)}
           </select>
@@ -151,15 +148,15 @@ export default function Logs() {
               { value: 'ERROR', label: 'Error' },
             ]}
           />
-        </div>
-      </div>
+        </div></>}
+      />
 
       {/* Full-text search over the message body. */}
       <div className="oui-row" style={{ gap: 'var(--space-2)', alignItems: 'center' }}>
         <div className="logs-search">
           <FiSearch size={13} className="logs-search-icon" />
           <input
-            className="opa-input"
+            className="oui-input"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') commitSearch() }}
@@ -170,7 +167,7 @@ export default function Logs() {
           />
         </div>
         {hasFilters && (
-          <button className="opa-btn ghost" onClick={clearFilters} title="Clear all filters">
+          <button className="oui-btn is-ghost" onClick={clearFilters} title="Clear all filters">
             <FiX size={13} /> Clear
           </button>
         )}
@@ -230,11 +227,11 @@ export default function Logs() {
             <span className="oui-text-muted oui-num">
               {rows.length ? `${pageStart}–${pageEnd}` : '0 logs'}
             </span>
-            <button className="opa-btn" disabled={!hasPrev}
+            <button className="oui-btn is-secondary" disabled={!hasPrev}
               onClick={() => setOffset((o) => Math.max(0, o - LIMIT))} title="Previous page">
               <FiChevronLeft size={13} />
             </button>
-            <button className="opa-btn" disabled={!hasNext}
+            <button className="oui-btn is-secondary" disabled={!hasNext}
               onClick={() => setOffset((o) => o + LIMIT)} title="Next page">
               <FiChevronRight size={13} />
             </button>
@@ -242,6 +239,9 @@ export default function Logs() {
         )}
       >
         <DataTable
+          loading={logsQ.loading}
+          error={logsQ.error}
+          onRetry={logsQ.reload}
           columns={columns}
           rows={rows}
           rowKey={(r, i) => r.id || i}
@@ -262,11 +262,11 @@ export default function Logs() {
             actions={(
               <div className="oui-row" style={{ gap: 'var(--space-2)' }}>
                 {row.trace_id && (
-                  <button className="opa-btn" onClick={() => navigate(`/traces/${encodeURIComponent(row.trace_id)}`)}>
+                  <button className="oui-btn is-secondary" onClick={() => navigate(`/traces/${encodeURIComponent(row.trace_id)}`)}>
                     Open trace
                   </button>
                 )}
-                <button className="opa-btn ghost" onClick={() => setExpanded(null)}>Close</button>
+                <button className="oui-btn is-ghost" onClick={() => setExpanded(null)}>Close</button>
               </div>
             )}
           >

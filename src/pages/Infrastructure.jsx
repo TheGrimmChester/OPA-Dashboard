@@ -24,7 +24,7 @@ export default function Infrastructure() {
   const reporting = hosts.length - silent.length
 
   return (
-    <div className="opa-grid" style={{ gap: 16 }}>
+    <div className="oui-grid" style={{ gap: 16 }}>
       <Panel
         title="Hosts"
         actions={
@@ -46,6 +46,8 @@ export default function Infrastructure() {
 
         {hosts.length > 0 && (
           <DataTable
+          loading={loading}
+          error={error ? String(error) : null}
             columns={[
               {
                 key: 'reporting',

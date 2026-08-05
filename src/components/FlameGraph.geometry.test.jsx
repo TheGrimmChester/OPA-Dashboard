@@ -330,7 +330,13 @@ describe('render contract', () => {
   })
 
   it('states the empty case rather than drawing an empty canvas', () => {
-    expect(renderToStaticMarkup(<FlameGraph callStack={[]} width={900} height={500} />)).toContain('opa-empty')
+    // Asserted on the rendered words rather than a class name: what matters is
+    // that a reader is told there is nothing to draw and why, not which
+    // stylesheet supplied the box. The class moved to the shared empty state.
+    const out = renderToStaticMarkup(<FlameGraph callStack={[]} width={900} height={500} />)
+    expect(out).not.toContain('<svg width="900"')
+    expect(out).toMatch(/No call stack/i)
+    expect(out).toMatch(/profiler/i)
   })
 
   it('renders inside a 300px panel', () => {

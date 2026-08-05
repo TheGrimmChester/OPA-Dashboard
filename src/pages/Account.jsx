@@ -1,11 +1,13 @@
 import React from 'react'
-import { FiUser } from 'react-icons/fi'
-import { Badge } from '../components/ui'
+import { PageHeader, Stack, Card, Badge, DefinitionList } from '@open-family/ui'
 import { useTenant } from '../contexts/TenantContext'
 
 /**
- * Account — signed-in identity for the OPA dashboard.
- * SCM connectors and review-provider credentials live in ORA; AppSec settings in OSA.
+ * Account — the signed-in identity and the tenant this dashboard is scoped to.
+ *
+ * Source-control connectors and review-provider credentials belong to the review
+ * product; application-security settings to the security product. This page is
+ * deliberately only identity and scope.
  */
 export default function Account() {
   const { organizationId } = useTenant()
@@ -14,31 +16,38 @@ export default function Account() {
   const orgSelected = organizationId && organizationId !== 'all'
 
   return (
-    <div className="oui-stack">
-      <div className="opa-page-head">
-        <h1 className="opa-page-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <FiUser size={22} /> Account
-        </h1>
-        <div className="opa-page-sub">
-          Profile and tenant context for Open Profiling Agent.
-          {username && (
-            <>
-              {' '}Signed in as <code className="oui-mono">{username}</code>
-              {role && <> · <Badge>{role}</Badge></>}
-            </>
-          )}
-        </div>
-      </div>
+    <Stack gap="sections">
+      <PageHeader
+        title="Account"
+        description="Your identity and the tenant context every query on this dashboard runs against."
+        actions={role ? <Badge>{role}</Badge> : undefined}
+        meta={username ? [{ label: 'Signed in as', value: username }] : undefined}
+      />
 
-      <div className="opa-panel" style={{ padding: 16 }}>
-        <div className="oui-text-muted" style={{ fontSize: 13, marginBottom: 8 }}>Organization</div>
-        <div className="cell-strong">
-          {orgSelected ? organizationId : 'All organizations (tenant switcher)'}
-        </div>
-        <p className="oui-text-muted" style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
-          Use the tenant switcher in the top bar to scope queries. API keys and users are managed under Admin.
+      <Card
+        title="Tenant scope"
+        description="Change this from the switcher in the top bar. It applies to every page."
+      >
+        <DefinitionList
+          items={[
+            {
+              term: 'Organisation',
+              value: orgSelected ? organizationId : 'All organisations',
+              mono: Boolean(orgSelected),
+            },
+            { term: 'User', value: username || 'Not signed in', mono: Boolean(username) },
+            { term: 'Role', value: role || 'Authentication is not enforced' },
+          ]}
+        />
+      </Card>
+
+      <Card title="Where other settings live">
+        <p className="oui-text-secondary">
+          API keys and user accounts are managed under Administration. Anything that
+          belongs to another product in the family — review connectors, security
+          policies — is configured in that product.
         </p>
-      </div>
-    </div>
+      </Card>
+    </Stack>
   )
 }

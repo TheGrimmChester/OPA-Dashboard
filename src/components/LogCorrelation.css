@@ -1,44 +1,48 @@
+/* Correlated logs for one trace.
+
+   The component always renders inside a Card (ProfileComparison puts one on each
+   side of the A/B split), so it no longer draws a second border, a second surface
+   or a top margin of its own — that was 24px of compound inset and two nested
+   rules around the same content. The Card owns the frame; this file owns the list.
+
+   The level filter is the kit's Select and the three states are the kit's
+   EmptyState / Skeleton, so nothing here rebuilds a control. */
+
 .LogCorrelation {
-  background: var(--canvas);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  margin-top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
 }
 
 .logs-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-4);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--border-default);
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
-.header-title {
+.logs-title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.header-icon {
-  font-size: var(--text-lg);
-  color: var(--accent);
-}
-
-.log-filter {
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-1);
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
-  font-size: var(--text-base);
 }
 
-.logs-empty {
-  text-align: center;
-  padding: var(--space-8);
-  color: var(--text-secondary);
+.logs-title > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+
+.logs-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .logs-list {
@@ -47,43 +51,50 @@
   gap: var(--space-2);
   max-height: 600px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
+/* A 3px severity rail plus the level word and its icon: three channels, so the
+   colour is never carrying the meaning by itself. */
 .log-entry {
   background: var(--surface-1);
-  border-left: 4px solid;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  padding: var(--space-2);
+  padding: var(--space-2) var(--space-3);
 }
 
 .log-entry.log-critical {
-  border-left-color: var(--critical-text, #c62828);
-  background: rgba(198, 40, 40, 0.1);
+  border-left-color: var(--critical-text);
+  border-color: var(--critical-border);
+  background: var(--critical-bg);
 }
 
+/* Error keeps the critical rail but not the tint, so a critical row still reads
+   as the heavier of the two. */
 .log-entry.log-error {
   border-left-color: var(--critical-text);
-  background: var(--critical-bg);
 }
 
 .log-entry.log-warn {
   border-left-color: var(--warn-text);
+  border-color: var(--warn-border);
   background: var(--warn-bg);
 }
 
 .log-entry.log-info {
   border-left-color: var(--accent);
-  background: var(--accent-wash);
 }
 
 .log-entry.log-debug {
-  border-left-color: var(--text-muted);
+  border-left-color: var(--border-strong);
 }
 
 .log-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-3);
   margin-bottom: var(--space-1);
 }
 
@@ -94,13 +105,13 @@
 }
 
 .log-icon {
-  font-size: var(--text-md);
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--text-muted);
 }
 
-.log-icon.critical {
-  color: var(--critical-text, #c62828);
-}
-
+.log-icon.critical,
 .log-icon.error {
   color: var(--critical-text);
 }
@@ -115,39 +126,43 @@
 
 .level-text {
   font-weight: var(--weight-semibold);
-  font-size: var(--text-xs);
-  text-transform: uppercase;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-secondary);
 }
 
 .log-timestamp {
   font-size: var(--text-xs);
-  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .log-message {
-  font-family: 'Courier New', monospace;
-  font-size: var(--text-base);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .log-fields {
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
 }
 
 .log-fields summary {
   cursor: pointer;
   font-size: var(--text-xs);
   color: var(--text-secondary);
-  margin-top: var(--space-1);
 }
 
 .log-fields pre {
-  background: var(--canvas);
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  overflow-x: auto;
   margin-top: var(--space-1);
+  padding: var(--space-2);
+  background: var(--surface-inset);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+  overflow-x: auto;
 }
-

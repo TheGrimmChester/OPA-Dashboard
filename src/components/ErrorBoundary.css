@@ -1,93 +1,43 @@
-.error-boundary {
+/* The kit's EmptyState owns the icon, the title, the description and the action
+   row; Button and .oui-btn own the two controls. The rules this replaced painted
+   the primary button with --chart-1 — a categorical chart hue, reserved for
+   series and never an interface accent — and rebuilt the button shape by hand.
+
+   What is left is the page-level centring and the developer-only stack trace,
+   neither of which the kit ships. */
+.opa-errboundary {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-4);
   min-height: 400px;
   padding: var(--space-8);
 }
 
-.error-boundary-content {
-  text-align: center;
-  max-width: 600px;
-}
-
-.error-boundary h2 {
-  color: var(--critical-text);
-  margin-bottom: var(--space-4);
-}
-
-.error-boundary p {
-  color: var(--text-secondary);
-  margin-bottom: var(--space-6);
-}
-
-.error-details {
-  text-align: left;
-  margin: var(--space-6) 0;
+.opa-errboundary-detail {
+  width: 100%;
+  max-width: var(--content-max-narrow);
   padding: var(--space-4);
-  background-color: var(--canvas);
-  border-radius: var(--radius-md);
+  background: var(--surface-2);
   border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
 }
 
-.error-details summary {
+.opa-errboundary-detail summary {
   cursor: pointer;
+  font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
-  margin-bottom: var(--space-2);
   color: var(--text-primary);
 }
 
-.error-details pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
+.opa-errboundary-detail pre {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  background: var(--surface-1);
+  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   color: var(--critical-text);
-  font-family: var(--font-mono);
-  background-color: var(--surface-1);
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
-  margin-top: var(--space-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
-
-.error-boundary-actions {
-  display: flex;
-  gap: var(--space-2);
-  justify-content: center;
-}
-
-.error-boundary-actions button,
-.button-link {
-  padding: var(--space-2) var(--space-6);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: var(--text-base);
-  text-decoration: none;
-  display: inline-block;
-  transition: all var(--dur-base) var(--ease);
-  font-weight: var(--weight-medium);
-}
-
-.error-boundary-actions button {
-  background-color: var(--chart-1);
-  color: var(--accent-contrast);
-}
-
-.error-boundary-actions button:hover {
-  background-color: var(--chart-1);
-  opacity: 0.9;
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.button-link {
-  background-color: var(--surface-2);
-  color: var(--text-primary);
-  border: 1px solid var(--border-default);
-}
-
-.button-link:hover {
-  background-color: var(--surface-3);
-  border-color: var(--chart-1);
-}
-

@@ -8,6 +8,7 @@ import { Panel, KpiTile, DataTable, StatusPill, Badge, HubDeferredSurface } from
 import { fmtNum, fmtAgo } from '../theme/format'
 import { useI18n } from '../contexts/I18nContext'
 import { isHubDeferred } from '../utils/hubDeferred'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -80,7 +81,7 @@ function CloudLive() {
   const resCols = [
     { key: 'provider', header: 'Provider', render: (r) => <Badge>{r.provider || '—'}</Badge> },
     { key: 'kind', header: 'Kind', render: (r) => <Badge>{r.kind || '—'}</Badge> },
-    { key: 'name', header: 'Name', render: (r) => <span className="oui-mono cell-strong">{r.name}</span> },
+    { key: 'name', header: 'Name', render: (r) => <span className="oui-mono oui-cell-primary">{r.name}</span> },
     { key: 'region', header: 'Region', render: (r) => r.region || '—' },
     { key: 'arn', header: 'ARN / ID', render: (r) => (
       <span className="oui-mono oui-text-muted" title={r.arn} style={{ display: 'block', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.arn || '—'}</span>
@@ -108,7 +109,7 @@ function CloudLive() {
   ]
 
   const violCols = [
-    { key: 'resource_name', header: 'Resource', render: (r) => <span className="oui-mono cell-strong">{r.resource_name}</span> },
+    { key: 'resource_name', header: 'Resource', render: (r) => <span className="oui-mono oui-cell-primary">{r.resource_name}</span> },
     { key: 'kind', header: 'Kind', render: (r) => <Badge>{r.kind || '—'}</Badge> },
     { key: 'missing_tags', header: 'Missing', render: (r) => <StatusPill tone="error">{r.missing_tags || '—'}</StatusPill> },
     { key: 'detected_at', header: 'Detected', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.detected_at)}</span> },
@@ -131,15 +132,13 @@ function CloudLive() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">{t('cloud.title')}</h1>
-          <div className="opa-page-sub">{t('cloud.subtitle')}</div>
-        </div>
-        <button className="opa-btn" disabled={busy || !s.configured} onClick={scrapeNow} title={!s.configured ? 'Set OPA_CLOUD_MONITOR_CONFIG' : 'Trigger scrape on leader'}>
+      <PageHeader
+        title={t('cloud.title')}
+        description={t('cloud.subtitle')}
+        actions={<><button className="oui-btn is-secondary" disabled={busy || !s.configured} onClick={scrapeNow} title={!s.configured ? 'Set OPA_CLOUD_MONITOR_CONFIG' : 'Trigger scrape on leader'}>
           <FiRefreshCw size={14} /> Scrape now
-        </button>
-      </div>
+        </button></>}
+      />
 
       {msg && (
         <Panel title="Scrape">
@@ -147,7 +146,7 @@ function CloudLive() {
         </Panel>
       )}
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Providers" icon={<FiCloud size={12} />} value={fmtNum(s.providers || 0)}
           status={s.configured ? 'ok' : 'warn'}
           footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>{s.configured ? 'configured' : 'not configured'}</span>} />
@@ -164,28 +163,41 @@ function CloudLive() {
         <>
           <Panel title="Cloud resources" icon={<FiServer />} flush loading={resources.loading} error={resources.error}
             empty={!resources.loading && res.length === 0} emptyText="No inventory yet — configure OPA_CLOUD_MONITOR_CONFIG">
-            <DataTable columns={resCols} rows={res} rowKey={(r) => r.id || `${r.provider}:${r.name}`} maxHeight={420} />
+            <DataTable
+          loading={resources.loading}
+          error={resources.error}
+          onRetry={resources.reload} columns={resCols} rows={res} rowKey={(r) => r.id || `${r.provider}:${r.name}`} maxHeight={420} />
           </Panel>
           <Panel title="Cloud integrations" icon={<FiCloud />} flush loading={integrations.loading} error={integrations.error}
             empty={!integrations.loading && cloudIntegrations.length === 0} emptyText="No aws_/azure_/gcp_ integration defs">
-            <DataTable columns={integCols} rows={cloudIntegrations} rowKey={(r) => r.id} maxHeight={280} />
+            <DataTable
+          loading={integrations.loading}
+          error={integrations.error}
+          onRetry={integrations.reload} columns={integCols} rows={cloudIntegrations} rowKey={(r) => r.id} maxHeight={280} />
           </Panel>
         </>
       )}
 
       {tab === 'cost' && (
-        <div className="opa-grid cols-2">
+        <div className="oui-grid is-2">
           <Panel title="By service" icon={<FiDollarSign />} flush loading={cost.loading} error={cost.error}
             empty={!cost.loading && byService.length === 0} emptyText="Ingest cost via POST /api/cloud/cost/ingest">
-            <DataTable columns={costCols} rows={byService} rowKey={(r) => r.service} maxHeight={320} />
+            <DataTable
+          loading={cost.loading}
+          error={cost.error}
+          onRetry={cost.reload} columns={costCols} rows={byService} rowKey={(r) => r.service} maxHeight={320} />
           </Panel>
           <Panel title="By tag" icon={<FiTag />} flush loading={cost.loading}
             empty={!cost.loading && byTag.length === 0} emptyText="No tagged cost rows">
-            <DataTable columns={tagCostCols} rows={byTag} rowKey={(r, i) => `${r.tag_key}:${r.tag_value}:${i}`} maxHeight={320} />
+            <DataTable
+          loading={cost.loading}
+          onRetry={cost.reload} columns={tagCostCols} rows={byTag} rowKey={(r, i) => `${r.tag_key}:${r.tag_value}:${i}`} maxHeight={320} />
           </Panel>
           <Panel title="Underutilized" icon={<FiActivity />} flush loading={cost.loading}
             empty={!cost.loading && under.length === 0} emptyText="No util_pct data">
-            <DataTable columns={utilCols} rows={under} rowKey={(r) => r.service} maxHeight={280} />
+            <DataTable
+          loading={cost.loading}
+          onRetry={cost.reload} columns={utilCols} rows={under} rowKey={(r) => r.service} maxHeight={280} />
           </Panel>
         </div>
       )}
@@ -194,14 +206,20 @@ function CloudLive() {
         <Panel title={`Tag violations${tags.data?.required_tags ? ` (need: ${tags.data.required_tags})` : ''}`}
           icon={<FiTag />} flush loading={tags.loading} error={tags.error}
           empty={!tags.loading && violations.length === 0} emptyText="No violations — set OPA_CLOUD_REQUIRED_TAGS and ingest cost to evaluate">
-          <DataTable columns={violCols} rows={violations} rowKey={(r, i) => `${r.resource_id}:${i}`} maxHeight={420} />
+          <DataTable
+          loading={tags.loading}
+          error={tags.error}
+          onRetry={tags.reload} columns={violCols} rows={violations} rowKey={(r, i) => `${r.resource_id}:${i}`} maxHeight={420} />
         </Panel>
       )}
 
       {tab === 'scrapes' && (
         <Panel title="Scrape log" icon={<FiActivity />} flush loading={scrapes.loading} error={scrapes.error}
           empty={!scrapes.loading && scrapeRows.length === 0} emptyText="No scrapes yet">
-          <DataTable columns={scrapeCols} rows={scrapeRows} rowKey={(r, i) => `${r.provider_id}:${r.metric_name}:${i}`} maxHeight={420} />
+          <DataTable
+          loading={scrapes.loading}
+          error={scrapes.error}
+          onRetry={scrapes.reload} columns={scrapeCols} rows={scrapeRows} rowKey={(r, i) => `${r.provider_id}:${r.metric_name}:${i}`} maxHeight={420} />
         </Panel>
       )}
     </div>

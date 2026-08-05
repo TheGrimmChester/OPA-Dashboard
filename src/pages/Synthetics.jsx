@@ -11,6 +11,7 @@ import {
 import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus, statusColor } from '../theme/format'
 import { tracesHref, traceHref } from '../utils/entityLinks'
 import './Synthetics.css'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -151,7 +152,7 @@ export default function Synthetics() {
       key: 'name', header: 'Check',
       render: (r) => (
         <div className="syn-name">
-          <span className="cell-strong">{r.name || '—'}</span>
+          <span className="oui-cell-primary">{r.name || '—'}</span>
           <span className="oui-mono oui-text-muted syn-url">
             <Badge>{r.check_type || 'http'}</Badge>{' '}
             {r.method && r.check_type !== 'tls' && r.check_type !== 'domain' ? `${r.method} ` : ''}{r.url}
@@ -198,9 +199,9 @@ export default function Synthetics() {
       key: 'actions', header: '', width: 76, align: 'center',
       render: (r) => (
         <div className="oui-row" style={{ gap: 4, justifyContent: 'center' }}>
-          <button className="opa-btn ghost" title="Edit"
+          <button className="oui-btn is-ghost" title="Edit"
             onClick={(e) => { e.stopPropagation(); edit(r) }}><FiEdit2 size={12} /></button>
-          <button className="opa-btn ghost" title="Delete"
+          <button className="oui-btn is-ghost" title="Delete"
             onClick={(e) => { e.stopPropagation(); remove(r) }}><FiTrash2 size={12} /></button>
         </div>
       ),
@@ -212,16 +213,12 @@ export default function Synthetics() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Synthetic monitoring</h1>
-          <div className="opa-page-sub">
-            HTTP · API journeys · TLS/domain · browser · private locations · trace-linked
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Synthetic monitoring"
+        description="HTTP · API journeys · TLS/domain · browser · private locations · trace-linked"
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Checks" icon={<FiRadio size={12} />} value={fmtNum(kpis.total)} unit="configured" status="neutral" />
         <KpiTile label="Failing" icon={<FiAlertTriangle size={12} />} value={fmtNum(kpis.down)}
           status={kpis.down > 0 ? 'error' : 'ok'} invert />
@@ -237,51 +234,51 @@ export default function Synthetics() {
         loading={checksQ.loading} error={checksQ.error}
       >
         <div style={{ padding: 'var(--space-3) var(--space-3) 0' }}>
-          <form className="opa-inline-form syn-form-wrap" onSubmit={submit}>
-            <select className="opa-select" value={form.check_type} onChange={set('check_type')} title="Check type" style={{ flex: '0 0 140px' }}>
+          <form className="oui-row syn-form-wrap" onSubmit={submit}>
+            <select className="oui-select" value={form.check_type} onChange={set('check_type')} title="Check type" style={{ flex: '0 0 140px' }}>
               <option value="http">HTTP</option>
               <option value="api_journey">API journey</option>
               <option value="tls">TLS cert</option>
               <option value="domain">Domain expiry</option>
               <option value="browser">Browser</option>
             </select>
-            <input className="opa-input" placeholder="Name" value={form.name} onChange={set('name')} />
-            <input className="opa-input" placeholder={needsCert ? 'hostname or https://host' : 'https://example.com/health'} value={form.url} onChange={set('url')} />
+            <input className="oui-input" placeholder="Name" value={form.name} onChange={set('name')} />
+            <input className="oui-input" placeholder={needsCert ? 'hostname or https://host' : 'https://example.com/health'} value={form.url} onChange={set('url')} />
             {form.check_type === 'http' && (
-              <select className="opa-select" value={form.method} onChange={set('method')} title="HTTP method">
+              <select className="oui-select" value={form.method} onChange={set('method')} title="HTTP method">
                 <option value="GET">GET</option>
                 <option value="HEAD">HEAD</option>
                 <option value="POST">POST</option>
                 <option value="PUT">PUT</option>
               </select>
             )}
-            <input className="opa-input" type="number" min="15" step="15" title="Interval (seconds)"
+            <input className="oui-input" type="number" min="15" step="15" title="Interval (seconds)"
               placeholder="Every (s)" value={form.interval_seconds} onChange={set('interval_seconds')}
               style={{ flex: '0 0 100px' }} />
-            <input className="opa-input" placeholder="Location (blank=agent)" value={form.location_id} onChange={set('location_id')}
+            <input className="oui-input" placeholder="Location (blank=agent)" value={form.location_id} onChange={set('location_id')}
               style={{ flex: '0 0 140px' }} />
             {needsCert && (
-              <input className="opa-input" type="number" min="1" title="Fail when days-left below this"
+              <input className="oui-input" type="number" min="1" title="Fail when days-left below this"
                 placeholder="Lead days" value={form.cert_lead_days} onChange={set('cert_lead_days')}
                 style={{ flex: '0 0 110px' }} />
             )}
             {form.check_type === 'http' && (
               <>
-                <input className="opa-input" type="number" min="0" placeholder="Status" value={form.assert_status} onChange={set('assert_status')} style={{ flex: '0 0 90px' }} />
-                <input className="opa-input" placeholder="Body contains" value={form.assert_body_contains} onChange={set('assert_body_contains')} />
+                <input className="oui-input" type="number" min="0" placeholder="Status" value={form.assert_status} onChange={set('assert_status')} style={{ flex: '0 0 90px' }} />
+                <input className="oui-input" placeholder="Body contains" value={form.assert_body_contains} onChange={set('assert_body_contains')} />
               </>
             )}
             {needsSteps && (
-              <textarea className="opa-input" rows={2} placeholder='Steps JSON: [{"name":"login","method":"POST","url":"...","extract":{"token":"json:access_token"}}]'
+              <textarea className="oui-input" rows={2} placeholder='Steps JSON: [{"name":"login","method":"POST","url":"...","extract":{"token":"json:access_token"}}]'
                 value={form.steps} onChange={set('steps')} style={{ flex: '1 1 100%', minWidth: '100%' }} />
             )}
-            <button className="opa-btn primary" disabled={busy}>
+            <button className="oui-btn is-primary" disabled={busy}>
               {editingId
                 ? <><FiCheck size={13} /> {busy ? 'Saving…' : 'Update check'}</>
                 : <><FiPlus size={13} /> {busy ? 'Saving…' : 'Add check'}</>}
             </button>
             {editingId && (
-              <button type="button" className="opa-btn ghost" onClick={resetForm}>
+              <button type="button" className="oui-btn is-ghost" onClick={resetForm}>
                 <FiX size={13} /> Cancel
               </button>
             )}
@@ -290,6 +287,9 @@ export default function Synthetics() {
         </div>
 
         <DataTable
+          loading={checksQ.loading}
+          error={checksQ.error}
+          onRetry={checksQ.reload}
           columns={columns}
           rows={checks}
           rowKey={(r) => r.id}
@@ -349,7 +349,7 @@ function CheckDetail({ check, onClose }) {
   ]
 
   const stepCols = [
-    { key: 'name', header: 'Step', render: (r) => <span className="cell-strong">{r.name || r.action}</span> },
+    { key: 'name', header: 'Step', render: (r) => <span className="oui-cell-primary">{r.name || r.action}</span> },
     { key: 'ok', header: 'OK', width: 70, render: (r) => (Number(r.ok) ? <StatusPill tone="ok">ok</StatusPill> : <StatusPill tone="error">fail</StatusPill>) },
     { key: 'latency_ms', header: 'Latency', num: true, width: 100, render: (r) => (r.latency_ms != null ? fmtMs(Number(r.latency_ms)) : '—') },
     { key: 'status_code', header: 'Status', width: 80, render: (r) => r.status_code || '—' },
@@ -368,11 +368,11 @@ function CheckDetail({ check, onClose }) {
         actions={(
           <div className="oui-row" style={{ gap: 8 }}>
             {check.id && (
-              <Link className="opa-btn ghost" to={tracesHref({ check_id: check.id })}>
+              <Link className="oui-btn is-ghost" to={tracesHref({ check_id: check.id })}>
                 Correlated traces
               </Link>
             )}
-            <button className="opa-btn ghost" onClick={onClose}>Close</button>
+            <button className="oui-btn is-ghost" onClick={onClose}>Close</button>
           </div>
         )}
       >
@@ -426,7 +426,9 @@ function CheckDetail({ check, onClose }) {
         empty={!q.loading && failures.length === 0}
         emptyText="No failures recorded"
       >
-        <DataTable columns={failCols} rows={failures} rowKey={(r, i) => i}
+        <DataTable
+          loading={q.loading}
+          onRetry={q.reload} columns={failCols} rows={failures} rowKey={(r, i) => i}
           initialSort={{ key: 'ts', dir: 'desc' }} maxHeight={300} />
       </Panel>
     </>

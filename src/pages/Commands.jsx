@@ -4,6 +4,7 @@ import { FiTerminal, FiActivity, FiClock, FiAlertTriangle } from 'react-icons/fi
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, EmptyState, StatusPill, InlineBar } from '../components/ui'
 import { fmtNum, fmtMs, fmtPct } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 // Commands — CLI / worker / cron transactions. Kept separate from HTTP endpoints
 // because they are a different population (agent popCommand / is_cli). The
@@ -26,7 +27,7 @@ export default function Commands() {
       mono: true,
       render: (r) => (
         <div className="oui-row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-          <span className="cell-strong oui-mono">{r.name || '—'}</span>
+          <span className="oui-cell-primary oui-mono">{r.name || '—'}</span>
           {(r.sample_ratio ?? 1) < 0.999 && (
             <StatusPill tone="warn">
               {fmtPct((r.sample_ratio || 0) * 100)} kept · {fmtNum(r.suppressed || 0)} suppressed
@@ -74,16 +75,12 @@ export default function Commands() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Commands</h1>
-          <div className="opa-page-sub">
-            CLI, workers and cron — named transactions, not HTTP endpoints
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Commands"
+        description="CLI, workers and cron — named transactions, not HTTP endpoints"
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Commands" icon={<FiTerminal size={12} />} value={fmtNum(rows.length)} status="neutral" />
         <KpiTile label="Requests" icon={<FiActivity size={12} />} value={fmtNum(totalRequests)} status="neutral" />
         <KpiTile
@@ -116,6 +113,9 @@ export default function Commands() {
             )
           : (
             <DataTable
+          loading={q.loading}
+          error={q.error}
+          onRetry={q.reload}
               columns={columns}
               rows={rows}
               rowKey={(r, i) => `${r.service}|${r.name}|${i}`}

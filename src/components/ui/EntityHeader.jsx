@@ -1,21 +1,28 @@
 import React from 'react'
+import { PageHeader } from '@open-family/ui'
 
-// Header for entity-detail pages (service / trace / error). Title + meta chips
-// on the left, actions/controls on the right.
-export default function EntityHeader({ title, mono = true, subtitle, badges, meta, actions }) {
+/**
+ * The header for an entity-detail page.
+ *
+ * There is one header component in the family, not two, so this is `PageHeader`
+ * with `mono` — which puts the title in the monospace face a step down, for an
+ * identifier a user might copy. The old version rendered the title in a `<span>`,
+ * so these pages had no `<h1>` and no document outline at all.
+ */
+export default function EntityHeader({
+  title, mono = true, subtitle, badges, meta, actions, breadcrumbs,
+}) {
   return (
-    <div className="opa-entity-head">
-      <div style={{ minWidth: 0 }}>
-        <div className="oui-row" style={{ gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-          <span className={mono ? 'opa-entity-title' : 'opa-entity-title'} style={!mono ? { fontFamily: 'var(--font-sans)' } : undefined}>{title}</span>
-          {badges}
-        </div>
-        {subtitle && <div className="opa-page-sub">{subtitle}</div>}
-      </div>
-      <div className="opa-entity-meta">
-        {meta}
-        {actions}
-      </div>
-    </div>
+    <PageHeader
+      breadcrumbs={breadcrumbs}
+      title={title}
+      mono={mono}
+      description={subtitle}
+      actions={
+        (badges || meta || actions)
+          ? <>{badges}{meta}{actions}</>
+          : undefined
+      }
+    />
   )
 }

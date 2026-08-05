@@ -19,8 +19,8 @@
   letter-spacing: .05em;
   color: var(--text-muted);
 }
-.alerts-field .opa-input,
-.alerts-field .opa-select { width: 100%; }
+.alerts-field .oui-input,
+.alerts-field .oui-select { width: 100%; }
 .alerts-field.wide { grid-column: span 2; }
 .alerts-form-foot {
   grid-column: 1 / -1;

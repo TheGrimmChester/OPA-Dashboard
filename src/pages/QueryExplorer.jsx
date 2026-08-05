@@ -1,8 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import axios from 'axios'
-import { FiPlay, FiSave, FiCode, FiTerminal } from 'react-icons/fi'
+import { FiPlay, FiSave, FiCode, FiTerminal, FiAlertCircle, FiRefreshCw, FiClock } from 'react-icons/fi'
+import {
+  PageHeader, Stack, Grid, Card, Table, Badge, Button, Input, Textarea, Field,
+  Row, DefinitionList, EmptyState, Skeleton,
+} from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
-import { Panel, EmptyState, DataTable, Badge } from '../components/ui'
+import { fmtNum } from '../theme/format'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -14,16 +18,14 @@ const EXAMPLES = [
   `SELECT avg(value) FROM metrics WHERE metric_name = 'nodejs.eventloop.utilization' GROUP BY service SINCE 1h`,
 ]
 
+const SIGNALS = ['spans', 'metrics', 'logs', 'rum']
+
 export default function QueryExplorer() {
   const [q, setQ] = useState(EXAMPLES[0])
   const [result, setResult] = useState({ data: null, loading: false, error: null })
   const [saveName, setSaveName] = useState('')
   const saved = useApi('/api/tql/saved', {}, { noRange: true })
   const attrs = useApi('/api/tql/attrs', {}, { noRange: true })
-
-  useEffect(() => {
-    // Warm attribute catalog on mount; ignore failures when agent is offline.
-  }, [])
 
   const run = async (asDry) => {
     setResult((s) => ({ ...s, loading: true, error: null }))
@@ -52,102 +54,226 @@ export default function QueryExplorer() {
   const cols = (result.data?.columns || Object.keys(rows[0] || {})).map((c) => ({
     key: c,
     header: c,
-    render: (r) => <span className="oui-mono">{r[c] == null ? '—' : String(r[c])}</span>,
+    mono: true,
+    render: (r) => (r[c] == null ? '—' : String(r[c])),
   }))
-  // Guard null/undefined: JSON.stringify(null) === "null" would fake an error state in Panel.
+  // Guard null/undefined: JSON.stringify(null) === "null" would fake an error state.
   const errText = result.error == null
     ? null
     : typeof result.error === 'string'
       ? result.error
       : (result.error?.error || JSON.stringify(result.error))
 
+  // The table's state is explicit, so an in-flight run never renders as "no rows".
+  const resultState = result.loading
+    ? 'loading'
+    : errText
+      ? 'error'
+      : rows.length
+        ? 'ready'
+        : 'empty'
+
+  // Three distinct emptinesses: nothing run yet, a dry run that compiled but did
+  // not execute, and a real run that matched nothing.
+  const emptyResult = result.data?.dry_run ? (
+    <EmptyState
+      inline
+      icon={<FiCode />}
+      title="Dry run — nothing executed"
+      description="The statement compiled. The SQL above is exactly what a real run would send to ClickHouse."
+    />
+  ) : result.data ? (
+    <EmptyState
+      inline
+      icon={<FiClock />}
+      title="No matching rows"
+      description="The statement ran and matched nothing. Widening SINCE, or relaxing a WHERE clause, usually resolves this."
+    />
+  ) : (
+    <EmptyState
+      inline
+      icon={<FiTerminal />}
+      title="Nothing has run yet"
+      description="SELECT … FROM spans | metrics | logs | rum WHERE … GROUP BY … SINCE 1h. Run the statement above, or start from one of the examples."
+    />
+  )
+
+  const errorResult = (
+    <EmptyState
+      inline
+      icon={<FiAlertCircle />}
+      title="The query did not run"
+      description={errText || 'The request did not complete.'}
+      actions={<Button icon={<FiRefreshCw />} onClick={() => run(false)}>Run again</Button>}
+    />
+  )
+
+  const savedList = saved.data?.queries || []
+
   return (
-    <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Query</h1>
-          <div className="opa-page-sub">Cross-signal TQL · compiles to safe ClickHouse SQL</div>
-        </div>
-      </div>
+    <Stack gap="sections">
+      <PageHeader
+        title="Query explorer"
+        description="Query traces, metrics, logs and browser sessions in one place. Every TQL statement compiles to parameterised ClickHouse SQL before it runs."
+        meta={[
+          { label: 'Signals', value: 'Spans, metrics, logs, browser' },
+          { label: 'Saved queries', value: fmtNum(savedList.length) },
+        ]}
+      />
 
-      <Panel title="Editor" icon={<FiTerminal />}>
-        <textarea
-          className="opa-input"
-          style={{ width: '100%', minHeight: 110, fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 13 }}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          spellCheck={false}
-        />
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="opa-btn" onClick={() => run(false)}><FiPlay size={14} /> Run</button>
-          <button type="button" className="opa-btn ghost" onClick={() => run(true)}><FiCode size={14} /> Dry run</button>
-          <input
-            className="opa-input"
-            placeholder="Saved name"
-            value={saveName}
-            onChange={(e) => setSaveName(e.target.value)}
-            style={{ width: 160 }}
-          />
-          <button type="button" className="opa-btn ghost" onClick={save}><FiSave size={14} /> Save</button>
-          {EXAMPLES.map((ex, i) => (
-            <button type="button" key={i} className="opa-btn ghost" onClick={() => setQ(ex)} style={{ fontSize: 12 }}>
-              Example {i + 1}
-            </button>
-          ))}
-        </div>
-      </Panel>
+      <Card
+        title="Editor"
+        description="A dry run compiles the statement and returns the SQL without executing it."
+      >
+        <Stack>
+          <Field label="TQL statement" htmlFor="opa-tql-editor">
+            <Textarea
+              id="opa-tql-editor"
+              className="oui-mono"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              spellCheck={false}
+              rows={5}
+            />
+          </Field>
 
-      <div className="opa-grid cols-2">
-        <Panel title="Result" icon={<FiPlay />} loading={result.loading} error={errText}
-          empty={!result.loading && !result.data && !result.error}
-          emptyText="Run a query to see rows">
-          {result.data?.sql && (
-            <pre className="oui-mono oui-text-muted" style={{ fontSize: 11, whiteSpace: 'pre-wrap', marginBottom: 12 }}>
-              {result.data.sql}
-              {result.data.elapsed_ms != null ? `\n/* ${result.data.elapsed_ms} ms · ${result.data.row_count || 0} rows · ${result.data.signal} */` : ''}
-            </pre>
-          )}
-          {cols.length > 0 && rows.length > 0 ? (
-            <DataTable columns={cols} rows={rows} rowKey={(_, i) => i} maxHeight={420} />
-          ) : (
-            result.data?.sql && !rows.length
-              ? <Badge>{result.data.dry_run ? 'Dry run' : 'No matching rows'}</Badge>
-              : null
-          )}
-        </Panel>
+          <Row>
+            <Button icon={<FiCode />} onClick={() => run(true)}>Dry run</Button>
+            <Button variant="primary" icon={<FiPlay />} loading={result.loading} onClick={() => run(false)}>
+              Run
+            </Button>
+            <span className="oui-spacer" />
+            <Input
+              placeholder="Saved name"
+              aria-label="Name for the saved query"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+            />
+            <Button icon={<FiSave />} onClick={save} disabled={!saveName.trim() || !q.trim()}>
+              Save
+            </Button>
+          </Row>
 
-        <Panel title="Attributes & saved" icon={<FiSave />} loading={attrs.loading || saved.loading}>
-          <div style={{ marginBottom: 12 }}>
-            {['spans', 'metrics', 'logs', 'rum'].map((sig) => (
-              <div key={sig} style={{ marginBottom: 8 }}>
-                <div className="oui-text-muted" style={{ fontSize: 11, marginBottom: 4 }}>{sig}</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {(attrs.data?.[sig] || []).map((a) => (
-                    <Badge key={a}>{a}</Badge>
-                  ))}
-                </div>
-              </div>
+          <Row>
+            <span className="oui-text-muted oui-text-sm">Start from an example</span>
+            {EXAMPLES.map((ex, i) => (
+              <Button key={i} size="sm" variant="ghost" onClick={() => setQ(ex)}>
+                Example {i + 1}
+              </Button>
             ))}
-          </div>
-          <div className="oui-text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Saved queries</div>
-          {(saved.data?.queries || []).length === 0 ? (
-            <span className="oui-text-muted">None yet</span>
-          ) : (
-            <ul style={{ margin: 0, paddingLeft: 16 }}>
-              {(saved.data.queries || []).map((s, i) => (
-                <li key={i}>
-                  <button type="button" className="opa-btn ghost" style={{ fontSize: 12 }} onClick={() => setQ(s.query_text || s.query || '')}>
+          </Row>
+        </Stack>
+      </Card>
+
+      <Grid columns={2}>
+        <Card
+          title="Result"
+          description="Rows from the last run, with the SQL the statement compiled to."
+          actions={result.data?.dry_run ? <Badge tone="accent">Dry run</Badge> : null}
+          footer={result.data?.elapsed_ms != null ? (
+            <>
+              <span>
+                Showing <strong className="oui-num">{fmtNum(rows.length)}</strong> of{' '}
+                <strong className="oui-num">{fmtNum(result.data.row_count || 0)}</strong> rows
+              </span>
+              <span className="oui-text-muted">
+                {result.data.signal} · <span className="oui-num">{fmtNum(result.data.elapsed_ms)}</span> ms
+              </span>
+            </>
+          ) : null}
+        >
+          <Stack>
+            {result.data?.sql && (
+              <pre className="oui-code" style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>
+                {result.data.sql}
+              </pre>
+            )}
+
+            {cols.length > 0 ? (
+              <Table
+                aria-label="Query result"
+                state={resultState}
+                columns={cols}
+                rows={rows}
+                getRowKey={(_, i) => String(i)}
+                emptyState={emptyResult}
+                errorState={errorResult}
+              />
+            ) : resultState === 'loading' ? (
+              <Stack>
+                <Skeleton />
+                <Skeleton width="80%" />
+                <Skeleton width="60%" />
+              </Stack>
+            ) : resultState === 'error' ? (
+              errorResult
+            ) : (
+              emptyResult
+            )}
+          </Stack>
+        </Card>
+
+        <Stack>
+          <Card title="Attributes" description="The label keys each signal reports, usable in WHERE and GROUP BY.">
+            {attrs.loading ? (
+              <Stack>
+                <Skeleton width="40%" />
+                <Skeleton />
+                <Skeleton width="70%" />
+              </Stack>
+            ) : attrs.error ? (
+              <EmptyState
+                inline
+                icon={<FiAlertCircle />}
+                title="Attributes failed to load"
+                description={String(attrs.error)}
+                actions={<Button icon={<FiRefreshCw />} onClick={attrs.reload}>Retry</Button>}
+              />
+            ) : (
+              <DefinitionList
+                items={SIGNALS.map((sig) => {
+                  const keys = attrs.data?.[sig] || []
+                  return {
+                    term: sig,
+                    value: keys.length
+                      ? <Row>{keys.map((a) => <Badge key={a} className="oui-mono">{a}</Badge>)}</Row>
+                      : <span className="oui-text-muted oui-text-sm">None reported</span>,
+                  }
+                })}
+              />
+            )}
+          </Card>
+
+          <Card title="Saved queries" description="Statements saved on this project. Selecting one loads it into the editor.">
+            {saved.loading ? (
+              <Stack>
+                <Skeleton width="60%" />
+                <Skeleton width="45%" />
+              </Stack>
+            ) : savedList.length === 0 ? (
+              <EmptyState
+                inline
+                icon={<FiSave />}
+                title="No saved queries yet"
+                description="Name a statement in the editor and save it to keep it here."
+              />
+            ) : (
+              <Row>
+                {savedList.map((s, i) => (
+                  <Button
+                    key={s.query_id ?? i}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setQ(s.query_text || s.query || '')}
+                  >
                     {s.name || s.query_id}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {!cols.length && !result.data && (
-            <EmptyState icon={<FiTerminal />} title="Tips" hint="SELECT … FROM spans|metrics|logs|rum WHERE … GROUP BY … SINCE 1h" />
-          )}
-        </Panel>
-      </div>
-    </div>
+                  </Button>
+                ))}
+              </Row>
+            )}
+          </Card>
+        </Stack>
+      </Grid>
+    </Stack>
   )
 }

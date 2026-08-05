@@ -12,19 +12,23 @@ function HelpIcon({ text, className = '', position = 'top' }) {
       const tooltip = tooltipRef.current
       const icon = iconRef.current
       
-      // Check if tooltip is inside navigation menu
+      // Inside the rail or a menu the tooltip has to escape an ancestor that
+      // clips and creates its own stacking context. `.main-nav` and
+      // `.nav-group-dropdown` were the old hand-rolled shell's classes and no
+      // longer exist anywhere, so this branch had gone dead — it now matches the
+      // kit's sidebar and menu surfaces.
       const wrapper = tooltip.parentElement
-      const isInNav = wrapper?.closest('.main-nav') || wrapper?.closest('.nav-group-dropdown')
-      
+      const isInNav = wrapper?.closest('.oui-sidebar') || wrapper?.closest('.oui-menu')
+
       // Use requestAnimationFrame to ensure DOM is updated
       requestAnimationFrame(() => {
         if (!tooltip || !icon) return
-        
+
         const iconRect = icon.getBoundingClientRect()
-        
-        // Always ensure high z-index
-        tooltip.style.zIndex = '999999'
-        
+
+        // The stacking order is a token (--z-overlay), declared in the stylesheet.
+        // A literal here would out-rank every layer the design system defines.
+
         // For navigation menu, use fixed positioning to escape z-index context
         if (isInNav) {
           // Reset all positioning styles from CSS classes

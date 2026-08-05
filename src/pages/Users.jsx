@@ -5,6 +5,7 @@ import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 import './Users.css'
+import { PageHeader } from '@open-family/ui'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const ROLES = ['viewer', 'editor', 'admin']
@@ -71,7 +72,7 @@ export default function Users() {
   }
 
   const columns = [
-    { key: 'username', header: 'Username', mono: true, render: (u) => <span className="cell-strong oui-mono">{u.username}</span>, sortValue: (u) => u.username },
+    { key: 'username', header: 'Username', mono: true, render: (u) => <span className="oui-cell-primary oui-mono">{u.username}</span>, sortValue: (u) => u.username },
     { key: 'email', header: 'Email', render: (u) => u.email || <span className="oui-text-muted">—</span>, sortValue: (u) => u.email || '' },
     { key: 'role', header: 'Role', sortValue: (u) => u.role, render: (u) => (
       <div className="oui-row">
@@ -96,20 +97,18 @@ export default function Users() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Users &amp; Roles</h1>
-          <div className="opa-page-sub">{fmtNum(users.length)} user{users.length === 1 ? '' : 's'} across {ROLES.length} roles</div>
-        </div>
-        <div className="oui-row">
+      <PageHeader
+        title="Users &amp; Roles"
+        description={<>{fmtNum(users.length)} user{users.length === 1 ? '' : 's'} across {ROLES.length} roles</>}
+        actions={<><div className="oui-row">
           <button className="users-icon-btn" style={{ color: 'var(--text-secondary)' }} onClick={() => q.reload()} title="Refresh"><FiRefreshCw size={15} /></button>
-        </div>
-      </div>
+        </div></>}
+      />
 
       {actionError && <div className="opa-errstate">{String(actionError)}</div>}
 
       {/* Role distribution KPIs */}
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Total users" icon={<FiUsers size={12} />} value={fmtNum(users.length)} status="neutral" />
         <KpiTile label="Admins" icon={<FiShield size={12} />} value={fmtNum(counts.admin || 0)} status={counts.admin ? 'warn' : 'neutral'} />
         <KpiTile label="Editors" icon={<FiEdit3 size={12} />} value={fmtNum(counts.editor || 0)} status="ok" />
@@ -138,6 +137,9 @@ export default function Users() {
         emptyText="No users."
       >
         <DataTable
+          loading={q.loading}
+          error={q.error ? loadMessage(q.error) : null}
+          onRetry={q.reload}
           columns={columns} rows={users} rowKey={(u) => u.username}
           initialSort={{ key: 'username', dir: 'asc' }}
           emptyText="No users."

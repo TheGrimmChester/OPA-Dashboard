@@ -3,8 +3,8 @@ import {
   FiCpu, FiHardDrive, FiGlobe, FiChevronRight, FiChevronDown,
   FiChevronsDown, FiChevronsUp, FiLayers, FiAlertTriangle, FiInfo,
 } from 'react-icons/fi'
+import { Button, EmptyState, Select } from '@open-family/ui'
 import TraceTabFilters from './TraceTabFilters'
-import { EmptyState } from './ui'
 import { VIZ_V2_ENABLED } from '../utils/chartTheme'
 import { detectOpType, typeFill, typeLabel, fnKindLabel } from '../utils/opTypes'
 import { fmtMs, fmtBytes, fmtNum, fmtPct } from '../theme/format'
@@ -32,6 +32,12 @@ const KIND_TAG = { 1: 'internal', 2: 'method' }
 // trace must not seed thousands of expanded rows.
 const AUTO_EXPAND_LEVELS = 3
 const AUTO_EXPAND_MAX = 400
+// Sibling ordering. "Newest first" reverses the depth-stable sort, which puts the
+// most recent call at each level at the top of its group.
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+]
 // Exact counts for the truncation notice. fmtNum's 1-decimal k/M rounding would
 // render the cap and the real total identically ("200.0k of 200.0k").
 const exact = (n) => n.toLocaleString('en-US')
@@ -332,14 +338,17 @@ function ExecutionStackTree({ callStack }) {
         <div className="stack-tree-head">
           <h3 className="stack-tree-title"><FiLayers />Execution stack</h3>
         </div>
+        {/* "Filtered to nothing" and "never recorded" are different problems with
+            different fixes, so they are two different empty states. */}
         <EmptyState
+          inline
           icon={<FiLayers />}
           title={filters.enabled && stats.calls > 0
-            ? 'No calls match the current thresholds'
+            ? 'No call matches the current thresholds'
             : 'No execution stack recorded'}
-          hint={filters.enabled && stats.calls > 0
-            ? `${fmtNum(stats.calls)} calls were filtered out - lower the thresholds above`
-            : 'The agent captured no call stack for this trace'}
+          description={filters.enabled && stats.calls > 0
+            ? `All ${fmtNum(stats.calls)} calls in this trace fell below the thresholds above. Lowering one of them brings them back.`
+            : 'The agent captured no call stack for this trace, so there is no execution to walk. Profiling has to be enabled on the service for one to be recorded.'}
         />
       </div>
     )
@@ -372,21 +381,18 @@ function ExecutionStackTree({ callStack }) {
           )}
         </div>
         <div className="stack-tree-actions">
-          <select
-            className="opa-select"
+          <Select
             value={sortOrder}
+            options={SORT_OPTIONS}
             onChange={(e) => setSortOrder(e.target.value)}
             aria-label="Sibling order"
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
-          <button onClick={expandAll} className="opa-btn" type="button">
-            <FiChevronsDown />Expand all
-          </button>
-          <button onClick={collapseAll} className="opa-btn" type="button">
-            <FiChevronsUp />Collapse all
-          </button>
+          />
+          <Button size="sm" icon={<FiChevronsDown />} onClick={expandAll}>
+            Expand all
+          </Button>
+          <Button size="sm" icon={<FiChevronsUp />} onClick={collapseAll}>
+            Collapse all
+          </Button>
         </div>
       </div>
 

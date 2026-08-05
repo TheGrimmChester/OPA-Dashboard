@@ -1,29 +1,6 @@
-.copy-to-clipboard {
-  background: transparent;
-  border: 1px solid var(--border-default);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: var(--text-base);
-  transition: all var(--dur-base) var(--ease);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--text-primary);
-}
-
-.copy-to-clipboard:hover {
-  background-color: var(--surface-3);
-  border-color: var(--border-strong);
-}
-
-.copy-to-clipboard.copied {
-  background-color: var(--good-bg);
-  border-color: var(--good-text);
+/* The kit's Button owns the shape, the height and the focus ring. All this file
+   adds is the "copied" confirmation tone, which the kit has no variant for. The
+   tick icon carries the same message, so colour is never the only signal. */
+.opa-copy.is-copied {
   color: var(--good-text);
 }
-
-.copy-to-clipboard span {
-  margin-left: var(--space-1);
-}
-

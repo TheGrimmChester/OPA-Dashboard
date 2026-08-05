@@ -78,7 +78,7 @@ function CallgraphWindowCompareLive({ service, transaction }) {
       sortable: true,
       render: (r) => (
         <div>
-          <div className="cell-strong">{r.class ? `${r.class}::${r.function}` : r.function}</div>
+          <div className="oui-cell-primary">{r.class ? `${r.class}::${r.function}` : r.function}</div>
           <div className="oui-text-muted cg-diff-meta">{r.call_site || r.path_hash}</div>
         </div>
       ),
@@ -141,8 +141,8 @@ function CallgraphWindowCompareLive({ service, transaction }) {
         </span>
       }>
         <div className="oui-row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-          <input className="opa-input" placeholder="service" value={svc} onChange={(e) => setSvc(e.target.value)} style={{ minWidth: 160 }} />
-          <input className="opa-input" placeholder="transaction (span name)" value={txn} onChange={(e) => setTxn(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
+          <input className="oui-input" placeholder="service" value={svc} onChange={(e) => setSvc(e.target.value)} style={{ minWidth: 160 }} />
+          <input className="oui-input" placeholder="transaction (span name)" value={txn} onChange={(e) => setTxn(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
         </div>
       </Panel>
 

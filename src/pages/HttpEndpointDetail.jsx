@@ -5,6 +5,7 @@ import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill } from '../components/ui'
 import { fmtMs, fmtBytes, fmtNum, fmtPct, fmtAgo, latencyStatus, errorRateStatus, tierColor, statusColor } from '../theme/format'
 import './SqlQueryDetail.css'
+import { PageHeader } from '@open-family/ui'
 
 export default function HttpEndpointDetail() {
   const { endpoint: rawEndpoint } = useParams()
@@ -71,17 +72,13 @@ export default function HttpEndpointDetail() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div style={{ minWidth: 0 }}>
-          <h1 className="opa-page-title oui-mono" style={{ wordBreak: 'break-word' }}>
-            {method && <StatusPill tone="neutral">{method}</StatusPill>}{' '}
-            {endpoint || '—'}
-          </h1>
-          <div className="opa-page-sub">HTTP endpoint{agg?.service ? ` · ${agg.service}` : ''}</div>
-        </div>
-        <div className="opa-entity-meta oui-row" style={{ gap: 'var(--space-3)' }}>
+      <PageHeader
+        title={<>{method && <StatusPill tone="neutral">{method}</StatusPill>}{' '}
+            {endpoint || '—'}</>}
+        description={<>HTTP endpoint{agg?.service ? ` · ${agg.service}` : ''}</>}
+        actions={<><div className="opa-entity-meta oui-row" style={{ gap: 'var(--space-3)' }}>
           <button
-            className="opa-btn"
+            className="oui-btn is-secondary"
             onClick={() => navigate('/traces?' + new URLSearchParams({ filter }).toString())}
             title="Open every matching trace in the Trace Explorer"
           >
@@ -90,12 +87,12 @@ export default function HttpEndpointDetail() {
           <Link to="/http" className="opa-sqlq-back">
             <FiArrowLeft size={12} /> back to External HTTP
           </Link>
-        </div>
-      </div>
+        </div></>}
+      />
 
       {/* Aggregate KPIs (from the list row) — accurate rollups over the range. */}
       {agg && (
-        <div className="opa-grid cols-4">
+        <div className="oui-grid is-4">
           <KpiTile label="Calls" icon={<FiActivity size={12} />} value={fmtNum(agg.call_count)} unit="calls" status="neutral" />
           <KpiTile label="Avg latency" icon={<FiClock size={12} />} value={fmtMs(agg.avg_duration)} status={latencyStatus(agg.avg_duration)}
             footer={agg.max_duration != null && <span className="oui-text-muted" style={{ fontSize: 'var(--text-2xs)' }}>max {fmtMs(agg.max_duration)}</span>} />
@@ -119,6 +116,9 @@ export default function HttpEndpointDetail() {
         )}
       >
         <DataTable
+          loading={t.loading}
+          error={t.error}
+          onRetry={t.reload}
           columns={traceColumns}
           rows={traces}
           rowKey={(r) => r.trace_id}

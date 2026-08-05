@@ -9,6 +9,7 @@ import { fmtMs, fmtNum, fmtBytes, fmtAgo, fmtPct, latencyStatus, errorRateStatus
 import { rumSessionHref, sessionTracesHref, traceHref, tracesHref } from '../utils/entityLinks'
 import SessionReplayPlayer from '../components/SessionReplayPlayer'
 import './BrowserRum.css'
+import { PageHeader } from '@open-family/ui'
 
 const ell = { display: 'block', maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
@@ -246,7 +247,7 @@ export default function BrowserRum() {
   const mobileSessionRows = mobileSessions.data?.sessions || []
   const mobileCrashRows = mobileCrashes.data?.crashes || mobileCrashes.data?.rows || (Array.isArray(mobileCrashes.data) ? mobileCrashes.data : [])
   const mobileSessionCols = [
-    { key: 'session_id', header: 'Session', render: (r) => <span className="oui-mono cell-strong">{String(r.session_id || '').slice(0, 16)}</span> },
+    { key: 'session_id', header: 'Session', render: (r) => <span className="oui-mono oui-cell-primary">{String(r.session_id || '').slice(0, 16)}</span> },
     { key: 'platform', header: 'Platform', render: (r) => <Badge>{r.platform || '—'}</Badge> },
     { key: 'crashes', header: 'Crashes', num: true, sortValue: (r) => Number(r.crashes), render: (r) => <span style={{ color: 'var(--critical-text)' }}>{fmtNum(r.crashes)}</span> },
     { key: 'app_version', header: 'App', render: (r) => <span className="oui-text-muted">{r.app_version || '—'}</span> },
@@ -254,7 +255,7 @@ export default function BrowserRum() {
     { key: 'last_seen', header: 'Last seen', num: true, render: (r) => <span className="oui-text-muted">{fmtAgo(r.last_seen)}</span> },
   ]
   const mobileCrashCols = [
-    { key: 'exception_name', header: 'Exception', render: (r) => <span className="cell-strong">{r.exception_name || r.crash_type || '—'}</span> },
+    { key: 'exception_name', header: 'Exception', render: (r) => <span className="oui-cell-primary">{r.exception_name || r.crash_type || '—'}</span> },
     { key: 'exception_message', header: 'Message', render: (r) => <span className="oui-text-muted" style={ell}>{r.exception_message || '—'}</span> },
     { key: 'platform', header: 'Platform', render: (r) => <Badge>{r.platform || '—'}</Badge> },
     { key: 'session_id', header: 'Session', render: (r) => <span className="oui-mono">{String(r.session_id || '').slice(0, 14)}</span> },
@@ -329,12 +330,10 @@ export default function BrowserRum() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Browser</h1>
-          <div className="opa-page-sub">Real user monitoring · Core Web Vitals (field p75) · mobile crash bridge</div>
-        </div>
-      </div>
+      <PageHeader
+        title="Browser"
+        description="Real user monitoring · Core Web Vitals (field p75) · mobile crash bridge"
+      />
 
       {/* Core Web Vitals — CrUX-style field data */}
       <Panel
@@ -376,10 +375,10 @@ export default function BrowserRum() {
       </Panel>
 
       {/* SLO budgets + facets */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="CWV budgets (p75)" icon={<FiZap />} loading={slo.loading} error={slo.error}
           empty={!slo.loading && !slo.data?.slo} emptyText="No SLO data yet — ingest field beacons first">
-          <div className="opa-grid cols-3">
+          <div className="oui-grid is-3">
             {['lcp', 'inp', 'cls'].map((k) => {
               const s = slo.data?.slo?.[k] || {}
               const tone = ratingTone(s.rating)
@@ -414,7 +413,7 @@ export default function BrowserRum() {
       </div>
 
       {/* Attribution + by-route */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Vital attribution" icon={<FiActivity />} loading={attribution.loading} error={attribution.error}
           empty={!attribution.loading && !(attr.lcp_elements || []).length && !(attr.inp_targets || []).length && !(attr.cls_sources || []).length}
           emptyText="No element attribution yet — ensure opa-rum.js ≥ 0.3 ships web_vitals_elements">
@@ -435,13 +434,16 @@ export default function BrowserRum() {
         </Panel>
         <Panel title="CWV by route" icon={<FiLayers />} flush loading={attribution.loading} error={attribution.error}
           empty={!attribution.loading && routeRows.length === 0} emptyText="No route breakdown yet">
-          <DataTable columns={routeCols} rows={routeRows} rowKey={(r, i) => i}
+          <DataTable
+          loading={attribution.loading}
+          error={attribution.error}
+          onRetry={attribution.reload} columns={routeCols} rows={routeRows} rowKey={(r, i) => i}
             initialSort={{ key: 'views', dir: 'desc' }} maxHeight={280} />
         </Panel>
       </div>
 
       {/* KPI tiles */}
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Page views" icon={<FiEye size={12} />} value={fmtNum(d.total_page_views || 0)}
           unit="views" status="neutral" />
         <KpiTile label="JS errors" icon={<FiAlertTriangle size={12} />} value={fmtNum(d.total_errors || 0)}
@@ -480,7 +482,9 @@ export default function BrowserRum() {
               hint={tab === 'mobile'
                 ? 'POST mobile crashes with session_id to /api/mobile/crashes — link appears here.'
                 : 'Add the opa-rum.js snippet (<script src=&quot;/opa-rum.js&quot; …>) to your app to start capturing resource timing, AJAX calls and page views.'} />
-          : <DataTable columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
+          : <DataTable
+          loading={tableLoading}
+          error={tab === 'mobile' ? mobileSessions.error : detail.error} columns={activeCols} rows={activeRows} rowKey={(r, i) => i}
               onRowClick={tab === 'ajax' ? drillAjax
                 : tab === 'sessions' ? (r) => selectSession(r.session_id)
                   : tab === 'mobile' ? (r) => setMobileSession(r.session_id === mobileSession ? '' : r.session_id)
@@ -494,8 +498,11 @@ export default function BrowserRum() {
           loading={mobileCrashes.loading} error={mobileCrashes.error}
           empty={!mobileCrashes.loading && mobileCrashRows.length === 0}
           emptyText="No crash detail rows for this session_id"
-          actions={<button type="button" className="opa-btn ghost" onClick={() => setMobileSession('')}>Clear</button>}>
-          <DataTable columns={mobileCrashCols} rows={mobileCrashRows} rowKey={(r, i) => i} maxHeight={360} />
+          actions={<button type="button" className="oui-btn is-ghost" onClick={() => setMobileSession('')}>Clear</button>}>
+          <DataTable
+          loading={mobileCrashes.loading}
+          error={mobileCrashes.error}
+          onRetry={mobileCrashes.reload} columns={mobileCrashCols} rows={mobileCrashRows} rowKey={(r, i) => i} maxHeight={360} />
         </Panel>
       )}
 
@@ -507,11 +514,14 @@ export default function BrowserRum() {
           emptyText="No events recorded for this session"
           actions={
             <div className="oui-row" style={{ gap: 8 }}>
-              <Link className="opa-btn ghost" to={sessionTracesHref(session)}>Correlated traces</Link>
-              <button className="opa-btn ghost" onClick={() => setSession(null)}>Close</button>
+              <Link className="oui-btn is-ghost" to={sessionTracesHref(session)}>Correlated traces</Link>
+              <button className="oui-btn is-ghost" onClick={() => setSession(null)}>Close</button>
             </div>
           }>
-          <DataTable columns={timelineCols} rows={timelineRows} rowKey={(r, i) => i}
+          <DataTable
+          loading={sessionDetail.loading}
+          error={sessionDetail.error}
+          onRetry={sessionDetail.reload} columns={timelineCols} rows={timelineRows} rowKey={(r, i) => i}
             onRowClick={(r) => r.trace_id && navigate(traceHref(r.trace_id))}
             maxHeight={420} />
           {(replay.data?.chunks || []).length > 0 && (

@@ -3,6 +3,7 @@ import { FiCloud, FiZap, FiThermometer, FiDollarSign } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, StatusPill, Badge } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtAgo } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 /** Serverless / FaaS pillar. */
 export default function Serverless() {
@@ -17,7 +18,7 @@ export default function Serverless() {
   const rows = inv.data?.invocations || []
 
   const coldCols = [
-    { key: 'function_name', header: 'Function', render: (r) => <span className="oui-mono cell-strong">{r.function_name}</span> },
+    { key: 'function_name', header: 'Function', render: (r) => <span className="oui-mono oui-cell-primary">{r.function_name}</span> },
     { key: 'invocations', header: 'Invocations', num: true, render: (r) => fmtNum(r.invocations) },
     { key: 'cold_starts', header: 'Cold', num: true, render: (r) => fmtNum(r.cold_starts) },
     { key: 'cold_start_rate_pct', header: 'Cold %', num: true, render: (r) => {
@@ -53,14 +54,12 @@ export default function Serverless() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Serverless</h1>
-          <div className="opa-page-sub">Cold starts · billed duration · memory overprovisioning</div>
-        </div>
-      </div>
+      <PageHeader
+        title="Serverless"
+        description="Cold starts · billed duration · memory overprovisioning"
+      />
 
-      <div className="opa-grid cols-4">
+      <div className="oui-grid is-4">
         <KpiTile label="Invocations" icon={<FiCloud size={12} />} value={fmtNum(s.invocations || 0)} status="neutral" />
         <KpiTile label="Cold starts" icon={<FiThermometer size={12} />} value={fmtNum(s.cold_starts || 0)} status={Number(s.cold_start_rate_pct) >= 10 ? 'warn' : 'neutral'}
           footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>{fmtPct(s.cold_start_rate_pct || 0)} rate</span>} />
@@ -69,20 +68,29 @@ export default function Serverless() {
           footer={<span className="oui-text-muted" style={{ fontSize: 11 }}>obs {fmtMs(s.avg_duration_ms || 0)}</span>} />
       </div>
 
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Cold start by function" icon={<FiThermometer />} flush loading={cold.loading} error={cold.error}
           empty={!cold.loading && functions.length === 0} emptyText="No FaaS invocations yet — wrap handlers with wrapLambdaHandler">
-          <DataTable columns={coldCols} rows={functions} rowKey={(r) => r.function_name} maxHeight={320} />
+          <DataTable
+          loading={cold.loading}
+          error={cold.error}
+          onRetry={cold.reload} columns={coldCols} rows={functions} rowKey={(r) => r.function_name} maxHeight={320} />
         </Panel>
         <Panel title="Memory cost signal" icon={<FiDollarSign />} flush loading={cost.loading} error={cost.error}
           empty={!cost.loading && costRows.length === 0} emptyText="No memory telemetry yet">
-          <DataTable columns={costCols} rows={costRows} rowKey={(r) => r.function_name} maxHeight={320} />
+          <DataTable
+          loading={cost.loading}
+          error={cost.error}
+          onRetry={cost.reload} columns={costCols} rows={costRows} rowKey={(r) => r.function_name} maxHeight={320} />
         </Panel>
       </div>
 
       <Panel title="Recent invocations" icon={<FiCloud />} flush loading={inv.loading} error={inv.error}
         empty={!inv.loading && rows.length === 0} emptyText="No invocations recorded">
-        <DataTable columns={invCols} rows={rows} rowKey={(r, i) => `${r.trace_id || r.function_name}:${i}`} maxHeight={420} />
+        <DataTable
+          loading={inv.loading}
+          error={inv.error}
+          onRetry={inv.reload} columns={invCols} rows={rows} rowKey={(r, i) => `${r.trace_id || r.function_name}:${i}`} maxHeight={420} />
       </Panel>
     </div>
   )

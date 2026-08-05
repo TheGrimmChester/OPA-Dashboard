@@ -1,25 +1,64 @@
 import React from 'react'
+import { Badge as FamilyBadge } from '@open-family/ui'
 
-// Neutral chip.
+/** The legacy tone vocabulary, mapped onto the family's reserved status roles. */
+const TONE = {
+  ok: 'good',
+  healthy: 'good',
+  up: 'good',
+  success: 'good',
+  warn: 'warning',
+  warning: 'warning',
+  degraded: 'warning',
+  error: 'critical',
+  critical: 'critical',
+  down: 'critical',
+  unhealthy: 'critical',
+  alert: 'critical',
+  info: 'accent',
+  neutral: 'neutral',
+}
+
+const toTone = (tone) => TONE[String(tone || '').toLowerCase()] || 'neutral'
+
+/** A neutral chip. */
 export function Badge({ children, title }) {
-  return <span className="opa-badge" title={title}>{children}</span>
+  return <FamilyBadge title={title}>{children}</FamilyBadge>
 }
 
-// Status pill: tone in ok|warn|error|neutral|info|alert.
+/** A status chip. The tone carries the state and the text names it. */
 export function StatusPill({ tone = 'neutral', children, title }) {
-  return <span className={`opa-pill ${tone}`} title={title}>{children}</span>
+  return <FamilyBadge tone={toTone(tone)} title={title}>{children}</FamilyBadge>
 }
 
-// Colored health dot; tone in ok|warn|error|neutral, optional pulse.
-export function HealthDot({ tone = 'neutral', pulse = false, title }) {
-  const color = { ok: 'var(--good-text)', warn: 'var(--warn-text)', error: 'var(--critical-text)', down: 'var(--critical-text)', neutral: 'var(--text-muted)' }[tone] || 'var(--text-muted)'
-  return <span className={`opa-dot ${pulse ? 'pulse' : ''}`} style={{ background: color, color }} title={title} />
+/**
+ * Health, as a chip rather than a dot.
+ *
+ * This was a bare coloured dot whose only label was a `title` attribute — colour
+ * alone, and a tooltip that no keyboard or screen-reader user reaches. A status
+ * hue in this system never travels without a word, so the tone now ships with
+ * text: the caller's `title` when there is one, otherwise the tone itself.
+ */
+export function HealthDot({ tone = 'neutral', title, children }) {
+  return (
+    <FamilyBadge tone={toTone(tone)} title={title}>
+      {children || title || String(tone)}
+    </FamilyBadge>
+  )
 }
 
-// Language / framework chips with a small colored dot.
-const LANG_COLOR = { php: '#8892BF', go: '#00ADD8', javascript: '#F7DF1E', python: '#3776AB', java: '#E76F00', ruby: '#CC342D', node: '#83CD29' }
+/**
+ * Language and framework chip.
+ *
+ * The per-language brand colours are gone. They were seven hard-coded hexes that
+ * collided with the chart palette, sat at unknown contrast on both surfaces, and
+ * encoded nothing a reader needs — the language is written right there.
+ */
 export function LanguageBadge({ language, version }) {
   if (!language) return null
-  const c = LANG_COLOR[String(language).toLowerCase()] || 'var(--text-muted)'
-  return <span className="opa-badge"><span className="opa-dot" style={{ background: c, width: 7, height: 7 }} />{language}{version ? ` ${version}` : ''}</span>
+  return (
+    <FamilyBadge>
+      {version ? `${language} ${version}` : String(language)}
+    </FamilyBadge>
+  )
 }

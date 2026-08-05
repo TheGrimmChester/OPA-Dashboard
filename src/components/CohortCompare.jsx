@@ -80,7 +80,7 @@ export default function CohortCompare() {
   }
 
   const columns = useMemo(() => [
-    { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="cell-strong">{r.label}</span> },
+    { key: 'label', header: 'Metric', sortable: false, render: (r) => <span className="oui-cell-primary">{r.label}</span> },
     ...groups.map((g, gi) => ({
       key: `g${gi}`,
       num: true,
@@ -88,7 +88,7 @@ export default function CohortCompare() {
       header: (
         <span>
           {g.value || '—'} <span className="oui-text-muted" style={{ fontWeight: 'var(--weight-regular)' }}>n={fmtNum(g.count)}</span>
-          {gi === 0 && groups.length > 1 && <span className="opa-badge" style={{ marginLeft: 6 }}>baseline</span>}
+          {gi === 0 && groups.length > 1 && <span className="oui-badge" style={{ marginLeft: 6 }}>baseline</span>}
           {g.value && (
             <span
               role="link"
@@ -121,18 +121,18 @@ export default function CohortCompare() {
       <Panel title="Cohort" icon={<FiLayers size={14} />}>
         <div className="oui-row" style={{ gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label className="cc-field">Split by
-            <select className="opa-select" value={dimension} onChange={(e) => setDimension(e.target.value)}>
+            <select className="oui-select" value={dimension} onChange={(e) => setDimension(e.target.value)}>
               {DIMENSIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
             </select>
           </label>
           <label className="cc-field">Service
-            <select className="opa-select" value={service} onChange={(e) => { setService(e.target.value); setName('') }}>
+            <select className="oui-select" value={service} onChange={(e) => { setService(e.target.value); setName('') }}>
               <option value="">All services</option>
               {services.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </label>
           <label className="cc-field">Transaction
-            <select className="opa-select" value={name} onChange={(e) => setName(e.target.value)}>
+            <select className="oui-select" value={name} onChange={(e) => setName(e.target.value)}>
               <option value="">All transactions</option>
               {names.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -192,7 +192,10 @@ export default function CohortCompare() {
         </div>
 
         <div style={{ marginTop: 'var(--space-4)' }}>
-          <DataTable columns={columns} rows={METRICS} rowKey={(r) => r.key} />
+          <DataTable
+          loading={q.loading}
+          error={q.error}
+          onRetry={q.reload} columns={columns} rows={METRICS} rowKey={(r) => r.key} />
         </div>
       </Panel>
     </>

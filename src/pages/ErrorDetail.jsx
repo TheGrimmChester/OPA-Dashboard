@@ -51,11 +51,11 @@ export default function ErrorDetail() {
         }
         actions={
           <div className="oui-row" style={{ gap: 8 }}>
-            <Link className="opa-btn ghost" to={tracesHref({ service: service || undefined, status: 'error' })}>
+            <Link className="oui-btn is-ghost" to={tracesHref({ service: service || undefined, status: 'error' })}>
               Error traces
             </Link>
             {service && (
-              <Link className="opa-btn ghost" to={logsHref({ service, level: 'ERROR' })}>Logs</Link>
+              <Link className="oui-btn is-ghost" to={logsHref({ service, level: 'ERROR' })}>Logs</Link>
             )}
             <Link to="/errors" className="oui-row" style={{ gap: 'var(--space-1)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
               <FiChevronLeft size={13} /> Errors
@@ -65,7 +65,7 @@ export default function ErrorDetail() {
       />
 
       {/* KPIs */}
-      <div className="opa-grid cols-3">
+      <div className="oui-grid is-3">
         <KpiTile
           label="Occurrences"
           icon={<FiHash size={12} />}

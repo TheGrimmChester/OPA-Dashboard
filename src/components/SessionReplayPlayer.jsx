@@ -154,7 +154,7 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
 
       {Object.keys(byType).length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          <button type="button" className={`opa-btn ghost ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
+          <button type="button" className={`oui-btn is-ghost ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
             all {events.length}
           </button>
           {legendTypes.map((t) => (
@@ -162,7 +162,7 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
               <button
                 key={t}
                 type="button"
-                className={`opa-btn ghost ${filter === t ? 'active' : ''}`}
+                className={`oui-btn is-ghost ${filter === t ? 'active' : ''}`}
                 onClick={() => setFilter(t)}
                 title={`${byType[t]} ${t} markers`}
               >
@@ -183,7 +183,7 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
       {filtered.length > 0 && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <button type="button" className="opa-btn ghost" onClick={() => setPlaying((p) => !p)} title={playing ? 'Pause' : 'Play'}>
+            <button type="button" className="oui-btn is-ghost" onClick={() => setPlaying((p) => !p)} title={playing ? 'Pause' : 'Play'}>
               {playing ? <FiPause /> : <FiPlay />}
             </button>
             <input
@@ -200,7 +200,7 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
             </span>
           </div>
 
-          <div className="opa-grid cols-2" style={{ gap: 12 }}>
+          <div className="oui-grid is-2" style={{ gap: 12 }}>
             <div>
               <div className="oui-text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Current event</div>
               <pre className="oui-mono" style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', maxHeight: 160, overflow: 'auto' }}>
@@ -209,7 +209,7 @@ export default function SessionReplayPlayer({ sessionId, ajaxEvents, ajaxRows })
               {nearestAjax?.trace_id && (
                 <button
                   type="button"
-                  className="opa-btn ghost"
+                  className="oui-btn is-ghost"
                   style={{ marginTop: 8 }}
                   onClick={() => navigate(`/traces/${encodeURIComponent(nearestAjax.trace_id)}`)}
                 >

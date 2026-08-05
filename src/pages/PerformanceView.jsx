@@ -4,6 +4,7 @@ import { useApi } from '../hooks/useApi'
 import { useTimeRange } from '../contexts/TimeRangeContext'
 import { Panel, KpiTile, TimeSeriesChart } from '../components/ui'
 import { fmtMs, fmtBytes, fmtNum, fmtPct, latencyStatus, errorRateStatus } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 const hhmm = (t) => (t || '').slice(11, 16)
 
@@ -94,28 +95,24 @@ export default function PerformanceView() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Performance</h1>
-          <div className="opa-page-sub">
-            Response times, throughput &amp; network across {pm.length} interval{pm.length === 1 ? '' : 's'}
-            {compare && <span className="oui-text-muted"> · overlaying previous period (dashed)</span>}
-          </div>
-        </div>
-        <div className="oui-row">
+      <PageHeader
+        title="Performance"
+        description={<>Response times, throughput &amp; network across {pm.length} interval{pm.length === 1 ? '' : 's'}
+            {compare && <span className="oui-text-muted"> · overlaying previous period (dashed)</span>}</>}
+        actions={<><div className="oui-row">
           <button
-            className={`opa-btn ${compare ? 'primary' : 'ghost'}`}
+            className={`oui-btn is-secondary ${compare ? 'primary' : 'ghost'}`}
             onClick={() => setCompare((c) => !c)}
             aria-pressed={compare}
             title="Overlay the immediately-preceding period of equal length as dashed lines"
           >
             <FiBarChart2 size={14} /> Compare to previous period
           </button>
-        </div>
-      </div>
+        </div></>}
+      />
 
       {/* KPIs */}
-      <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+      <div className="oui-grid is-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile label="p95 response" icon={<FiZap size={12} />} value={fmtMs(p95Cur)} status={latencyStatus(p95Cur)}
           spark={pm.map((m) => m.p95)} sparkColor="var(--chart-2)" current={p95Cur} previous={p95Prev} invert />
         <KpiTile label="p99 response" icon={<FiClock size={12} />} value={fmtMs(p99Cur)} status={latencyStatus(p99Cur)}
@@ -130,7 +127,7 @@ export default function PerformanceView() {
       </div>
 
       {/* Charts */}
-      <div className="opa-grid cols-2">
+      <div className="oui-grid is-2">
         <Panel title="Response time percentiles" icon={<FiClock />} loading={perf.loading} error={perf.error} empty={perfEmpty}>
           <TimeSeriesChart data={pm} series={[
             { key: 'p50', name: 'p50', color: 'var(--chart-1)', type: 'line' },

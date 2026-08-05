@@ -1,131 +1,29 @@
 import React from 'react'
-import { FiZap } from 'react-icons/fi'
-import { formatPercentageDiff } from '../../utils/comparisonUtils'
-import './ComparisonTable.css'
+import ComparisonTable, { summaryItem } from './ComparisonTable'
+import { fmtMs, fmtPct } from '../../theme/format'
 
-function formatDuration(ms) {
-  if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`
-  if (ms < 1000) return `${ms.toFixed(2)}ms`
-  return `${(ms / 1000).toFixed(2)}s`
-}
-
-function CacheComparisonTable({ comparison }) {
-  if (!comparison || !comparison.comparison || comparison.comparison.length === 0) {
-    return (
-      <div className="comparison-empty">
-        <FiZap className="empty-icon" />
-        <p>No cache operations to compare</p>
-      </div>
-    )
-  }
-  
+/** Cache operations, side by side across two traces. */
+export default function CacheComparisonTable({ comparison }) {
   return (
-    <div className="comparison-table-container">
-      <div className="comparison-summary">
-        <div className="summary-item">
-          <span className="summary-label">Total Operations:</span>
-          <span className="summary-value">
-            {comparison.total1} → {comparison.total2}
-            <span className={`summary-diff ${comparison.totalDiff.changeType}`}>
-              ({formatPercentageDiff(comparison.totalDiff.diff)})
-            </span>
-          </span>
-        </div>
-        <div className="summary-item">
-          <span className="summary-label">Hit Rate:</span>
-          <span className="summary-value">
-            {comparison.hitRate1.toFixed(1)}% → {comparison.hitRate2.toFixed(1)}%
-            <span className={`summary-diff ${comparison.hitRateDiff.changeType}`}>
-              ({formatPercentageDiff(comparison.hitRateDiff.diff)})
-            </span>
-          </span>
-        </div>
-      </div>
-      
-      <div className="comparison-table-wrapper">
-        <table className="comparison-table">
-          <thead>
-            <tr>
-              <th>Operation Type</th>
-              <th>Trace 1</th>
-              <th>Trace 2</th>
-              <th>Difference</th>
-            </tr>
-          </thead>
-          <tbody>
-            {comparison.comparison.map((item, idx) => (
-              <tr key={idx} className={item.existsInBoth ? '' : 'new-or-removed'}>
-                <td className="type-cell">
-                  <code>{item.type}</code>
-                </td>
-                <td className="value-cell">
-                  <div className="value-group">
-                    <div className="value-item">
-                      <span className="value-label">Count:</span>
-                      <span className="value-number">{item.count1}</span>
-                    </div>
-                    <div className="value-item">
-                      <span className="value-label">Hits:</span>
-                      <span className="value-number">{item.hits1}</span>
-                    </div>
-                    <div className="value-item">
-                      <span className="value-label">Misses:</span>
-                      <span className="value-number">{item.misses1}</span>
-                    </div>
-                    <div className="value-item">
-                      <span className="value-label">Duration:</span>
-                      <span className="value-number">{formatDuration(item.duration1)}</span>
-                    </div>
-                  </div>
-                </td>
-                <td className="value-cell">
-                  <div className="value-group">
-                    <div className="value-item">
-                      <span className="value-label">Count:</span>
-                      <span className="value-number">{item.count2}</span>
-                    </div>
-                    <div className="value-item">
-                      <span className="value-label">Hits:</span>
-                      <span className="value-number">{item.hits2}</span>
-                    </div>
-                    <div className="value-item">
-                      <span className="value-label">Misses:</span>
-                      <span className="value-number">{item.misses2}</span>
-                    </div>
-                    <div className="value-item">
-                      <span className="value-label">Duration:</span>
-                      <span className="value-number">{formatDuration(item.duration2)}</span>
-                    </div>
-                  </div>
-                </td>
-                <td className="diff-cell">
-                  <div className="diff-group">
-                    <div className={`diff-item ${item.countDiff.changeType}`}>
-                      <span className="diff-label">Count:</span>
-                      <span className="diff-value">{formatPercentageDiff(item.countDiff.diff)}</span>
-                    </div>
-                    <div className={`diff-item ${item.hitsDiff.changeType}`}>
-                      <span className="diff-label">Hits:</span>
-                      <span className="diff-value">{formatPercentageDiff(item.hitsDiff.diff)}</span>
-                    </div>
-                    <div className={`diff-item ${item.missesDiff.changeType}`}>
-                      <span className="diff-label">Misses:</span>
-                      <span className="diff-value">{formatPercentageDiff(item.missesDiff.diff)}</span>
-                    </div>
-                    <div className={`diff-item ${item.durationDiff.changeType}`}>
-                      <span className="diff-label">Duration:</span>
-                      <span className="diff-value">{formatPercentageDiff(item.durationDiff.diff)}</span>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <ComparisonTable
+      comparison={comparison}
+      label="Cache operation comparison"
+      emptyTitle="No cache operations to compare"
+      emptyDescription="Neither trace recorded a cache operation, so there is nothing to line up."
+      summary={[
+        summaryItem('Total operations', comparison?.total1, comparison?.total2, comparison?.totalDiff),
+        summaryItem('Hit rate', fmtPct(comparison?.hitRate1), fmtPct(comparison?.hitRate2), comparison?.hitRateDiff, false),
+      ]}
+      identity={{
+        header: 'Operation type',
+        render: (r) => <span className="oui-mono">{r.type}</span>,
+      }}
+      metrics={[
+        { key: 'count', label: 'Count', left: (r) => r.count1, right: (r) => r.count2, change: (r) => r.countDiff },
+        { key: 'duration', label: 'Duration', left: (r) => fmtMs(r.duration1), right: (r) => fmtMs(r.duration2), change: (r) => r.durationDiff },
+        { key: 'hits', label: 'Hits', left: (r) => r.hits1, right: (r) => r.hits2, change: (r) => r.hitsDiff, lowerIsBetter: false },
+        { key: 'misses', label: 'Misses', left: (r) => r.misses1, right: (r) => r.misses2, change: (r) => r.missesDiff },
+      ]}
+    />
   )
 }
-
-export default CacheComparisonTable
-

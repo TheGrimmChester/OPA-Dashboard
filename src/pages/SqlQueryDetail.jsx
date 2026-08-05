@@ -68,7 +68,7 @@ export default function SqlQueryDetail() {
       />
 
       {/* Cost KPIs */}
-      <div className="opa-grid cols-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+      <div className="oui-grid is-4" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <KpiTile
           label="Executions" icon={<FiActivity size={12} />}
           value={fmtNum(d.total_executions || 0)} unit="runs" status="neutral"
@@ -128,6 +128,9 @@ export default function SqlQueryDetail() {
         emptyText="No sample traces recorded for this query"
       >
         <DataTable
+          loading={t.loading}
+          error={t.error}
+          onRetry={t.reload}
           columns={traceColumns}
           rows={traces}
           rowKey={(r) => r.trace_id}

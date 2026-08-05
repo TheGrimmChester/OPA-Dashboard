@@ -5,6 +5,7 @@ import axios from 'axios'
 import { useApi } from '../hooks/useApi'
 import { Panel, KpiTile, DataTable, InlineBar, Badge, StatusPill, SegmentedControl } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
+import { PageHeader } from '@open-family/ui'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -76,7 +77,7 @@ export default function ErrorsInbox() {
         <div className="oui-row" style={{ minWidth: 0, gap: 8 }}>
           <Badge title={r?.error_type}>{r?.error_type || 'Error'}</Badge>
           <span
-            className="cell-strong oui-mono"
+            className="oui-cell-primary oui-mono"
             title={r?.error_message}
             style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
           >
@@ -90,7 +91,7 @@ export default function ErrorsInbox() {
       header: 'Service',
       sortValue: (r) => r?.service || '',
       render: (r) => (r?.service
-        ? <button type="button" className="opa-btn ghost oui-mono" style={{ padding: '0 4px' }}
+        ? <button type="button" className="oui-btn is-ghost oui-mono" style={{ padding: '0 4px' }}
             onClick={(e) => { e.stopPropagation(); navigate(`/services/${encodeURIComponent(r.service)}`) }}>
             {r.service}
           </button>
@@ -138,15 +139,15 @@ export default function ErrorsInbox() {
         return (
           <div className="oui-row" style={{ gap: 6, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
             {r?.status !== 'resolved' && (
-              <button className="opa-btn ghost" style={btnStyle} disabled={busy} title="Mark resolved"
+              <button className="oui-btn is-ghost" style={btnStyle} disabled={busy} title="Mark resolved"
                 onClick={(e) => changeStatus(gid, 'resolved', e)}><FiCheck size={12} /> Resolve</button>
             )}
             {r?.status !== 'ignored' && (
-              <button className="opa-btn ghost" style={btnStyle} disabled={busy} title="Ignore this group"
+              <button className="oui-btn is-ghost" style={btnStyle} disabled={busy} title="Ignore this group"
                 onClick={(e) => changeStatus(gid, 'ignored', e)}><FiSlash size={12} /> Ignore</button>
             )}
             {r?.status !== 'unresolved' && (
-              <button className="opa-btn ghost" style={btnStyle} disabled={busy} title="Reopen"
+              <button className="oui-btn is-ghost" style={btnStyle} disabled={busy} title="Reopen"
                 onClick={(e) => changeStatus(gid, 'unresolved', e)}><FiRotateCcw size={12} /> Reopen</button>
             )}
           </div>
@@ -157,19 +158,15 @@ export default function ErrorsInbox() {
 
   return (
     <div className="oui-stack">
-      <div className="opa-page-head">
-        <div>
-          <h1 className="opa-page-title">Errors</h1>
-          <div className="opa-page-sub">
-            {totalGroups} error group{totalGroups === 1 ? '' : 's'} across {affectedServices} service{affectedServices === 1 ? '' : 's'}
-          </div>
-        </div>
-        <div className="oui-row" style={{ gap: 'var(--space-3)' }}>
+      <PageHeader
+        title="Errors"
+        description={<>{totalGroups} error group{totalGroups === 1 ? '' : 's'} across {affectedServices} service{affectedServices === 1 ? '' : 's'}</>}
+        actions={<><div className="oui-row" style={{ gap: 'var(--space-3)' }}>
           <SegmentedControl options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} />
           <label className="oui-row" style={{ gap: 6, fontSize: 'var(--text-xs)' }}>
             <FiFilter size={12} className="oui-text-muted" />
             <select
-              className="opa-select"
+              className="oui-select"
               value={service}
               onChange={(e) => setService(e.target.value)}
             >
@@ -179,10 +176,10 @@ export default function ErrorsInbox() {
               ))}
             </select>
           </label>
-        </div>
-      </div>
+        </div></>}
+      />
 
-      <div className="opa-grid cols-3">
+      <div className="oui-grid is-3">
         <KpiTile label="Error groups" icon={<FiLayers size={12} />} value={fmtNum(totalGroups)} unit="unique" status="neutral" />
         <KpiTile label="Occurrences" icon={<FiRepeat size={12} />} value={fmtNum(totalOccurrences)} unit="events" status={totalOccurrences > 0 ? 'error' : 'ok'} />
         <KpiTile label="Affected services" icon={<FiServer size={12} />} value={fmtNum(affectedServices)} status={affectedServices > 0 ? 'warn' : 'ok'} />
@@ -201,6 +198,9 @@ export default function ErrorsInbox() {
           : <span className="oui-text-muted" style={{ fontSize: 'var(--text-xs)' }}>click a row to analyze</span>}
       >
         <DataTable
+          loading={q.loading}
+          error={q.error}
+          onRetry={q.reload}
           columns={columns}
           rows={rows}
           rowKey={(r) => r?.error_id}
