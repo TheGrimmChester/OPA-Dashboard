@@ -11,7 +11,7 @@ import {
   Button, Segmented, ToastProvider, useTheme, useSidebarCollapsed,
 } from '@open-family/ui'
 
-import { NAV_SECTIONS, OVERVIEW_ITEM } from '../../nav'
+import { NAV_SECTIONS, OVERVIEW_ITEM, routeHasTimeRange } from '../../nav'
 import { useI18n, LocaleSwitcher } from '../../contexts/I18nContext'
 import { useTimeRange } from '../../contexts/TimeRangeContext'
 import { useTenant } from '../../contexts/TenantContext'
@@ -133,6 +133,12 @@ export default function Shell({ children }) {
   // An empty role means auth is off (local smoke runs); show everything then.
   const isAdmin = role === 'admin' || role === ''
 
+  // The range switch is per route, not global. It used to render on every page,
+  // including Settings and the catalogue, where nothing reads `from`/`to` — an
+  // operator reported it as a control that does nothing. Refresh below stays
+  // unconditional: it is a separate concern, and every page can be re-fetched.
+  const showTimeRange = routeHasTimeRange(pathname)
+
   const sections = useMemo(
     () => NAV_SECTIONS.map((section) => ({
       id: section.id,
@@ -191,7 +197,7 @@ export default function Shell({ children }) {
             center={<SearchTrigger onOpen={() => setPaletteOpen(true)} />}
             right={
               <>
-                {isCustom ? (
+                {showTimeRange && (isCustom ? (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -208,7 +214,7 @@ export default function Shell({ children }) {
                     onChange={setRange}
                     items={ranges.map((r) => ({ value: r.value, label: r.label }))}
                   />
-                )}
+                ))}
                 <Button
                   variant="ghost"
                   aria-label="Refresh"
