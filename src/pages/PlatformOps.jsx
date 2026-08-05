@@ -10,7 +10,7 @@ import {
 import { useApi } from '../hooks/useApi'
 import { useTableSort } from '../hooks/useTableSort'
 import {
-  fmtMs, fmtNum, fmtPct, fmtBytes, statusColor, latencyStatus, errorRateStatus,
+  fmtMs, fmtNum, fmtPct, fmtBytes, statusColor, errorRateStatus,
 } from '../theme/format'
 
 const TABS = [

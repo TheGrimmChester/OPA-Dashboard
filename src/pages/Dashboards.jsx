@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import axios from 'axios'
 import { FiLayout, FiPlus, FiSave, FiPlay } from 'react-icons/fi'
 import { Panel, EmptyState, KpiTile, DataTable, Badge } from '../components/ui'
-import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import {
   PageHeader, Button, Field, Input, useToast,
 } from '@open-family/ui'
@@ -101,7 +101,7 @@ export default function Dashboards() {
       })
       toast.push('Dashboard created')
       navigate(`/dashboards/${res.data.id}`)
-    } catch (e) {
+    } catch {
       toast.push('Create failed', { tone: 'error' })
     }
   }

@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   FiFileText, FiBarChart2, FiSearch, FiX, FiChevronLeft, FiChevronRight,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import {
-  Panel, DataTable, StatusPill, SegmentedControl, TimeSeriesChart, EntityChip,
-} from '../components/ui'
+import { Panel, DataTable, StatusPill, SegmentedControl, EntityChip } from '../components/ui'
 import { fmtNum, fmtAgo } from '../theme/format'
 import { serviceHref, traceHref } from '../utils/entityLinks'
 import './Logs.css'

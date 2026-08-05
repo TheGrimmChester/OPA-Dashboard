@@ -143,6 +143,33 @@ describe('one scale, not two', () => {
   })
 })
 
+describe('status marks that are too close to distinguish are not drawn adjacent', () => {
+  // --st-serious and --st-warn are ~13.6 ΔE apart under normal vision, below the
+  // design system's own 15 floor, so the two cannot be told apart reliably when
+  // they meet as plain colour fills — a stacked severity bar, a segmented status
+  // strip, touching chips. This product uses neither as a fill: chart marks use
+  // --st-critical and --st-good, and every status chip carries its own text.
+  //
+  // Asserted here so a future stacked severity bar has to make a deliberate
+  // decision instead of quietly reintroducing the ambiguity. The fix belongs
+  // upstream in the kit, so this does not patch the tokens locally.
+  it('never references the two status mark steps that sit below the separation floor', () => {
+    const hits = []
+    for (const [file, text] of cleaned) {
+      for (const m of text.matchAll(/var\(\s*--st-(serious|warn)\b/g)) {
+        hits.push(`${relative(root, file)}: --st-${m[1]}`)
+      }
+    }
+    expect(hits).toEqual([])
+  })
+
+  it('finds those names when they are actually present', () => {
+    // Negative control for the matcher above.
+    const sample = 'background: var(--st-serious); border-color: var(--st-warn);'
+    expect([...sample.matchAll(/var\(\s*--st-(serious|warn)\b/g)]).toHaveLength(2)
+  })
+})
+
 describe('the accent belongs to the product, not the page', () => {
   it('no stylesheet or component hard-codes a family accent hex', () => {
     // #7C6CFF was shared by four of the five dashboards, which is why three of

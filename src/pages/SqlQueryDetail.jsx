@@ -1,12 +1,11 @@
 import React from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   FiDatabase, FiActivity, FiClock, FiZap, FiTrendingUp, FiArrowLeft, FiCode, FiBarChart2, FiGitBranch,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import {
-  Panel, KpiTile, TimeSeriesChart, EntityHeader, EmptyState, DataTable,
-} from '../components/ui'
+import { Panel, KpiTile, EntityHeader, EmptyState, DataTable } from '../components/ui'
 import { fmtMs, fmtNum, fmtAgo, latencyStatus, statusColor } from '../theme/format'
 import './SqlQueryDetail.css'
 

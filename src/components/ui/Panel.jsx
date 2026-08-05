@@ -16,7 +16,10 @@ import { Card, Button, EmptyState, Skeleton } from '@open-family/ui'
  * shape of the final rows, which a generic card-level spinner cannot do.
  */
 export default function Panel({
-  title, icon, description, actions, children,
+  title, description, actions, children,
+  // Accepted so call sites convert independently. The family's card titles are
+  // text: an icon beside one adds a thing to scan and names nothing.
+  icon: _icon,
   loading, error, empty, emptyText = 'No data', onRetry,
   flush = false, className = '', expandable = true,
 }) {

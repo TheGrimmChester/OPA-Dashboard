@@ -59,10 +59,10 @@ export function useTableSort(rows, columns, initial = null) {
   const sortableColumns = useMemo(
     () => columns.map((column) => {
       if (column.sortable === false) {
-        const { sortValue, ...rest } = column
+        const { sortValue: _omit, ...rest } = column
         return rest
       }
-      const { sortValue, ...rest } = column
+      const { sortValue: _omit, ...rest } = column
       return {
         ...rest,
         sortable: true,

@@ -33,7 +33,9 @@
 .opa-prof-search .oui-input-group { width: 100%; }
 .opa-prof-search .oui-input { width: 100%; padding-right: var(--space-8); }
 .opa-prof-search .oui-input::-webkit-search-cancel-button { display: none; }
-.opa-prof-search-clear { position: absolute; right: var(--space-1); }
+/* Absolutely positioned, so it is out of the wrapper's flex flow and has to
+   centre itself against the field. */
+.opa-prof-search-clear { position: absolute; right: var(--space-1); top: 50%; transform: translateY(-50%); }
 .opa-prof-sum { font-size: var(--text-xs); white-space: nowrap; }
 .opa-prof-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
 

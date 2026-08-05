@@ -3,7 +3,16 @@ import { Badge } from '@open-family/ui'
 import ComparisonTable, { summaryItem } from './ComparisonTable'
 import { fmtMs, fmtBytes } from '../../theme/format'
 
-/** Status codes as badges. The tone follows the class, and the code is the label. */
+/**
+ * Status codes as badges. The tone follows the response class, and the code
+ * itself is the label.
+ *
+ * The label is load-bearing, not decoration. A 3xx badge and a 4xx badge can sit
+ * side by side here, and those two status steps are closer together than the
+ * design system's own separation floor — so if the hue were the only signal, a
+ * reader could not reliably tell them apart. The number carries the identity and
+ * the colour is a second encoding of it.
+ */
 function StatusCodes({ codes }) {
   const entries = Object.entries(codes || {})
   if (entries.length === 0) return <span className="oui-text-muted">—</span>

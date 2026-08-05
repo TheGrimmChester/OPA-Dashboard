@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import TimeSeriesChart from '../components/ui/TimeSeriesChart'
 import { Link, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   FiRadio, FiPlus, FiCheck, FiX, FiEdit2, FiTrash2, FiActivity, FiAlertTriangle, FiClock, FiShield,
 } from 'react-icons/fi'
 import { useApi } from '../hooks/useApi'
-import {
-  Panel, KpiTile, DataTable, StatusPill, HealthDot, TimeSeriesChart, Badge,
-} from '../components/ui'
+import { Panel, KpiTile, DataTable, StatusPill, HealthDot, Badge } from '../components/ui'
 import { fmtMs, fmtNum, fmtPct, fmtAgo, latencyStatus, statusColor } from '../theme/format'
 import { tracesHref, traceHref } from '../utils/entityLinks'
 import './Synthetics.css'
