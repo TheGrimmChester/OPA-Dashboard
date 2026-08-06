@@ -9,7 +9,9 @@ RUN npm ci
 COPY . .
 # Single API base — OPA-Hub only (empty = same-origin nginx path proxy).
 ARG VITE_API_URL=
+ARG VITE_OAM_URL=
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_OAM_URL=$VITE_OAM_URL
 RUN npm run build
 
 # Runtime stage

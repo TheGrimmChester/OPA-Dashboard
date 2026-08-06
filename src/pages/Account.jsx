@@ -1,13 +1,16 @@
 import React from 'react'
-import { PageHeader, Stack, Card, Badge, DefinitionList } from '@open-family/ui'
+import { PageHeader, Stack, Card, Badge, DefinitionList, Button } from '@open-family/ui'
 import { useTenant } from '../contexts/TenantContext'
+
+const OAM_URL = (import.meta.env.VITE_OAM_URL || '').replace(/\/$/, '')
+const connectorsHref = OAM_URL ? `${OAM_URL}/connectors` : ''
 
 /**
  * Account — the signed-in identity and the tenant this dashboard is scoped to.
  *
- * Source-control connectors and review-provider credentials belong to the review
- * product; application-security settings to the security product. This page is
- * deliberately only identity and scope.
+ * Source-control connectors live in Account Manager; review-provider credentials
+ * belong to the review product; application-security settings to the security
+ * product. This page is deliberately only identity and scope.
  */
 export default function Account() {
   const { organizationId } = useTenant()
@@ -43,10 +46,19 @@ export default function Account() {
 
       <Card title="Where other settings live">
         <p className="oui-text-secondary">
-          API keys and user accounts are managed under Administration. Anything that
-          belongs to another product in the family — review connectors, security
-          policies — is configured in that product.
+          API keys and user accounts are managed under Administration. GitHub
+          connectors are installed and claimed in Account Manager
+          {connectorsHref ? '' : ' (OAM `/connectors`)'}. Security policies live
+          in the security product; review providers and Repo Watch live in the
+          review product.
         </p>
+        {connectorsHref ? (
+          <p style={{ marginTop: 'var(--space-3)' }}>
+            <Button href={connectorsHref} target="_blank" rel="noreferrer" variant="ghost">
+              Manage connectors in Account Manager
+            </Button>
+          </p>
+        ) : null}
       </Card>
     </Stack>
   )
