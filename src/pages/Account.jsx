@@ -46,7 +46,8 @@ export default function Account() {
 
       <Card title="Where other settings live">
         <p className="oui-text-secondary">
-          API keys and user accounts are managed under Administration. GitHub
+          API keys and user accounts are managed in Account Manager
+          {OAM_URL ? '' : ' (OAM)'}. GitHub
           connectors are installed and claimed in Account Manager
           {connectorsHref ? '' : ' (OAM `/connectors`)'}. Security policies live
           in the security product; review providers and Repo Watch live in the
