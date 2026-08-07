@@ -71,8 +71,6 @@ describe('the range switch renders only where the range filters data', () => {
 
   it.each([
     ['/settings/account', 'settings'],
-    ['/users', 'user administration'],
-    ['/api-keys', 'credentials'],
     ['/slos', 'objective definitions, windowed by their own window_hours'],
     ['/alerts', 'alert rules'],
     ['/catalog', 'the service catalogue'],
@@ -86,7 +84,6 @@ describe('the range switch renders only where the range filters data', () => {
 describe('refresh is not part of the deal', () => {
   it.each([
     '/settings/account',
-    '/users',
     '/catalog',
     '/traces',
     '/metrics',

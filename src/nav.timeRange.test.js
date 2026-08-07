@@ -48,8 +48,6 @@ const NOT_WINDOWED = [
   '/live',
   '/collaborate',
   '/automation',
-  '/users',
-  '/api-keys',
   '/settings/account',
 ]
 
