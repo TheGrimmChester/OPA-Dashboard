@@ -21,13 +21,13 @@ export function formatApiError(e) {
 }
 
 // Fetch a JSON endpoint, auto-merging the global time range (from/to) and
-// re-fetching when the range, the selected tenant, the manual refresh tick, or
+// re-fetching when the range, the selected tenant scope (org + project selection), the manual refresh tick, or
 // params change. The tenant travels as request headers (see TenantContext), so it
 // has to be an explicit dependency here or a switch would never re-query.
 // opts.noRange disables from/to injection. opts.skip defers the call.
 export function useApi(path, params = {}, opts = {}) {
   const { from, to, interval, tick } = useTimeRange()
-  const { organizationId, projectId } = useTenant()
+  const { scopeKey } = useTenant()
   const [state, setState] = useState({ data: null, loading: true, error: null })
   const paramsKey = JSON.stringify(params)
   const skip = opts.skip
@@ -47,7 +47,7 @@ export function useApi(path, params = {}, opts = {}) {
       setState({ data: null, loading: false, error: formatApiError(e) })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, paramsKey, from, to, interval, skip, opts.noRange, organizationId, projectId])
+  }, [path, paramsKey, from, to, interval, skip, opts.noRange, scopeKey])
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -60,7 +60,7 @@ export function useApi(path, params = {}, opts = {}) {
 
 // Poll a path on an interval (for Live views). Returns {data,loading,error}.
 export function usePolling(path, intervalMs, params = {}, opts = {}) {
-  const { organizationId, projectId } = useTenant()
+  const { scopeKey } = useTenant()
   const [state, setState] = useState({ data: null, loading: true, error: null })
   const ref = useRef()
   const paramsKey = JSON.stringify(params)
@@ -78,6 +78,6 @@ export function usePolling(path, intervalMs, params = {}, opts = {}) {
     if (!opts.paused) ref.current = setInterval(fetchOnce, intervalMs)
     return () => { alive = false; clearInterval(ref.current) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, paramsKey, intervalMs, opts.paused, organizationId, projectId])
+  }, [path, paramsKey, intervalMs, opts.paused, scopeKey])
   return state
 }

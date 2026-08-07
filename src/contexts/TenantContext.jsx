@@ -1,48 +1,89 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import axios from 'axios'
+import { projectScopeHeaders } from '@open-family/ui'
+
+import {
+  ALL,
+  isMutatingMethod,
+  isProjectDirectoryRequest,
+  persistProjectSelection,
+  projectIdFromSelection,
+  readProjectSelection,
+  tenantScopeKey,
+} from '../utils/projectScope'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+const SELECTION_KEY = 'project_selection'
+const PROJECT_KEY = 'project_id'
 
-// "all" is the unscoped selection and the default one: nothing is filtered until
-// the user picks a concrete org/project. It is NOT a stand-in for the
-// "default-org"/"default-project" tenant, which is a real org/project you can
-// select like any other.
-const ALL = 'all'
+export { ALL }
 
 // One-time migration: "default-org"/"default-project" used to BE the
-// "nothing selected" sentinel. It is now an ordinary org/project, so a pair
-// persisted before this change would silently scope the dashboard to it. Reset
-// that exact pair to "All" — once, keyed on a flag, so deliberately selecting
-// Default Organization afterwards still sticks.
+// "nothing selected" sentinel. Reset that exact pair to UI All — once.
 const MIGRATED_KEY = 'tenant_picker_default_to_all_v1'
 if (!localStorage.getItem(MIGRATED_KEY)) {
   const storedOrg = localStorage.getItem('organization_id')
-  const storedProj = localStorage.getItem('project_id')
+  const storedProj = localStorage.getItem(PROJECT_KEY)
   if ((!storedOrg || storedOrg === 'default-org') && (!storedProj || storedProj === 'default-project')) {
     localStorage.setItem('organization_id', ALL)
-    localStorage.setItem('project_id', ALL)
+    persistProjectSelection(SELECTION_KEY, PROJECT_KEY, ALL)
+  } else if (storedProj && storedProj !== ALL && !localStorage.getItem(SELECTION_KEY)) {
+    persistProjectSelection(SELECTION_KEY, PROJECT_KEY, [storedProj])
   }
   localStorage.setItem(MIGRATED_KEY, '1')
 }
 
-// Live tenant selection, read by the axios interceptor below. Kept outside React
-// state so the interceptor always sees the current values: an interceptor
-// registered from an effect would still carry the previous tenant when a child's
-// effect fires its refetch (child effects run before the provider's).
 const tenantHeaders = {
   organizationId: localStorage.getItem('organization_id') || ALL,
-  projectId: localStorage.getItem('project_id') || ALL,
+  selection: readProjectSelection(SELECTION_KEY, PROJECT_KEY),
+  enabledProjectIds: [],
 }
 
-// Registered once, at import time, so requests fired by the very first render
-// already carry the tenant headers.
+function stampTenant(config) {
+  config.headers = config.headers || {}
+  delete config.headers['X-Project-ID']
+  delete config.headers['X-Project-IDs']
+  delete config.headers['X-Organization-ID']
+
+  if (tenantHeaders.organizationId) {
+    config.headers['X-Organization-ID'] = tenantHeaders.organizationId
+  }
+
+  const url = config.url || ''
+  if (isProjectDirectoryRequest(url)) return
+
+  if (isMutatingMethod(config.method)) {
+    if (
+      tenantHeaders.selection !== ALL
+      && Array.isArray(tenantHeaders.selection)
+      && tenantHeaders.selection.length === 1
+    ) {
+      config.headers['X-Project-ID'] = tenantHeaders.selection[0]
+    }
+    return
+  }
+
+  if (
+    tenantHeaders.selection === ALL
+    && (!tenantHeaders.enabledProjectIds || tenantHeaders.enabledProjectIds.length === 0)
+  ) {
+    return
+  }
+
+  Object.assign(
+    config.headers,
+    projectScopeHeaders(tenantHeaders.selection, tenantHeaders.enabledProjectIds),
+  )
+}
+
 axios.interceptors.request.use((config) => {
-  // "all" is sent explicitly — the backend reads it as "do not filter this
-  // dimension", per dimension, so org=X + project=all filters on the org alone.
-  if (tenantHeaders.organizationId) config.headers['X-Organization-ID'] = tenantHeaders.organizationId
-  if (tenantHeaders.projectId) config.headers['X-Project-ID'] = tenantHeaders.projectId
+  stampTenant(config)
   return config
 })
+
+function projectRowId(p) {
+  return String(p.project_id || p.id || '')
+}
 
 const TenantContext = createContext()
 
@@ -58,36 +99,31 @@ export const TenantProvider = ({ children }) => {
   const [organizationId, setOrganizationId] = useState(() => {
     return localStorage.getItem('organization_id') || ALL
   })
-  const [projectId, setProjectId] = useState(() => {
-    return localStorage.getItem('project_id') || ALL
-  })
+  const [selection, setSelectionState] = useState(() => readProjectSelection(SELECTION_KEY, PROJECT_KEY))
   const [organizations, setOrganizations] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(false)
 
-  // Load organizations on mount. Projects come from the effect below, which
-  // already runs on mount — calling it here too would double-fetch.
+  const projectId = projectIdFromSelection(selection)
+  const scopeKey = useMemo(
+    () => tenantScopeKey(organizationId, selection),
+    [organizationId, selection],
+  )
+
   useEffect(() => {
     loadOrganizations()
   }, [])
 
-  // Update the project menu when the organization changes. With the org on "All"
-  // this lists projects across every org, so a project is still selectable.
   useEffect(() => {
     loadProjects(organizationId)
   }, [organizationId])
 
-  // `loading` is part of the context value, so it has to actually track the
-  // in-flight fetches — it was exposed but never set, leaving every consumer to
-  // read a permanent false.
   const loadOrganizations = async () => {
     setLoading(true)
     try {
       const token = localStorage.getItem('auth_token')
       const response = await axios.get(`${API_URL}/api/organizations`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       })
       setOrganizations(response.data.organizations || [])
     } catch (error) {
@@ -100,18 +136,22 @@ export const TenantProvider = ({ children }) => {
   const loadProjects = async (orgId = null) => {
     try {
       const token = localStorage.getItem('auth_token')
-      // Org ids are base64 (URL alphabet + "=" padding), so encode them.
       const org = orgId || organizationId
-      const response = await axios.get(`${API_URL}/api/projects?organization_id=${encodeURIComponent(org)}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const params = new URLSearchParams({ product: 'opa' })
+      if (org && org !== ALL) params.set('organization_id', org)
+      // OAM directory proxy (may be missing until proxies land — wire client path anyway).
+      const response = await axios.get(`${API_URL}/api/oam/projects?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
       const fetchedProjects = response.data.projects || []
       setProjects(fetchedProjects)
+      const ids = fetchedProjects.map(projectRowId).filter(Boolean)
+      tenantHeaders.enabledProjectIds = ids
       return fetchedProjects
     } catch (error) {
       console.error('Failed to load projects:', error)
+      setProjects([])
+      tenantHeaders.enabledProjectIds = []
       return []
     }
   }
@@ -119,27 +159,30 @@ export const TenantProvider = ({ children }) => {
   const selectOrganization = (orgId) => {
     setOrganizationId(orgId)
     localStorage.setItem('organization_id', orgId)
-    // Switching org always resets the project to "All": the previous project
-    // belongs to the old org, and "all of the new org" is the only selection
-    // that is meaningful without knowing its project list yet. The effect above
-    // reloads the project menu for the new org.
-    setProjectId(ALL)
-    localStorage.setItem('project_id', ALL)
+    const saved = persistProjectSelection(SELECTION_KEY, PROJECT_KEY, ALL)
+    tenantHeaders.selection = saved
+    setSelectionState(saved)
   }
 
-  const selectProject = (projId) => {
-    setProjectId(projId)
-    localStorage.setItem('project_id', projId)
-  }
+  const setProjectSelection = useCallback((next) => {
+    const saved = persistProjectSelection(SELECTION_KEY, PROJECT_KEY, next)
+    tenantHeaders.selection = saved
+    setSelectionState(saved)
+  }, [])
 
-  // Publish the selection to the interceptor synchronously, during render, so a
-  // child that refetches on this same commit sends the new tenant.
+  const selectProject = useCallback((projId) => {
+    setProjectSelection(!projId || projId === ALL ? ALL : [String(projId)])
+  }, [setProjectSelection])
+
   tenantHeaders.organizationId = organizationId
-  tenantHeaders.projectId = projectId
+  tenantHeaders.selection = selection
 
-  const value = {
+  const value = useMemo(() => ({
     organizationId,
     projectId,
+    selection,
+    scopeKey,
+    setProjectSelection,
     organizations,
     projects,
     loading,
@@ -147,8 +190,11 @@ export const TenantProvider = ({ children }) => {
     selectProject,
     loadOrganizations,
     loadProjects,
-  }
+    hasConcreteProject: selection !== ALL && selection.length === 1,
+  }), [
+    organizationId, projectId, selection, scopeKey, setProjectSelection, organizations, projects,
+    loading, selectOrganization, selectProject,
+  ])
 
   return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>
 }
-

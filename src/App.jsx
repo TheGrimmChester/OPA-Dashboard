@@ -43,8 +43,6 @@ const ErrorDetail = lazy(() => import('./pages/ErrorDetail'))
 const KeyTransactions = lazy(() => import('./pages/KeyTransactions'))
 const Commands = lazy(() => import('./pages/Commands'))
 const Login = lazy(() => import('./pages/Login'))
-const Users = lazy(() => import('./pages/Users'))
-const ApiKeys = lazy(() => import('./pages/ApiKeys'))
 const Account = lazy(() => import('./pages/Account'))
 const Slos = lazy(() => import('./pages/Slos'))
 const Alerts = lazy(() => import('./pages/Alerts'))
@@ -220,8 +218,6 @@ function AppRoutes() {
       <Route path="/automation" element={<Automation />} />
 
       {/* Administration */}
-      <Route path="/users" element={<Users />} />
-      <Route path="/api-keys" element={<ApiKeys />} />
       <Route path="/settings/account" element={<Account />} />
 
       <Route path="*" element={<Navigate to="/overview" replace />} />

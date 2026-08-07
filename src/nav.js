@@ -3,7 +3,7 @@ import {
   FiAlertCircle, FiFileText, FiBell, FiCrosshair, FiZap, FiRadio, FiTool,
   FiDatabase, FiExternalLink, FiShare2, FiGlobe, FiMonitor, FiTrendingUp,
   FiColumns, FiHardDrive, FiCloud, FiBox, FiBarChart2, FiSearch, FiLayout,
-  FiRss, FiUserPlus, FiLayers, FiRepeat, FiUsers, FiKey, FiUser,
+  FiRss, FiUserPlus, FiLayers, FiRepeat, FiUser,
 } from 'react-icons/fi'
 
 /**
@@ -106,7 +106,6 @@ export const NAV_SECTIONS = [
     items: [
       // Was FiRadio, shared with Synthetic monitoring.
       { to: '/live', labelKey: 'nav.live', icon: FiRss },
-      // Was FiUsers, shared with Users and roles.
       { to: '/collaborate', labelKey: 'nav.collaborate', icon: FiUserPlus },
       // Was FiHardDrive, shared with Hosts.
       // /api/stats is windowed (Hub internal/query/ops_reads.go); /api/health is
@@ -120,8 +119,6 @@ export const NAV_SECTIONS = [
     id: 'administration',
     labelKey: 'nav.group.admin',
     items: [
-      { to: '/users', labelKey: 'nav.users', icon: FiUsers, adminOnly: true },
-      { to: '/api-keys', labelKey: 'nav.apiKeys', icon: FiKey, adminOnly: true },
       { to: '/settings/account', labelKey: 'nav.account', icon: FiUser },
     ],
   },

@@ -8,6 +8,7 @@ import {
   AppShell as FamilyShell, PageContent, Sidebar, TopBar, TopBarDivider,
   OrgSwitcher, SearchTrigger, UserMenu,
   Menu, MenuAnchor, MenuItem, MenuLabel, MenuSeparator, MenuHeader, useMenu,
+  ProjectScopeMenu, formatProjectScopeLabel,
   Button, Segmented, ToastProvider, useTheme, useSidebarCollapsed,
 } from '@open-family/ui'
 
@@ -41,34 +42,39 @@ function cleanScopeName(name, suffix) {
 
 /**
  * Organisation and project scope, as one switcher in the top bar.
- *
- * Previously two labelled dropdowns sat inline in the bar, which is what pushed
- * the control count past what a fixed-height bar could hold.
+ * Always shown — OAM directory via `/api/oam/projects?product=opa`.
  */
 function ScopeSwitcher() {
   const {
-    organizationId, projectId, organizations, projects,
-    selectOrganization, selectProject,
+    organizationId, selection, organizations, projects,
+    selectOrganization, setProjectSelection,
   } = useTenant()
 
   const orgs = useMemo(
     () => organizations.filter((o, i, all) => i === all.findIndex((x) => x.org_id === o.org_id)),
     [organizations]
   )
-  const projs = useMemo(
-    () => projects.filter((p, i, all) => i === all.findIndex((x) => x.project_id === p.project_id)),
+  const projectItems = useMemo(
+    () => projects
+      .map((p) => {
+        const id = String(p.project_id || p.id || '')
+        return id ? { id, label: cleanScopeName(p.name || id, 'project') } : null
+      })
+      .filter(Boolean)
+      .filter((p, i, all) => i === all.findIndex((x) => x.id === p.id)),
     [projects]
   )
 
   const orgLabel = organizationId === 'all'
     ? 'All organisations'
     : cleanScopeName(orgs.find((o) => o.org_id === organizationId)?.name || organizationId, 'organization')
-  const projLabel = projectId === 'all'
-    ? 'All projects'
-    : cleanScopeName(projs.find((p) => p.project_id === projectId)?.name || projectId, 'project')
 
   return (
-    <OrgSwitcher contextLabel={orgLabel} value={projLabel} initials={orgLabel}>
+    <OrgSwitcher
+      contextLabel={orgLabel}
+      value={formatProjectScopeLabel(selection, projectItems)}
+      initials={orgLabel}
+    >
       <MenuLabel>Organisation</MenuLabel>
       <MenuItem checked={organizationId === 'all'} onSelect={() => selectOrganization('all')}>
         All organisations
@@ -83,19 +89,11 @@ function ScopeSwitcher() {
         </MenuItem>
       ))}
       <MenuSeparator />
-      <MenuLabel>Project</MenuLabel>
-      <MenuItem checked={projectId === 'all'} onSelect={() => selectProject('all')}>
-        All projects
-      </MenuItem>
-      {projs.map((proj) => (
-        <MenuItem
-          key={proj.project_id}
-          checked={proj.project_id === projectId}
-          onSelect={() => selectProject(proj.project_id)}
-        >
-          {cleanScopeName(proj.name, 'project')}
-        </MenuItem>
-      ))}
+      <ProjectScopeMenu
+        projects={projectItems}
+        selection={selection}
+        onChange={setProjectSelection}
+      />
     </OrgSwitcher>
   )
 }
