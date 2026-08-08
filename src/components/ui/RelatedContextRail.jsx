@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { FiLink } from 'react-icons/fi'
 import { Panel } from './index'
+import { useTenant } from '../../contexts/TenantContext'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 /** Dashboards: related-context rail for entity detail pages. */
 export default function RelatedContextRail({ query, title = 'Related' }) {
+  const { scopeKey } = useTenant()
   const [items, setItems] = useState([])
   useEffect(() => {
     if (!query || String(query).length < 2) { setItems([]); return undefined }
@@ -16,7 +18,7 @@ export default function RelatedContextRail({ query, title = 'Related' }) {
       .then((res) => { if (alive) setItems(res.data?.results || []) })
       .catch(() => { if (alive) setItems([]) })
     return () => { alive = false }
-  }, [query])
+  }, [query, scopeKey])
 
   if (!items.length) return null
   return (

@@ -8,10 +8,12 @@ import {
   PageHeader, Button, Field, Input, useToast,
 } from '@open-family/ui'
 import { useApi } from '../hooks/useApi'
+import { useTenant } from '../contexts/TenantContext'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 function WidgetCard({ widget, variables }) {
+  const { scopeKey } = useTenant()
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
   useEffect(() => {
@@ -30,7 +32,7 @@ function WidgetCard({ widget, variables }) {
       }
     })()
     return () => { alive = false }
-  }, [widget.id, widget.query, widget.type, JSON.stringify(variables)])
+  }, [widget.id, widget.query, widget.type, JSON.stringify(variables), scopeKey])
 
   const rows = data?.rows || []
   const cols = (data?.columns || []).map((c) => ({

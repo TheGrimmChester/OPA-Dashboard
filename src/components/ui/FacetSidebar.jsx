@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import { FiAlertCircle, FiFilter } from 'react-icons/fi'
 import { Badge, Button } from '@open-family/ui'
+import { useTenant } from '../../contexts/TenantContext'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -20,6 +21,7 @@ export default function FacetSidebar({
   value,
   onChange,
 }) {
+  const { scopeKey } = useTenant()
   const [facets, setFacets] = useState({})
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -51,7 +53,7 @@ export default function FacetSidebar({
       setLoadError(anyFail && !anyOk)
     })()
     return () => { alive = false }
-  }, [signal, fieldsKey, reloadKey])
+  }, [signal, fieldsKey, reloadKey, scopeKey])
 
   const retry = useCallback(() => {
     setLoadError(false)
