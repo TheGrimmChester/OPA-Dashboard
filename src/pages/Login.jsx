@@ -6,6 +6,7 @@ import { Panel } from '../components/ui'
 import './Login.css'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+const OAM_URL = (import.meta.env.VITE_OAM_URL || '').replace(/\/$/, '')
 
 // Decode a JWT payload (no verification — display only; the server verifies).
 function decodeJwt(token) {
@@ -26,6 +27,30 @@ function nextTarget() {
   return '/'
 }
 
+/**
+ * OAM issues JWTs when codeployed. Prefer same-origin /oam-auth so CSP
+ * connect-src 'self' allows login XHR. Hub /api/auth/login may proxy to OAM,
+ * but peers use the bridge; Absolute VITE_OAM_URL is for deep-links only.
+ */
+async function resolveAuthBase() {
+  try {
+    const { data } = await axios.get(`${API_URL}/api/auth/status`)
+    if (data?.mode === 'codeployed' || data?.mode === 'hub' || data?.standalone === false) {
+      return '/oam-auth'
+    }
+  } catch {
+    /* standalone or status unavailable — fall through */
+  }
+  try {
+    await axios.get('/oam-auth/api/auth/status')
+    return '/oam-auth'
+  } catch {
+    /* bridge absent */
+  }
+  if (OAM_URL) return OAM_URL
+  return API_URL
+}
+
 function Login() {
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
@@ -33,6 +58,7 @@ function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [ssoEnabled, setSsoEnabled] = useState(false)
+  const [authBase, setAuthBase] = useState(API_URL)
 
   // Capture the token the OIDC callback puts in the URL fragment (#token=...&
   // dnonce=...). Only accept it if dnonce matches the value this SPA stored
@@ -40,41 +66,52 @@ function Login() {
   // started and blocks token-fixation via a crafted /login#token=... link.
   // username/role come from the token's own signed claims, not spoofable params.
   useEffect(() => {
-    if (window.location.hash && window.location.hash.includes('token=')) {
-      const p = new URLSearchParams(window.location.hash.slice(1))
-      const token = p.get('token')
-      const dnonce = p.get('dnonce')
-      const expected = sessionStorage.getItem('oidc_dnonce')
-      // Preserve any ?next= before we strip the fragment from the URL.
-      const target = nextTarget()
-      // Strip the token from the URL immediately regardless of outcome.
-      window.history.replaceState(null, '', window.location.pathname)
-      sessionStorage.removeItem('oidc_dnonce')
-      if (token && expected && dnonce && dnonce === expected) {
-        const claims = decodeJwt(token)
-        if (claims) {
-          localStorage.setItem('auth_token', token)
-          if (claims.username) localStorage.setItem('username', claims.username)
-          if (claims.role) localStorage.setItem('role', claims.role)
-          navigate(target)
-          return
+    let cancelled = false
+    ;(async () => {
+      if (window.location.hash && window.location.hash.includes('token=')) {
+        const p = new URLSearchParams(window.location.hash.slice(1))
+        const token = p.get('token')
+        const dnonce = p.get('dnonce')
+        const expected = sessionStorage.getItem('oidc_dnonce')
+        // Preserve any ?next= before we strip the fragment from the URL.
+        const target = nextTarget()
+        // Strip the token from the URL immediately regardless of outcome.
+        window.history.replaceState(null, '', window.location.pathname)
+        sessionStorage.removeItem('oidc_dnonce')
+        if (token && expected && dnonce && dnonce === expected) {
+          const claims = decodeJwt(token)
+          if (claims) {
+            localStorage.setItem('auth_token', token)
+            if (claims.username) localStorage.setItem('username', claims.username)
+            if (claims.role) localStorage.setItem('role', claims.role)
+            navigate(target)
+            return
+          }
         }
+        setError('SSO login could not be verified. Please try again.')
       }
-      setError('SSO login could not be verified. Please try again.')
-    }
-    axios.get(`${API_URL}/api/auth/oidc/status`)
-      .then((r) => setSsoEnabled(!!r.data?.enabled))
-      .catch(() => setSsoEnabled(false))
-  }, [])
+
+      const base = await resolveAuthBase()
+      if (cancelled) return
+      setAuthBase(base)
+      try {
+        const r = await axios.get(`${base}/api/auth/oidc/status`)
+        if (!cancelled) setSsoEnabled(!!r.data?.enabled)
+      } catch {
+        if (!cancelled) setSsoEnabled(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [navigate])
 
   // Begin SSO: generate a one-time delivery nonce, remember it, and hand it to
-  // the agent's login endpoint, which echoes it back in the post-login fragment.
+  // the auth issuer, which echoes it back in the post-login fragment.
   const startSso = () => {
     const nonce = (window.crypto && window.crypto.randomUUID)
       ? window.crypto.randomUUID()
       : `${Math.random().toString(36).slice(2)}${Date.now()}`
     sessionStorage.setItem('oidc_dnonce', nonce)
-    window.location.href = `${API_URL}/api/auth/oidc/login?dnonce=${encodeURIComponent(nonce)}`
+    window.location.href = `${authBase}/api/auth/oidc/login?dnonce=${encodeURIComponent(nonce)}`
   }
 
   const handleSubmit = async (e) => {
@@ -83,20 +120,19 @@ function Login() {
     setLoading(true)
 
     try {
-      const response = await axios.post(`${API_URL}/api/auth/login`, {
+      const base = authBase || await resolveAuthBase()
+      const response = await axios.post(`${base}/api/auth/login`, {
         username,
         password,
       })
 
-      // Store token
       localStorage.setItem('auth_token', response.data.token)
       localStorage.setItem('username', response.data.username)
       localStorage.setItem('role', response.data.role)
 
-      // Redirect to the requested page (?next=) or home
       navigate(nextTarget())
     } catch (err) {
-      setError(err.response?.data?.error || 'Invalid credentials')
+      setError(err.response?.data?.message || err.response?.data?.error || 'Invalid credentials')
     } finally {
       setLoading(false)
     }

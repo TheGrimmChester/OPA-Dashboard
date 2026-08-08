@@ -17,6 +17,12 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     proxy: {
+      // Family login issuer (OAM). Production nginx exposes the same /oam-auth/.
+      '/oam-auth': {
+        target: process.env.VITE_OAM_PROXY_TARGET || 'http://127.0.0.1:8090',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/oam-auth/, ''),
+      },
       // Hub-only, matching production nginx. Override with VITE_API_PROXY_TARGET
       // or VITE_HUB_PROXY_TARGET when the hub is not on localhost:8080.
       '/api': {
@@ -25,9 +31,8 @@ export default defineConfig({
         rewrite: (path) => path
       },
       '/ws': {
-        // The agent's WebSocket listener is a separate server on :8082
-        // (wsAddr in main.go), not the :8080 HTTP API — mirror nginx.conf.
-        target: process.env.VITE_WS_PROXY_TARGET || 'http://agent:8082',
+        // Hub WebSocket listener on :8082 (compose service hub) — mirror nginx.conf.
+        target: process.env.VITE_WS_PROXY_TARGET || 'http://127.0.0.1:8082',
         ws: true,
         changeOrigin: true,
         secure: false,
