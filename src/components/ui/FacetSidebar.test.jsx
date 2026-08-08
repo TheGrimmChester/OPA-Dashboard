@@ -12,6 +12,10 @@ vi.mock('axios', () => ({
   },
 }))
 
+vi.mock('../../contexts/TenantContext', () => ({
+  useTenant: () => ({ scopeKey: 'org|all' }),
+}))
+
 describe('FacetSidebar', () => {
   beforeEach(() => {
     get.mockReset()

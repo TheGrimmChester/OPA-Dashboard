@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: Facet chips, related rail, command palette search, and dashboard widgets refetch when the project switcher changes (`scopeKey`).
+
 ## [Unreleased]
 
 ### Changed

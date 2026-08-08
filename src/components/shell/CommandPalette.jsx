@@ -5,6 +5,7 @@ import { FiSearch, FiSun, FiRefreshCw, FiCornerDownLeft, FiServer, FiActivity, F
 import { applyTheme } from '@open-family/ui'
 import { NAV_SECTIONS, OVERVIEW_ITEM } from '../../nav'
 import { useTimeRange } from '../../contexts/TimeRangeContext'
+import { useTenant } from '../../contexts/TenantContext'
 import { useI18n } from '../../contexts/I18nContext'
 import './CommandPalette.css'
 
@@ -59,6 +60,7 @@ export default function CommandPalette({ open, onOpenChange }) {
   const [entities, setEntities] = useState([])
   const navigate = useNavigate()
   const { refresh } = useTimeRange()
+  const { scopeKey } = useTenant()
   const { t } = useI18n()
   const inputRef = useRef(null)
   const listRef = useRef(null)
@@ -109,7 +111,7 @@ export default function CommandPalette({ open, onOpenChange }) {
       }
     }, 180)
     return () => { clearTimeout(t); ctrl.abort() }
-  }, [query, open])
+  }, [query, open, scopeKey])
 
   const q = query.trim().toLowerCase()
   const sections = useMemo(() => {
